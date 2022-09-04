@@ -1,0 +1,13 @@
+.pio
+CMakeLists*.txt
+!CMakeListsUser.txt
+cmake-build-*/
+build
+.vscode
+.idea
+platformio.ini
+compile_commands.json
+sdkconfig
+sdkconfig.*
+docs/_build
+compile_commands.json.bak
