@@ -1,0 +1,100 @@
+include:
+  - template: 'Workflows/MergeRequest-Pipelines.gitlab-ci.yml'
+
+
+stages:
+  - check
+  - build
+  - test
+
+
+variables:
+  PIO_PROJ_FOLDER: keycard-access
+
+
+.pio-cache: &pio-cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - "${PIO_PROJ_FOLDER}/.pio"
+
+.rules-changes-sources: &rules-changes-sources
+  changes:
+    - ${PIO_PROJ_FOLDER}/src/**/*
+    - ${PIO_PROJ_FOLDER}/include/**/*
+    - ${PIO_PROJ_FOLDER}/lib/**/*
+    - ${PIO_PROJ_FOLDER}/platformio.ini
+
+.rules-changes-cicd: &rules-changes-cicd
+  changes:
+    - cicd/*
+    - .gitlab-ci.yml
+
+.rules-merge-to-master: &rules-merge-to-master
+  if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
+  when: always
+
+
+check format:
+  stage: check
+  image: alpine
+  allow_failure: true
+  before_script:
+    - apk add --update --no-cache git clang clang-extra-tools
+  script:
+    - >
+      find ${PIO_PROJ_FOLDER} -not -path '*/\.*' -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
+          echo "Formatting $FILE"
+          clang-format --style file -i "$FILE"
+      done
+    - git diff --patch | tee 0001-Clang-format.patch
+    - test ! -s 0001-Clang-format.patch
+  artifacts:
+    paths:
+      - 0001-Clang-format.patch
+    expire_in: 1 week
+    when: on_failure
+  rules:
+    # Run always, on merge request too
+    - when: always
+
+
+build test firmware:
+  stage: build
+  image: ${CI_REGISTRY}/proj/testinator/esp32:latest
+  <<: *pio-cache
+  before_script:
+    - cd "${PIO_PROJ_FOLDER}"
+  script:
+    # Remove the cached firmwares to ensure we will rebuild
+    - rm -f .pio/**/firmware.{bin,elf}
+    - pio run
+    - pio test --without-uploading --without-testing
+  artifacts:
+    paths:
+      - "${PIO_PROJ_FOLDER}/.pio/**/*.checksum"  # Without this, `pio run` deletes the firmware
+      - "${PIO_PROJ_FOLDER}/.pio/**/firmware.bin"
+      - "${PIO_PROJ_FOLDER}/.pio/**/firmware.elf"
+  rules:
+    - when: always
+
+
+test hardware:
+  stage: test
+  image: ${CI_REGISTRY}/proj/testinator/esp32:latest
+  tags:
+    - pn532
+  dependencies:
+    - build test firmware
+  before_script:
+    - cd "${PIO_PROJ_FOLDER}"
+  script:
+    # Make two attempts at uploading. Do not use pio test because it always returns 0
+    - pio run -t nobuild -t upload --verbose || pio run -t nobuild -t upload --verbose
+    - pio test --without-building --without-uploading --verbose
+  rules:
+    # Run always, on merge request too
+    - <<: *rules-merge-to-master
+    # But skip by default if the sources did not change
+    - <<: *rules-changes-sources
+    - <<: *rules-changes-cicd
