@@ -5,8 +5,8 @@
 #ifndef KEYCARDACCESS_CONFIG_HPP
 #define KEYCARDACCESS_CONFIG_HPP
 
-#include <string>
 #include <desfire/data.hpp>
+#include <string>
 
 namespace ka {
 
@@ -18,6 +18,6 @@ namespace ka {
     };
 
     [[nodiscard]] config const &system_config();
-}
+}// namespace ka
 
 #endif//KEYCARDACCESS_CONFIG_HPP

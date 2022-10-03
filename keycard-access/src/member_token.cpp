@@ -14,7 +14,8 @@
     }
 
 #define REQ_CMD(CMD) REQ_CMD_NAMED_RES(CMD, _r)
-#define REQ_CMD_RES(CMD) REQ_CMD_NAMED_RES(CMD, r) else
+#define REQ_CMD_RES(CMD) REQ_CMD_NAMED_RES(CMD, r) \
+else
 
 namespace ka {
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
