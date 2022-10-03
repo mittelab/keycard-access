@@ -5,8 +5,8 @@
 #ifndef KEYCARDACCESS_MEMBER_TOKEN_HPP
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
-#include <desfire/tag.hpp>
 #include "config.hpp"
+#include <desfire/tag.hpp>
 
 namespace ka {
 
@@ -20,6 +20,7 @@ namespace ka {
         desfire::any_key _root_key;
 
         [[nodiscard]] inline desfire::tag &tag() const;
+
     public:
         template <class... Tn>
         using r = desfire::tag::result<Tn...>;
@@ -36,8 +37,13 @@ namespace ka {
         inline void set_root_key(desfire::any_key k);
         [[nodiscard]] r<> try_set_root_key(desfire::any_key k);
 
-        [[nodiscard]] r<> test_root_key() const;
-        [[nodiscard]] r<> test_root_key(desfire::any_key const &k) const;
+        r<> unlock_root_app() const;
+        r<> unlock_root_app(desfire::any_key const &k) const;
+
+        /**
+         * @brief Format and install default root key.
+         */
+        r<> provision(config const &cfg = system_config());
 
         /**
          * @brief The ID of the token, as in @ref desfire::tag::get_card_uid().
@@ -59,7 +65,7 @@ namespace ka {
         [[nodiscard]] static key_t get_default_root_key(id_t token_id, config const &cfg = system_config());
     };
 
-}
+}// namespace ka
 
 namespace ka {
     desfire::tag &member_token::tag() const {
@@ -73,6 +79,6 @@ namespace ka {
     void member_token::set_root_key(desfire::any_key k) {
         _root_key = std::move(k);
     }
-}
+}// namespace ka
 
 #endif//KEYCARDACCESS_MEMBER_TOKEN_HPP
