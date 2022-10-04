@@ -12,16 +12,100 @@ namespace ka {
 
     using key_t = desfire::key<desfire::cipher_type::aes128>;
 
+    namespace tagfs {
+
+        template <class... Tn>
+        using r = desfire::tag::result<Tn...>;
+
+        [[nodiscard]] bool is_unauthorized(desfire::error e);
+
+        template <class... Tn>
+        [[nodiscard]] bool is_unauthorized(r<Tn...> const &e);
+
+        /**
+         * @addtogroup Creating read-only, free-access files
+         * @brief Creates a read-only value file with free unencrypted access in the current application.
+         * The file can only be deleted afterwards, it is not possible to write on it, only read and it requires no authentication to read.
+         * This assumes the app is already selected, the user is already authenticated, if the security settings require so,
+         * and file @p fid does not exists.
+         * @param fid Id of the file to create
+         * @param value Value of the file
+         * @return A result representing whether the operation was successful or not.
+         * @{
+         */
+        r<> create_ro_plain_value_file(desfire::tag &tag, desfire::file_id fid, std::int32_t value);
+        r<> create_ro_plain_data_file(desfire::tag &tag, desfire::file_id fid, mlab::bin_data const &value);
+        /**
+         * @}
+         */
+
+        /**
+         * @brief Makes the current app read only.
+         * This is achieved by preventing any change in the master key and configuration, and allowing
+         * no key to further change keys.
+         * @note If any other key is set up, then those keys will still be able to modify the application. Make
+         * sure the current key is the only allowed key in the app.
+         * @param list_requires_auth True to require authentication with a key for listing files
+         * @return A result representing whether the operation succeeded.
+         */
+        r<> make_app_ro(desfire::tag &tag, bool list_requires_auth);
+
+        /**
+         * @brief Creates an app with a unique, randomized key, suitable for being turned into a read-only app later.
+         * @param tag
+         * @param aid
+         * @return
+         */
+        [[nodiscard]] r<key_t> create_app_for_ro(desfire::tag &tag, desfire::app_id aid);
+
+        /**
+         * @brief Deletes a file in the current app if existing.
+         * This assumes the app is already selected and the user is already authenticated, if the security settings require so.
+         * @param fid File to delete.
+         * @return A result representing whether the operation was successful.
+         */
+        r<> delete_file_if_exists(desfire::tag &tag, desfire::file_id fid);
+
+        /**
+         * @brief Deletes app in if it exists.
+         * This assumes that the root app is unlocked, if the security settings require so.
+         * @param aid App to delete.
+         * @return A result representing whether the operation was successful.
+         */
+        r<> delete_app_if_exists(desfire::tag &tag, desfire::app_id aid);
+
+        /**
+         * @brief Searches for a file id @p fid in the list of files of the current app.
+         * This assumes the app is already selected and the user is already authenticated, if the security settings require so.
+         * @param fid File to search for.
+         * @return A boolean representing whether the file was found (or an error).
+         */
+        [[nodiscard]] r<bool> does_file_exist(desfire::tag &tag, desfire::file_id fid);
+
+        /**
+         * @brief Searches for an app @p aid in the list of applications.
+         * This assumes the user is already authenticated, if the security settings require so.
+         * @param aid App to search for.
+         * @return A boolean representing whether the app was found (or an error).
+         */
+        [[nodiscard]] r<bool> does_app_exist(desfire::tag &tag, desfire::app_id fid);
+    }
+
     class member_token {
         /**
          * @note Mutable because interacting with the tag requires non-const access.
          */
         mutable desfire::tag *_tag;
         desfire::any_key _root_key;
-
-        [[nodiscard]] inline desfire::tag &tag() const;
-
     public:
+        /**
+         * @brief Application directory app id as required by AN10787 §3.10.
+         */
+        static constexpr desfire::app_id mad_aid{0xff, 0xff, 0xff};
+        static constexpr desfire::file_id mad_file_version{0x0};
+        static constexpr desfire::file_id mad_file_card_holder{0x1};
+        static constexpr desfire::file_id mad_file_card_publisher{0x2};
+
         template <class... Tn>
         using r = desfire::tag::result<Tn...>;
 
@@ -37,13 +121,17 @@ namespace ka {
         inline void set_root_key(desfire::any_key k);
         [[nodiscard]] r<> try_set_root_key(desfire::any_key k);
 
-        r<> unlock_root_app() const;
-        r<> unlock_root_app(desfire::any_key const &k) const;
+        [[nodiscard]] inline desfire::tag &tag() const;
 
         /**
-         * @brief Format and install default root key.
+         * @addtogroup Provisioning
+         * @{
          */
-        r<> provision(config const &cfg = system_config());
+        r<> setup_root_key(config const &cfg = system_config());
+        r<> setup_mad(std::string const &holder, std::string const &publisher);
+        /**
+         * @}
+         */
 
         /**
          * @brief The ID of the token, as in @ref desfire::tag::get_card_uid().
@@ -68,6 +156,13 @@ namespace ka {
 }// namespace ka
 
 namespace ka {
+
+
+    template <class... Tn>
+    bool tagfs::is_unauthorized(r<Tn...> const &e) {
+        return (not e) and is_unauthorized(e.error());
+    }
+
     desfire::tag &member_token::tag() const {
         return *_tag;
     }
