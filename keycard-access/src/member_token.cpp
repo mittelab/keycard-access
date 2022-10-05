@@ -7,6 +7,8 @@
 #include <desfire/kdf.hpp>
 #include <esp_random.h>
 #include <mlab/bin_data.hpp>
+#include <algorithm>
+#include <numeric>
 
 #define REQ_CMD_NAMED_RES(CMD, RNAME)                                                 \
     if (const auto RNAME = (CMD); not RNAME) {                                        \
@@ -31,6 +33,12 @@ namespace mlab {
         bin_data retval;
         retval << prealloc(s.size()) << s;
         return retval;
+    }
+    [[nodiscard]] std::string to_string(bin_data const &bd) {
+        const mlab::range<char const *> view{
+                reinterpret_cast<char const *>(bd.data()),
+                reinterpret_cast<char const *>(bd.data() + bd.size())};
+        return std::string{std::begin(view), std::end(view)};
     }
 }
 
@@ -97,6 +105,43 @@ namespace ka {
         desfire::bin_data input_data;
         input_data << token_id << cfg.differentiation_salt;
         return desfire::kdf_an10922(cfg.master_key, provider, input_data);
+    }
+
+
+    member_token::r<std::string> member_token::get_holder() const {
+        REQ_CMD(tag().select_application(mad_aid))
+        REQ_CMD_RES(tag().read_data(mad_file_card_holder, 0, 0xffffff, desfire::file_security::none)) {
+            return mlab::to_string(*r);
+        }
+    }
+
+    member_token::r<std::string> member_token::get_publisher() const {
+        REQ_CMD(tag().select_application(mad_aid))
+        REQ_CMD_RES(tag().read_data(mad_file_card_publisher, 0, 0xffffff, desfire::file_security::none)) {
+            return mlab::to_string(*r);
+        }
+    }
+
+    member_token::r<unsigned> member_token::get_mad_version() const {
+        REQ_CMD(tag().select_application(mad_aid))
+        REQ_CMD_RES(tag().get_value(mad_file_version, desfire::file_security::none)) {
+            return unsigned(*r);
+        }
+    }
+
+
+    member_token::r<std::vector<gate::id_t>> member_token::get_enrolled_gates() const {
+        REQ_CMD(tag().select_application(desfire::root_app))
+        REQ_CMD_RES(tag().get_application_ids()) {
+            // Filter those in range
+            std::vector<gate::id_t> gates;
+            for (desfire::app_id const &aid : *r) {
+                if (gate::is_gate_app(aid)) {
+                    gates.push_back(gate::app_id_to_id(aid));
+                }
+            }
+            return gates;
+        }
     }
 
     namespace tagfs {

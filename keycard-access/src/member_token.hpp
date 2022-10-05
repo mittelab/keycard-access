@@ -6,6 +6,7 @@
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
 #include "config.hpp"
+#include "gate.hpp"
 #include <desfire/tag.hpp>
 
 namespace ka {
@@ -17,10 +18,18 @@ namespace ka {
         template <class... Tn>
         using r = desfire::tag::result<Tn...>;
 
+        /**
+         * @addtogroup Error code characterization
+         * @brief Checks whether an error code in a result represents an unauthorized operation.
+         * @{
+         */
         [[nodiscard]] bool is_unauthorized(desfire::error e);
 
         template <class... Tn>
         [[nodiscard]] bool is_unauthorized(r<Tn...> const &e);
+        /**
+         * @}
+         */
 
         /**
          * @addtogroup Creating read-only, free-access files
@@ -122,6 +131,12 @@ namespace ka {
         [[nodiscard]] r<> try_set_root_key(desfire::any_key k);
 
         [[nodiscard]] inline desfire::tag &tag() const;
+
+        [[nodiscard]] r<std::string> get_holder() const;
+        [[nodiscard]] r<std::string> get_publisher() const;
+        [[nodiscard]] r<unsigned> get_mad_version() const;
+
+        [[nodiscard]] r<std::vector<gate::id_t>> get_enrolled_gates() const;
 
         /**
          * @addtogroup Provisioning

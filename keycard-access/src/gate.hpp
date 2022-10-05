@@ -21,7 +21,7 @@ namespace ka {
          * @{
          */
         static constexpr std::uint32_t gate_aid_range_begin = 0xf51000;
-        static constexpr std::uint32_t gate_aid_range_end = 0xf54fff;
+        static constexpr std::uint32_t gate_aid_range_end = 0xf55000;
         /**
          * @}
          */
@@ -33,6 +33,8 @@ namespace ka {
         [[nodiscard]] inline desfire::app_id app_id() const;
 
         [[nodiscard]] inline static constexpr desfire::app_id id_to_app_id(id_t id);
+        [[nodiscard]] inline static constexpr id_t app_id_to_id(desfire::app_id id);
+        [[nodiscard]] inline static constexpr bool is_gate_app(desfire::app_id id);
 
         inline explicit gate(id_t id);
         gate(gate const &) = delete;
@@ -61,6 +63,22 @@ namespace ka {
         return {std::uint8_t((app_id_uint >> 16) & 0xff),
                 std::uint8_t((app_id_uint >> 8) & 0xff),
                 std::uint8_t(app_id_uint & 0xff)};
+    }
+
+    constexpr ka::gate::id_t gate::app_id_to_id(desfire::app_id id) {
+        const std::uint32_t app_id_uint =
+                (std::uint32_t(id[2]) << 16) |
+                (std::uint32_t(id[1]) << 8) |
+                std::uint32_t(id[0]);
+        return app_id_uint - gate_aid_range_begin;
+    }
+
+    constexpr bool gate::is_gate_app(desfire::app_id id) {
+        const std::uint32_t app_id_uint =
+                (std::uint32_t(id[2]) << 16) |
+                (std::uint32_t(id[1]) << 8) |
+                std::uint32_t(id[0]);
+        return app_id_uint >= gate_aid_range_begin and app_id_uint < gate_aid_range_end;
     }
 }// namespace ka
 
