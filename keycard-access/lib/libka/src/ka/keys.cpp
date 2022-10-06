@@ -76,16 +76,16 @@ namespace ka {
     }
 
     bool keypair::has_private() const {
-        mbedtls_ecdsa_context *ecdsa_ctx = ecdsa_context();
-        return ecdsa_ctx != nullptr and mbedtls_ecp_check_privkey(&ecdsa_ctx->grp, &ecdsa_ctx->d) == 0;
+        mbedtls_ecp_keypair *ecp_kp = ecp_keypair();
+        return ecp_kp != nullptr and mbedtls_ecp_check_privkey(&ecp_kp->grp, &ecp_kp->d) == 0;
     }
 
     bool keypair::has_public() const {
-        mbedtls_ecdsa_context *ecdsa_ctx = ecdsa_context();
-        return ecdsa_ctx != nullptr and mbedtls_ecp_check_pubkey(&ecdsa_ctx->grp, &ecdsa_ctx->Q) == 0;
+        mbedtls_ecp_keypair *ecp_kp = ecp_keypair();
+        return ecp_kp != nullptr and mbedtls_ecp_check_pubkey(&ecp_kp->grp, &ecp_kp->Q) == 0;
     }
 
-    mbedtls_ecdsa_context *keypair::ecdsa_context() const {
+    mbedtls_ecp_keypair *keypair::ecp_keypair() const {
         return mbedtls_pk_ec(_ctx);
     }
 
@@ -142,9 +142,9 @@ namespace ka {
                 success = result == 0;
             }
         }
-        // Make sure it's ecdsa
-        if (mbedtls_pk_can_do(&_ctx, MBEDTLS_PK_ECDSA) == 0) {
-            // Not ecdsa.
+        // Make sure it's ecp
+        if (success and mbedtls_pk_can_do(&_ctx, MBEDTLS_PK_ECKEY) == 0) {
+            // Not ecp.
             ESP_LOGE("KA", "Unsupported key type %s", mbedtls_pk_get_name(&_ctx));
             success = false;
         }
@@ -168,16 +168,16 @@ namespace ka {
     }
 
     void keypair::generate() {
-        // Do a clean setup initializing as an ecdsa context
+        // Do a clean setup initializing as an ecc context
         clear();
-        if (not check_error(mbedtls_pk_setup(&_ctx, mbedtls_pk_info_from_type(MBEDTLS_PK_ECDSA)), "mbedtls_pk_setup")) {
+        if (not check_error(mbedtls_pk_setup(&_ctx, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY)), "mbedtls_pk_setup")) {
             return;
         }
-        // Initialize a suitable entropy source
+        // Curve 2259 is not supported for saving/loading
         if (not check_error(
-                    mbedtls_ecdsa_genkey(ecdsa_context(), mbedtls_ecp_group_id::MBEDTLS_ECP_DP_CURVE25519,
-                                         default_secure_rng().rng(), default_secure_rng().p_rng()),
-                    "mbedtls_ecdsa_genkey")) {
+                    mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP521R1, ecp_keypair(),
+                                        default_secure_rng().rng(), default_secure_rng().p_rng()),
+                    "mbedtls_ecp_gen_key")) {
             clear();
             return;
         }

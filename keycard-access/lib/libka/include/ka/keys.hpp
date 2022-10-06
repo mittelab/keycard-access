@@ -54,7 +54,7 @@ namespace ka {
          */
         mutable mbedtls_pk_context _ctx;
 
-        [[nodiscard]] mbedtls_ecdsa_context *ecdsa_context() const;
+        [[nodiscard]] mbedtls_ecdsa_context *ecp_keypair() const;
         [[nodiscard]] mlab::bin_data export_key_internal(bool include_private) const;
         [[nodiscard]] bool import_key_internal(mlab::bin_data const &data, bool is_private, bool ignore_error);
 
