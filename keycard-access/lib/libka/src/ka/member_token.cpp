@@ -2,12 +2,12 @@
 // Created by spak on 9/29/22.
 //
 
-#include <ka/member_token.hpp>
+#include <algorithm>
 #include <desfire/esp32/crypto_impl.hpp>
 #include <desfire/kdf.hpp>
-#include <mlab/bin_data.hpp>
-#include <algorithm>
 #include <esp_random.h>
+#include <ka/member_token.hpp>
+#include <mlab/bin_data.hpp>
 #include <numeric>
 
 #define REQ_CMD_NAMED_RES(CMD, RNAME)                                                 \
