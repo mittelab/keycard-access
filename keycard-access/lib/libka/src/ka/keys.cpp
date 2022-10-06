@@ -2,7 +2,7 @@
 // Created by spak on 10/5/22.
 //
 
-#include "keys.hpp"
+#include <ka/keys.hpp>
 #include <cstring>
 #include <esp_log.h>
 #include <esp_random.h>
@@ -166,6 +166,7 @@ namespace ka {
         if (not import_key_internal(data, true, true)) {
             return import_key(data, false);
         }
+        return true;
     }
 
     void keypair::generate() {

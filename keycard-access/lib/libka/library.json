@@ -1,0 +1,36 @@
+{
+  "name": "libKA",
+  "version": "1.0.0",
+  "description": "Support library for Keycard Access",
+  "license": "LGPL-3.0-only",
+  "homepage": "https://proj.mittelab.dev/keycardAccess/",
+  "repository": {
+    "type": "git",
+    "url": "https://git.mittelab.org/proj/keycardAccess.git"
+  },
+  "authors": [
+    {
+      "name": "Pietro Saccardi",
+      "email": "lizardm4@gmail.com",
+      "maintainer": true
+    }
+  ],
+  "frameworks": "espidf",
+  "platforms": "espressif32",
+  "flags": [
+    "-std=gnu++17",
+    "-Wall",
+    "-Wextra"
+  ],
+  "unflags": [
+    "-std=gnu++11",
+    "-std=gnu++14",
+    "-std=c++11",
+    "-std=c++14",
+    "-std=c++17"
+  ],
+  "dependencies": {
+    "libSpookyAction": "https://git.mittelab.org/proj/libspookyaction.git#18671213",
+    "mittelab/mitteLib": "^1.0.3"
+  }
+}

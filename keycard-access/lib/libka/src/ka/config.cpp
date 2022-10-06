@@ -2,7 +2,7 @@
 // Created by spak on 10/2/22.
 //
 
-#include "config.hpp"
+#include <ka/config.hpp>
 
 namespace ka {
     namespace {
