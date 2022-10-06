@@ -98,7 +98,7 @@ namespace ka {
          * @return A boolean representing whether the app was found (or an error).
          */
         [[nodiscard]] r<bool> does_app_exist(desfire::tag &tag, desfire::app_id fid);
-    }
+    }// namespace tagfs
 
     class member_token {
         /**
@@ -106,6 +106,7 @@ namespace ka {
          */
         mutable desfire::tag *_tag;
         desfire::any_key _root_key;
+
     public:
         /**
          * @brief Application directory app id as required by AN10787 §3.10.

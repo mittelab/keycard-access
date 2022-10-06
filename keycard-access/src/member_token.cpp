@@ -3,11 +3,11 @@
 //
 
 #include "member_token.hpp"
+#include <algorithm>
 #include <desfire/esp32/crypto_impl.hpp>
 #include <desfire/kdf.hpp>
 #include <esp_random.h>
 #include <mlab/bin_data.hpp>
-#include <algorithm>
 #include <numeric>
 
 #define REQ_CMD_NAMED_RES(CMD, RNAME)                                                 \
@@ -17,8 +17,9 @@
     }
 
 #define REQ_CMD(CMD) REQ_CMD_NAMED_RES(CMD, _r)
-#define REQ_CMD_RES(CMD) REQ_CMD_NAMED_RES(CMD, r) \
-else
+#define REQ_CMD_RES(CMD)      \
+    REQ_CMD_NAMED_RES(CMD, r) \
+    else
 
 namespace mlab {
     bin_data &operator<<(bin_data &bd, std::string const &s) {
@@ -40,7 +41,7 @@ namespace mlab {
                 reinterpret_cast<char const *>(bd.data() + bd.size())};
         return std::string{std::begin(view), std::end(view)};
     }
-}
+}// namespace mlab
 
 namespace ka {
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
@@ -62,8 +63,7 @@ namespace ka {
                 .master_key_changeable = true,
                 .dir_access_without_auth = true,
                 .create_delete_without_auth = false,
-                .config_changeable = false
-        };
+                .config_changeable = false};
         // Try retrieveing the id
         REQ_CMD_RES(id()) {
             // Use the id to compute the key
@@ -150,10 +150,8 @@ namespace ka {
             const desfire::file_settings<desfire::file_type::value> ro_settings{
                     desfire::generic_file_settings{
                             desfire::file_security::none,
-                            desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, desfire::no_key}
-                    },
-                    desfire::value_file_settings{value, value, value, false}
-            };
+                            desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, desfire::no_key}},
+                    desfire::value_file_settings{value, value, value, false}};
             return tag.create_file(fid, ro_settings);
         }
 
@@ -162,15 +160,12 @@ namespace ka {
             const desfire::file_settings<desfire::file_type::standard> init_settings{
                     desfire::generic_file_settings{
                             desfire::file_security::none,
-                            desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, tag.active_key_no()}
-                    },
-                    desfire::data_file_settings{value.size()}
-            };
+                            desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, tag.active_key_no()}},
+                    desfire::data_file_settings{value.size()}};
             // Final access rights revoke the write access
             const desfire::generic_file_settings final_settings{
                     desfire::file_security::none,
-                    desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, desfire::no_key}
-            };
+                    desfire::access_rights{desfire::no_key, desfire::no_key, desfire::all_keys, desfire::no_key}};
             REQ_CMD(tag.create_file(fid, init_settings))
             REQ_CMD(tag.write_data(fid, 0, value, desfire::file_security::none))
             REQ_CMD(tag.change_file_settings(fid, final_settings, desfire::file_security::none))
@@ -197,8 +192,7 @@ namespace ka {
 
         r<> make_app_ro(desfire::tag &tag, bool list_requires_auth) {
             const desfire::key_rights ro_rights{
-                desfire::no_key, false, list_requires_auth, false, false
-            };
+                    desfire::no_key, false, list_requires_auth, false, false};
             REQ_CMD(tag.change_app_settings(ro_rights))
             return mlab::result_success;
         }
@@ -232,5 +226,5 @@ namespace ka {
             }
             return mlab::result_success;
         }
-    }
+    }// namespace tagfs
 }// namespace ka
