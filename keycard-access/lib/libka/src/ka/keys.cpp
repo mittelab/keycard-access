@@ -37,22 +37,21 @@ namespace ka {
     }
     secure_rng::secure_rng() : _entropy_ctx{}, _drbg_ctx{} {
         static constexpr auto pers_str = "keycard_access";
+        ESP_LOGI("KA", "Collecting entropy...");
         mbedtls_entropy_init(&_entropy_ctx);
         mbedtls_ctr_drbg_init(&_drbg_ctx);
-        ESP_LOGI("KA", "Adding esp_fill_random as entropy source.");
         if (not check_error(
                     mbedtls_entropy_add_source(&_entropy_ctx, &entropy_source, nullptr, 32, MBEDTLS_ENTROPY_SOURCE_STRONG),
                     "mbedtls_entropy_add_source")) {
             return;
         }
-        ESP_LOGI("KA", "Seeding RNG...");
         const auto *pers_str_cast = reinterpret_cast<const unsigned char *>(pers_str);
         if (not check_error(
                     mbedtls_ctr_drbg_seed(&_drbg_ctx, mbedtls_entropy_func, &_entropy_ctx, pers_str_cast, std::strlen(pers_str)),
                     "mbedtls_ctr_drbg_seed")) {
             return;
         }
-        ESP_LOGI("KA", "Entropy source ready for generation.");
+        ESP_LOGI("KA", "Collecting entropy done.");
     }
 
     void *secure_rng::p_rng() {
