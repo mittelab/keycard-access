@@ -90,8 +90,8 @@ namespace ka {
     }
 
     mlab::bin_data keypair::export_key_internal(bool include_private) const {
-        mlab::bin_data buffer;
-        buffer.resize(64);// Should be enough for ecdsa
+        // Should be enough for ecc
+        std::array<std::uint8_t, 256> buffer{};
         int written_length = 0;
         if (include_private) {
             written_length = mbedtls_pk_write_key_der(&_ctx, buffer.data(), buffer.size());
@@ -102,9 +102,8 @@ namespace ka {
             check_error(written_length, "mbedtls_pk_write_(pub)key_der");
             return {};
         }
-        // Truncate
-        buffer.resize(written_length);
-        return buffer;
+        // Truncate when returning. Note that both functions operate at the END of the buffer!
+        return {std::end(buffer) - written_length, std::end(buffer)};
     }
 
     mlab::bin_data keypair::export_key() const {
