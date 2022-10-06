@@ -68,8 +68,7 @@ build test firmware:
   script:
     # Remove the cached firmwares to ensure we will rebuild
     - rm -f .pio/**/firmware.{bin,elf}
-    - pio run
-    - pio test --without-uploading --without-testing
+    - pio test -vv --without-uploading --without-testing
   artifacts:
     paths:
       - "${PIO_PROJ_FOLDER}/.pio/**/*.checksum"  # Without this, `pio run` deletes the firmware
@@ -89,9 +88,9 @@ test hardware:
   before_script:
     - cd "${PIO_PROJ_FOLDER}"
   script:
-    # Make two attempts at uploading. Do not use pio test because it always returns 0
-    - pio run -t nobuild -t upload --verbose || pio run -t nobuild -t upload --verbose
-    - pio test --without-building --without-uploading --verbose
+    # Make two attempts at uploading.
+    - pio test --without-building --without-testing -vv || pio test --without-building --without-testing -vv
+    - pio test --without-building --without-uploading -vv
   rules:
     # Run always, on merge request too
     - <<: *rules-merge-to-master
