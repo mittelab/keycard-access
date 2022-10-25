@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstdint>
+#include <ka/helpers.hpp>
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/pk.h>
@@ -52,16 +53,11 @@ namespace ka {
         /**
          * @note Mutable because methods that do not modify the context, like exporting keys, still require a nonconst ptr
          */
-        mutable mbedtls_pk_context _ctx;
+        mutable managed<mbedtls_ecp_keypair, &mbedtls_ecp_keypair_init, &mbedtls_ecp_keypair_free> _kp;
 
-        [[nodiscard]] mbedtls_ecdsa_context *ecp_keypair() const;
         [[nodiscard]] mlab::bin_data export_key_internal(bool include_private) const;
-        [[nodiscard]] bool import_key_internal(mlab::bin_data const &data, bool is_private, bool ignore_error);
 
     public:
-        keypair();
-        ~keypair();
-
         keypair(keypair const &) = delete;
         keypair(keypair &&) noexcept = default;
         keypair &operator=(keypair const &) = delete;
@@ -69,15 +65,16 @@ namespace ka {
 
         void generate();
         void clear();
+        void clear_private();
 
         [[nodiscard]] bool has_public() const;
         [[nodiscard]] bool has_private() const;
+        [[nodiscard]] bool has_matching_public_private() const;
 
         [[nodiscard]] mlab::bin_data export_key() const;
         [[nodiscard]] mlab::bin_data export_key(bool include_private) const;
 
         [[nodiscard]] bool import_key(mlab::bin_data const &data);
-        [[nodiscard]] bool import_key(mlab::bin_data const &data, bool is_private);
     };
 }// namespace ka
 

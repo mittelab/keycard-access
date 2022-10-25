@@ -10,13 +10,24 @@
 #include <mbedtls/error.h>
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
+#include <mlab/bin_data.hpp>
+#include <utility>
 
 #define MBEDTLS_TRY_DESC(FN, DESC)                                   \
     if (const auto res = (FN); not mbedtls_err_check(res, (DESC))) { \
         return mbedtls_err_cast(res);                                \
     }
 
+#define MBEDTLS_TRY_RET_DESC(FN, RET, DESC)                          \
+    if (const auto res = (FN); not mbedtls_err_check(res, (DESC))) { \
+        return RET;                                                  \
+    }
+
 #define MBEDTLS_TRY(FN) MBEDTLS_TRY_DESC(FN, __func__)
+
+#define MBEDTLS_TRY_RET(FN, RET) MBEDTLS_TRY_RET_DESC(FN, RET, __func__)
+
+#define MBEDTLS_TRY_RET_VOID(FN) MBEDTLS_TRY_RET_DESC(FN, , __func__)
 
 namespace ka {
 
@@ -66,10 +77,10 @@ namespace ka {
     public:
         managed();
         managed(managed const &) = delete;
-        managed(managed &&) = delete;
+        managed(managed &&) noexcept;
 
         managed &operator=(managed const &) = delete;
-        managed &operator=(managed &&) = delete;
+        managed &operator=(managed &&) noexcept;
 
         [[nodiscard]] operator T *();
 
@@ -88,12 +99,29 @@ namespace ka {
     };
 }// namespace ka
 
+namespace mlab {
+    bin_data &operator<<(bin_data &bd, mbedtls_mpi const &n);
+    bin_data &operator<<(bin_data &bd, std::pair<std::reference_wrapper<mbedtls_ecp_group const>, std::reference_wrapper<mbedtls_ecp_point const>> group_and_pt);
+    bin_stream &operator>>(bin_stream &s, mbedtls_mpi &n);
+    bin_stream &operator>>(bin_stream &s, std::pair<std::reference_wrapper<mbedtls_ecp_group const>, std::reference_wrapper<mbedtls_ecp_point>> group_and_pt);
+}// namespace mlab
+
 namespace ka {
     template <class T, void (*InitFn)(T *), void (*FreeFn)(T *)>
     managed<T, InitFn, FreeFn>::managed() : _obj{} {
         InitFn(&_obj);
     }
 
+    template <class T, void (*InitFn)(T *), void (*FreeFn)(T *)>
+    managed<T, InitFn, FreeFn>::managed(managed &&other) noexcept : _obj{} {
+        InitFn(&_obj);
+        std::swap(other._obj, _obj);
+    }
+
+    template <class T, void (*InitFn)(T *), void (*FreeFn)(T *)>
+    managed<T, InitFn, FreeFn> &managed<T, InitFn, FreeFn>::operator=(managed &&other) noexcept {
+        std::swap(other._obj, _obj);
+    }
 
     template <class T, void (*InitFn)(T *), void (*FreeFn)(T *)>
     managed<T, InitFn, FreeFn>::operator T *() {

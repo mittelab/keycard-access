@@ -12,17 +12,24 @@
 
 namespace ka {
     namespace {
-        bool check_error(int mbedtls_err, const char *desc) {
-            if (mbedtls_err != 0) {
-                static auto constexpr buffer_length = 200;
-                char buffer[buffer_length];
-                mbedtls_strerror(mbedtls_err, buffer, buffer_length);
-                ESP_LOGE("KA", "Mbedtls failure for %s, error %s", desc, buffer);
-                return false;
+        struct key_format {
+            unsigned version = 0x0;
+            bool has_private = false;
+
+            constexpr key_format() = default;
+            constexpr key_format(unsigned v, bool pvt) : version{v}, has_private{pvt} {}
+
+            [[nodiscard]] constexpr std::uint8_t as_byte() const {
+                return std::uint8_t((version << 1) | (has_private ? 0b1 : 0b0));
             }
-            return true;
-        }
+
+            [[nodiscard]] static constexpr key_format from_byte(std::uint8_t b) {
+                return {unsigned(b) >> 1, (b & 0b1) != 0};
+            }
+        };
+
     }// namespace
+
     secure_rng &default_secure_rng() {
         static secure_rng _rng{};
         return _rng;
@@ -40,17 +47,9 @@ namespace ka {
         ESP_LOGI("KA", "Collecting entropy...");
         mbedtls_entropy_init(&_entropy_ctx);
         mbedtls_ctr_drbg_init(&_drbg_ctx);
-        if (not check_error(
-                    mbedtls_entropy_add_source(&_entropy_ctx, &entropy_source, nullptr, 32, MBEDTLS_ENTROPY_SOURCE_STRONG),
-                    "mbedtls_entropy_add_source")) {
-            return;
-        }
+        MBEDTLS_TRY_RET_VOID(mbedtls_entropy_add_source(&_entropy_ctx, &entropy_source, nullptr, 32, MBEDTLS_ENTROPY_SOURCE_STRONG))
         const auto *pers_str_cast = reinterpret_cast<const unsigned char *>(pers_str);
-        if (not check_error(
-                    mbedtls_ctr_drbg_seed(&_drbg_ctx, mbedtls_entropy_func, &_entropy_ctx, pers_str_cast, std::strlen(pers_str)),
-                    "mbedtls_ctr_drbg_seed")) {
-            return;
-        }
+        MBEDTLS_TRY_RET_VOID(mbedtls_ctr_drbg_seed(&_drbg_ctx, mbedtls_entropy_func, &_entropy_ctx, pers_str_cast, std::strlen(pers_str)))
         ESP_LOGI("KA", "Collecting entropy done.");
     }
 
@@ -62,48 +61,37 @@ namespace ka {
         mbedtls_entropy_free(&_entropy_ctx);
     }
 
-    keypair::keypair() : _ctx{} {
-        mbedtls_pk_init(&_ctx);
-    }
-
-    keypair::~keypair() {
-        mbedtls_pk_free(&_ctx);
-    }
-
     void keypair::clear() {
-        mbedtls_pk_free(&_ctx);
-        mbedtls_pk_init(&_ctx);
+        clear_private();
+        mbedtls_ecp_point_free(&_kp->Q);
+        mbedtls_ecp_point_init(&_kp->Q);
+        assert(not has_public());
+    }
+
+    void keypair::clear_private() {
+        mbedtls_mpi_free(&_kp->d);
+        mbedtls_mpi_init(&_kp->d);
+        assert(not has_private());
     }
 
     bool keypair::has_private() const {
-        mbedtls_ecp_keypair *ecp_kp = ecp_keypair();
-        return ecp_kp != nullptr and mbedtls_ecp_check_privkey(&ecp_kp->grp, &ecp_kp->d) == 0;
+        return mbedtls_ecp_check_privkey(&_kp->grp, &_kp->d) == 0;
     }
 
     bool keypair::has_public() const {
-        mbedtls_ecp_keypair *ecp_kp = ecp_keypair();
-        return ecp_kp != nullptr and mbedtls_ecp_check_pubkey(&ecp_kp->grp, &ecp_kp->Q) == 0;
+        return mbedtls_ecp_check_pubkey(&_kp->grp, &_kp->Q) == 0;
     }
 
-    mbedtls_ecp_keypair *keypair::ecp_keypair() const {
-        return mbedtls_pk_ec(_ctx);
+    bool keypair::has_matching_public_private() const {
+        return has_public() and has_private() and mbedtls_ecp_check_pub_priv(_kp, _kp) == 0;
     }
 
     mlab::bin_data keypair::export_key_internal(bool include_private) const {
-        // Should be enough for ecc
-        std::array<std::uint8_t, 256> buffer{};
-        int written_length = 0;
         if (include_private) {
-            written_length = mbedtls_pk_write_key_der(&_ctx, buffer.data(), buffer.size());
+            return mlab::bin_data::chain(key_format{0x0, true}.as_byte(), std::make_pair(std::cref(_kp->grp), std::cref(_kp->Q)));
         } else {
-            written_length = mbedtls_pk_write_pubkey_der(&_ctx, buffer.data(), buffer.size());
+            return mlab::bin_data::chain(key_format{0x0, false}.as_byte(), _kp->d);
         }
-        if (written_length < 0) {
-            check_error(written_length, "mbedtls_pk_write_(pub)key_der");
-            return {};
-        }
-        // Truncate when returning. Note that both functions operate at the END of the buffer!
-        return {std::end(buffer) - written_length, std::end(buffer)};
     }
 
     mlab::bin_data keypair::export_key() const {
@@ -124,63 +112,61 @@ namespace ka {
         }
     }
 
-    bool keypair::import_key_internal(const mlab::bin_data &data, bool is_private, bool ignore_error) {
-        clear();
-        bool success = false;
-        if (is_private) {
-            const auto result = mbedtls_pk_parse_key(&_ctx, data.data(), data.size(), nullptr, 0);
-            if (not ignore_error) {
-                success = check_error(result, "mbedtls_pk_parse_key");
-            } else {
-                success = result == 0;
-            }
-        } else {
-            const auto result = mbedtls_pk_parse_public_key(&_ctx, data.data(), data.size());
-            if (not ignore_error) {
-                success = check_error(result, "mbedtls_pk_parse_public_key");
-            } else {
-                success = result == 0;
-            }
-        }
-        // Make sure it's ecp
-        if (success and mbedtls_pk_can_do(&_ctx, MBEDTLS_PK_ECKEY) == 0) {
-            // Not ecp.
-            ESP_LOGE("KA", "Unsupported key type %s", mbedtls_pk_get_name(&_ctx));
-            success = false;
-        }
-        // In case of unsuccessful operation, clear
-        if (not success) {
-            clear();
-        }
-        return success;
-    }
-
-    bool keypair::import_key(const mlab::bin_data &data, bool is_private) {
-        return import_key_internal(data, is_private, false);
-    }
-
     bool keypair::import_key(mlab::bin_data const &data) {
-        // Simply try
-        if (not import_key_internal(data, true, true)) {
-            return import_key(data, false);
+        clear();
+        mlab::bin_stream s{data};
+        const auto fmt = key_format::from_byte(s.pop());
+        if (fmt.version != 0) {
+            ESP_LOGW("KA", "Unsupported key format %02x", fmt.version);
+            return false;
+        }
+        // We know this format version 0, has a curve 25519 group
+        MBEDTLS_TRY_RET(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_CURVE25519), false)
+        // Pull out private or public part
+        if (fmt.has_private) {
+            s >> _kp->d;
+        } else {
+            s >> std::make_pair(std::cref(_kp->grp), std::ref(_kp->Q));
+        }
+        // Assert that the stream ends there.
+        if (s.bad()) {
+            ESP_LOGW("KA", "Invalid key format.");
+            clear();
+            return false;
+        } else if (not s.eof()) {
+            ESP_LOGW("KA", "Stray bytes in key sequence.");
+            clear();
+            return false;
+        }
+        // Recover public key, if needed
+        if (fmt.has_private) {
+            if (not mbedtls_err_check(mbedtls_ecp_mul(
+                        &_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().rng(), default_secure_rng().p_rng()))) {
+                clear();
+                return false;
+            }
+        }
+        // Safety checks
+        if (not has_public()) {
+            ESP_LOGW("KA", "Invalid public key loaded.");
+            clear();
+            return false;
+        }
+        if (has_private() != fmt.has_private) {
+            ESP_LOGW("KA", "Invalid private key loaded.");
+            clear();
+            return false;
+        }
+        if (fmt.has_private and not has_matching_public_private()) {
+            ESP_LOGE("KA", "Unable to recover public key.");
+            clear();
+            return false;
         }
         return true;
     }
 
     void keypair::generate() {
-        // Do a clean setup initializing as an ecc context
-        clear();
-        if (not check_error(mbedtls_pk_setup(&_ctx, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY)), "mbedtls_pk_setup")) {
-            return;
-        }
-        // Curve 2259 is not supported for saving/loading
-        if (not check_error(
-                    mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP521R1, ecp_keypair(),
-                                        default_secure_rng().rng(), default_secure_rng().p_rng()),
-                    "mbedtls_ecp_gen_key")) {
-            clear();
-            return;
-        }
+        MBEDTLS_TRY_RET_VOID(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().rng(), default_secure_rng().p_rng()))
     }
 
 

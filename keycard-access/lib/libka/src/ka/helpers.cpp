@@ -90,3 +90,66 @@ namespace ka {
         return true;
     }
 }// namespace ka
+
+namespace mlab {
+    bin_data &operator<<(bin_data &bd, mbedtls_mpi const &n) {
+        const auto n_size = mbedtls_mpi_size(&n);
+        assert(n_size < std::numeric_limits<std::uint16_t>::max());
+        bd << prealloc(bd.size() + n_size + 2) << lsb16 << n_size;
+        const auto n_offset = bd.size();
+        bd.resize(bd.size() + n_size);
+        ka::mbedtls_err_check(mbedtls_mpi_write_binary_le(&n, bd.data() + n_offset, n_size), "mbedtls_mpi_write_binary_le");
+        return bd;
+    }
+
+    bin_data &operator<<(bin_data &bd, std::pair<std::reference_wrapper<mbedtls_ecp_group const>, std::reference_wrapper<mbedtls_ecp_point const>> group_and_pt) {
+        mbedtls_ecp_group const &group = group_and_pt.first;
+        mbedtls_ecp_point const &pt = group_and_pt.second;
+
+        // This buffer suffices for all points:
+        std::array<std::uint8_t, MBEDTLS_ECP_MAX_PT_LEN> buffer{};
+        std::size_t written_length = 0;
+        ka::mbedtls_err_check(mbedtls_ecp_point_write_binary(&group, &pt, MBEDTLS_ECP_PF_UNCOMPRESSED, &written_length, buffer.data(), buffer.size()));
+        assert(written_length < std::numeric_limits<std::uint16_t>::max());
+
+        auto buffer_view = make_range(std::begin(buffer), std::begin(buffer) + written_length);
+
+        return bd << prealloc(bd.size() + written_length + 2) << lsb16 << written_length << buffer_view;
+    }
+
+    bin_stream &operator>>(bin_stream &s, mbedtls_mpi &n) {
+        if (s.remaining() < 2) {
+            s.set_bad();
+            return s;
+        }
+        std::size_t nsize = 0;
+        s >> lsb16 >> nsize;
+        auto buffer = s.read(nsize);
+        if (not s.bad()) {
+            if (not ka::mbedtls_err_check(mbedtls_mpi_read_binary_le(&n, buffer.data(), buffer.size()), "mbedtls_mpi_read_binary_le")) {
+                s.set_bad();
+            }
+        }
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, std::pair<std::reference_wrapper<mbedtls_ecp_group const>, std::reference_wrapper<mbedtls_ecp_point>> group_and_pt) {
+        mbedtls_ecp_group const &group = group_and_pt.first;
+        mbedtls_ecp_point &pt = group_and_pt.second;
+
+        if (s.remaining() < 2) {
+            s.set_bad();
+            return s;
+        }
+        std::size_t nsize = 0;
+        s >> lsb16 >> nsize;
+
+        auto buffer = s.read(nsize);
+        if (not s.bad()) {
+            if (not ka::mbedtls_err_check(mbedtls_ecp_point_read_binary(&group, &pt, buffer.data(), buffer.size()), "mbedtls_ecp_point_read_binary")) {
+                s.set_bad();
+            }
+        }
+        return s;
+    }
+}// namespace mlab
