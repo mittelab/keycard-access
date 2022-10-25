@@ -4,11 +4,8 @@
 
 #include <cstring>
 #include <esp_log.h>
-#include <esp_random.h>
-#include <ka/keys.hpp>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/entropy.h>
-#include <mbedtls/error.h>
+#include <ka/keypair.hpp>
+#include <ka/secure_rng.hpp>
 
 namespace ka {
     namespace {
@@ -29,37 +26,6 @@ namespace ka {
         };
 
     }// namespace
-
-    secure_rng &default_secure_rng() {
-        static secure_rng _rng{};
-        return _rng;
-    }
-
-    int secure_rng::entropy_source(void *data [[maybe_unused]], unsigned char *output, std::size_t len, std::size_t *olen) {
-        esp_fill_random(output, len);
-        if (olen != nullptr) {
-            *olen = len;
-        }
-        return 0;
-    }
-    secure_rng::secure_rng() : _entropy_ctx{}, _drbg_ctx{} {
-        static constexpr auto pers_str = "keycard_access";
-        ESP_LOGI("KA", "Collecting entropy...");
-        mbedtls_entropy_init(&_entropy_ctx);
-        mbedtls_ctr_drbg_init(&_drbg_ctx);
-        MBEDTLS_TRY_RET_VOID(mbedtls_entropy_add_source(&_entropy_ctx, &entropy_source, nullptr, 32, MBEDTLS_ENTROPY_SOURCE_STRONG))
-        const auto *pers_str_cast = reinterpret_cast<const unsigned char *>(pers_str);
-        MBEDTLS_TRY_RET_VOID(mbedtls_ctr_drbg_seed(&_drbg_ctx, mbedtls_entropy_func, &_entropy_ctx, pers_str_cast, std::strlen(pers_str)))
-        ESP_LOGI("KA", "Collecting entropy done.");
-    }
-
-    void *secure_rng::p_rng() {
-        return static_cast<void *>(&_drbg_ctx);
-    }
-
-    secure_rng::~secure_rng() {
-        mbedtls_entropy_free(&_entropy_ctx);
-    }
 
     void keypair::clear() {
         clear_private();
@@ -141,7 +107,7 @@ namespace ka {
         // Recover public key, if needed
         if (fmt.has_private) {
             if (not mbedtls_err_check(mbedtls_ecp_mul(
-                        &_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().rng(), default_secure_rng().p_rng()))) {
+                        &_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().fn(), default_secure_rng().arg()))) {
                 clear();
                 return false;
             }
@@ -166,7 +132,7 @@ namespace ka {
     }
 
     void keypair::generate() {
-        MBEDTLS_TRY_RET_VOID(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().rng(), default_secure_rng().p_rng()))
+        MBEDTLS_TRY_RET_VOID(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
     }
 
 

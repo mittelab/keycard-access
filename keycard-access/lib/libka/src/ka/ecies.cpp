@@ -4,7 +4,7 @@
 
 #include <ka/ecies.hpp>
 #include <ka/helpers.hpp>
-#include <ka/keys.hpp>
+#include <ka/secure_rng.hpp>
 #include <mbedtls/ecdh.h>
 #include <mlab/bin_data.hpp>
 
@@ -58,7 +58,7 @@ namespace ka {
 
         // Compute the shared secret
         managed<mbedtls_mpi, &mbedtls_mpi_init, &mbedtls_mpi_free> secret;
-        MBEDTLS_TRY(mbedtls_ecdh_compute_shared(grp, secret, eph_pub, &prvkey.d, default_secure_rng().rng(), default_secure_rng().p_rng()))
+        MBEDTLS_TRY(mbedtls_ecdh_compute_shared(grp, secret, eph_pub, &prvkey.d, default_secure_rng().fn(), default_secure_rng().arg()))
 
         // Derive and set the symmetric cipher key up
         managed<mbedtls_gcm_context, &mbedtls_gcm_init, &mbedtls_gcm_free> aes_gcm;
@@ -83,11 +83,11 @@ namespace ka {
 
         // Generate an ephemeral keypair
         managed<mbedtls_ecp_keypair, &mbedtls_ecp_keypair_init, &mbedtls_ecp_keypair_free> eph_keypair;
-        MBEDTLS_TRY(mbedtls_ecp_gen_key(pubkey.grp.id, eph_keypair, default_secure_rng().rng(), default_secure_rng().p_rng()))
+        MBEDTLS_TRY(mbedtls_ecp_gen_key(pubkey.grp.id, eph_keypair, default_secure_rng().fn(), default_secure_rng().arg()))
 
         // Computed shared secret
         managed<mbedtls_mpi, &mbedtls_mpi_init, &mbedtls_mpi_free> secret;
-        MBEDTLS_TRY(mbedtls_ecdh_compute_shared(&eph_keypair->grp, secret, &pubkey.Q, &eph_keypair->d, default_secure_rng().rng(), default_secure_rng().p_rng()))
+        MBEDTLS_TRY(mbedtls_ecdh_compute_shared(&eph_keypair->grp, secret, &pubkey.Q, &eph_keypair->d, default_secure_rng().fn(), default_secure_rng().arg()))
 
         // Prepare salt and IV for later encryption
         std::array<std::uint8_t, salt_size> salt{};
