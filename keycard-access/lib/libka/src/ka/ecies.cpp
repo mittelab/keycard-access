@@ -21,13 +21,10 @@ namespace ka::ecies {
          */
         constexpr std::size_t iv_size = 12;
 
-        std::size_t public_key_size(mbedtls_ecp_group const &g) {
-            /**
-             * @todo This is incorrect for different key groups!
-             */
-            return mbedtls_mpi_size(&g.P) * 2 + 1;
-        }
-
+        /**
+         * Expected size taken up by the public key, used for preallocating data
+         */
+        constexpr std::size_t max_pubkey_size_hint = MBEDTLS_ECP_MAX_PT_LEN + 2;
     }// namespace
 
     mbedtls_result<mlab::bin_data> decrypt(mbedtls_ecp_keypair const &prvkey, mlab::bin_data const &enc_message) {
@@ -41,24 +38,19 @@ namespace ka::ecies {
         // Data needed for decryption, in order
         std::array<std::uint8_t, iv_size> iv{};
         std::array<std::uint8_t, salt_size> salt{};
-        const auto eph_pub_bin_len = public_key_size(prvkey.grp);
-        // Make sure we can actually read all that data
-        if (enc_message.size() < iv.size() + salt.size() + eph_pub_bin_len + tag_size) {
-            return mbedtls_err::other;
-        }
+        managed<mbedtls_ecp_point, &mbedtls_ecp_point_init, &mbedtls_ecp_point_free> eph_pub;
+
         // Pull all the data out
         mlab::bin_stream s{enc_message};
-        s >> iv >> salt;
-        assert(s.good());
-        const auto eph_pub_bin = s.read(eph_pub_bin_len);
-        assert(s.remaining() >= tag_size);
+        s >> iv >> salt >> std::make_pair(std::cref(prvkey.grp), std::ref(*eph_pub));
+
         const auto ciphertext = s.read(s.remaining() - tag_size);
         const auto tag = s.read(tag_size);
-        assert(s.eof());
 
-        // Convert the ephemeral public key into an elliptic curve point
-        managed<mbedtls_ecp_point, &mbedtls_ecp_point_init, &mbedtls_ecp_point_free> eph_pub;
-        MBEDTLS_TRY(mbedtls_ecp_point_read_binary(grp, eph_pub, eph_pub_bin.data(), eph_pub_bin.size()))
+        // If we have not managed to read all this data, then the stream is malformed
+        if (s.bad() or not s.eof()) {
+            return mbedtls_err::other;
+        }
 
         // Compute the shared secret
         managed<mbedtls_mpi, &mbedtls_mpi_init, &mbedtls_mpi_free> secret;
@@ -104,31 +96,18 @@ namespace ka::ecies {
         if (const auto r = derive_symmetric_key(salt, *secret, *aes_gcm); not r) {
             return r.error();
         }
-
-        // Save the public key into a binary format
-        std::array<std::uint8_t, MBEDTLS_ECP_MAX_PT_LEN> eph_pub_bin{};
-        std::size_t eph_pub_bin_len = 0;
-        MBEDTLS_TRY(mbedtls_ecp_point_write_binary(&eph_keypair->grp, &eph_keypair->Q, MBEDTLS_ECP_PF_UNCOMPRESSED,
-                                                   &eph_pub_bin_len, std::begin(eph_pub_bin), eph_pub_bin.size()))
-        // Also assert that the public key has a predictable size, so we can encode it fixed-length
-        if (const auto exp_pub_bin_len = public_key_size(pubkey.grp); eph_pub_bin_len != exp_pub_bin_len) {
-            ESP_LOGE("KA", "Ephemeral public key length %d differs from expected length %d", eph_pub_bin_len, exp_pub_bin_len);
-            return mbedtls_err::other;
-        }
-
         // Prepare an output buffer; copy IV, salt, public key
-        const auto enc_message_len = iv.size() + salt.size() + eph_pub_bin_len + plaintext.size() + tag_size;
-        mlab::bin_data enc_message;
-        enc_message << mlab::prealloc(enc_message_len) << iv << salt;
-        // Public key is actually a subset of the binary array:
-        enc_message << mlab::make_range(std::begin(eph_pub_bin), std::begin(eph_pub_bin) + eph_pub_bin_len);
+        mlab::bin_data enc_message{mlab::prealloc(iv.size() + salt.size() + max_pubkey_size_hint + plaintext.size() + tag_size)};
+        enc_message << iv << salt << std::make_pair(std::cref(eph_keypair->grp), std::cref(eph_keypair->Q));
+
         // Preallocation just allocates, now resize to the full required length so that the buffer is available for writing
-        enc_message.resize(enc_message_len);
+        const auto ciphertext_offset = enc_message.size();
+        enc_message.resize(enc_message.size() + plaintext.size() + tag_size);
 
         // Select the data windows for ciphertext and tag
         const auto ciphertext = mlab::make_range(
-                std::begin(enc_message) + std::ptrdiff_t(iv.size() + salt.size() + eph_pub_bin_len),
-                std::begin(enc_message) + std::ptrdiff_t(iv.size() + salt.size() + eph_pub_bin_len + plaintext.size()));
+                std::begin(enc_message) + std::ptrdiff_t(ciphertext_offset),
+                std::begin(enc_message) + std::ptrdiff_t(ciphertext_offset + plaintext.size()));
 
         const auto tag = mlab::make_range(ciphertext.end(), enc_message.end());
 
@@ -162,4 +141,4 @@ namespace ka::ecies {
         }
     }
 
-}// namespace ka
+}// namespace ka::ecies
