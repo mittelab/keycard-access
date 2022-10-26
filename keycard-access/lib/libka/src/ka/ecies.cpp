@@ -8,7 +8,7 @@
 #include <mbedtls/ecdh.h>
 #include <mlab/bin_data.hpp>
 
-namespace ka {
+namespace ka::ecies {
 
     namespace {
         constexpr std::size_t salt_size = 32;
@@ -20,13 +20,17 @@ namespace ka {
          * GCM recommends 12 bytes, so that the IV does not have to be rehashed into 12 bytes
          */
         constexpr std::size_t iv_size = 12;
+
+        std::size_t public_key_size(mbedtls_ecp_group const &g) {
+            /**
+             * @todo This is incorrect for different key groups!
+             */
+            return mbedtls_mpi_size(&g.P) * 2 + 1;
+        }
+
     }// namespace
 
-    ::size_t public_key_size(mbedtls_ecp_group const &g) {
-        return mbedtls_mpi_size(&g.P) * 2 + 1;
-    }
-
-    mbedtls_result<mlab::bin_data> ecies_decrypt(mbedtls_ecp_keypair const &prvkey, mlab::bin_data const &enc_message) {
+    mbedtls_result<mlab::bin_data> decrypt(mbedtls_ecp_keypair const &prvkey, mlab::bin_data const &enc_message) {
         // Ensure it has capabilities
         MBEDTLS_TRY(mbedtls_ecp_check_privkey(&prvkey.grp, &prvkey.d))
 
@@ -62,7 +66,7 @@ namespace ka {
 
         // Derive and set the symmetric cipher key up
         managed<mbedtls_gcm_context, &mbedtls_gcm_init, &mbedtls_gcm_free> aes_gcm;
-        if (const auto r = ecies_derive_symmetric_key(salt, *secret, *aes_gcm); not r) {
+        if (const auto r = derive_symmetric_key(salt, *secret, *aes_gcm); not r) {
             return r.error();
         }
 
@@ -77,7 +81,7 @@ namespace ka {
         return plaintext;
     }
 
-    mbedtls_result<mlab::bin_data> ecies_encrypt(mbedtls_ecp_keypair const &pubkey, mlab::bin_data const &plaintext) {
+    mbedtls_result<mlab::bin_data> encrypt(mbedtls_ecp_keypair const &pubkey, mlab::bin_data const &plaintext) {
         // Ensure it has capabilities
         MBEDTLS_TRY(mbedtls_ecp_check_pubkey(&pubkey.grp, &pubkey.Q))
 
@@ -97,7 +101,7 @@ namespace ka {
 
         // Derive and set the symmetric cipher key up
         managed<mbedtls_gcm_context, &mbedtls_gcm_init, &mbedtls_gcm_free> aes_gcm;
-        if (const auto r = ecies_derive_symmetric_key(salt, *secret, *aes_gcm); not r) {
+        if (const auto r = derive_symmetric_key(salt, *secret, *aes_gcm); not r) {
             return r.error();
         }
 
@@ -137,7 +141,7 @@ namespace ka {
         return enc_message;
     }
 
-    mbedtls_result<std::array<std::uint8_t, 32>> ecies_derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret) {
+    mbedtls_result<std::array<std::uint8_t, 32>> derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret) {
         // Save the secret into a fixed size buffer. 128 bytes should suffice, even with 521 bits of key
         std::array<std::uint8_t, MBEDTLS_ECP_MAX_BYTES> secret_bin{};
         MBEDTLS_TRY(mbedtls_mpi_write_binary_le(&secret, std::begin(secret_bin), secret_bin.size()))
@@ -149,8 +153,8 @@ namespace ka {
         return sym_key;
     }
 
-    mbedtls_result<> ecies_derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret, mbedtls_gcm_context &context) {
-        if (const auto r = ecies_derive_symmetric_key(salt, secret); r) {
+    mbedtls_result<> derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret, mbedtls_gcm_context &context) {
+        if (const auto r = derive_symmetric_key(salt, secret); r) {
             MBEDTLS_TRY(mbedtls_gcm_setkey(&context, MBEDTLS_CIPHER_ID_AES, r->data(), r->size()))
             return mlab::result_success;
         } else {

@@ -7,20 +7,13 @@
 
 #include <ka/helpers.hpp>
 #include <mlab/bin_data.hpp>
-#include <mlab/result.hpp>
 
-namespace ka {
+namespace ka::ecies {
+    [[nodiscard]] mbedtls_result<mlab::bin_data> decrypt(mbedtls_ecp_keypair const &prvkey, mlab::bin_data const &enc_message);
+    [[nodiscard]] mbedtls_result<mlab::bin_data> encrypt(mbedtls_ecp_keypair const &pubkey, mlab::bin_data const &plaintext);
 
-    template <class... Tn>
-    using mbedtls_result = mlab::result<mbedtls_err, Tn...>;
-
-    [[nodiscard]] std::size_t public_key_size(mbedtls_ecp_group const &g);
-
-    [[nodiscard]] mbedtls_result<mlab::bin_data> ecies_decrypt(mbedtls_ecp_keypair const &prvkey, mlab::bin_data const &enc_message);
-    [[nodiscard]] mbedtls_result<mlab::bin_data> ecies_encrypt(mbedtls_ecp_keypair const &pubkey, mlab::bin_data const &plaintext);
-
-    [[nodiscard]] mbedtls_result<std::array<std::uint8_t, 32>> ecies_derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret);
-    [[nodiscard]] mbedtls_result<> ecies_derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret, mbedtls_gcm_context &context);
-}// namespace ka
+    [[nodiscard]] mbedtls_result<std::array<std::uint8_t, 32>> derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret);
+    [[nodiscard]] mbedtls_result<> derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret, mbedtls_gcm_context &context);
+}// namespace ka::ecies
 
 #endif//KEYCARDACCESS_ECIES_HPP

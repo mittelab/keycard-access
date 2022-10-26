@@ -6,6 +6,7 @@
 #include <esp_log.h>
 #include <ka/keypair.hpp>
 #include <ka/secure_rng.hpp>
+#include <ka/ecies.hpp>
 
 namespace ka {
     namespace {
@@ -78,13 +79,27 @@ namespace ka {
         }
     }
 
-    bool keypair::import_key(mlab::bin_data const &data) {
+    mbedtls_result<mlab::bin_data> keypair::encrypt(mlab::bin_data const &data) const {
+        if (not has_public()) {
+            return mbedtls_err::ecp_invalid_key;
+        }
+        return ecies::encrypt(*_kp, data);
+    }
+
+    mbedtls_result<mlab::bin_data> keypair::decrypt(mlab::bin_data const &data) const {
+        if (not has_private()) {
+            return mbedtls_err::ecp_invalid_key;
+        }
+        return ecies::decrypt(*_kp, data);
+    }
+
+    mbedtls_result<> keypair::import_key(mlab::bin_data const &data) {
         clear();
         mlab::bin_stream s{data};
         const auto fmt = key_format::from_byte(s.pop());
         if (fmt.version != 0) {
             ESP_LOGW("KA", "Unsupported key format %02x", fmt.version);
-            return false;
+            return mbedtls_err::other;
         }
         // We know this format version 0, has a curve 25519 group
         MBEDTLS_TRY_RET(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_CURVE25519), false)
@@ -97,42 +112,34 @@ namespace ka {
         // Assert that the stream ends there.
         if (s.bad()) {
             ESP_LOGW("KA", "Invalid key format.");
-            clear();
-            return false;
         } else if (not s.eof()) {
             ESP_LOGW("KA", "Stray bytes in key sequence.");
-            clear();
-            return false;
-        }
-        // Recover public key, if needed
-        if (fmt.has_private) {
-            if (not mbedtls_err_check(mbedtls_ecp_mul(
-                        &_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().fn(), default_secure_rng().arg()))) {
-                clear();
-                return false;
+        } else {
+            // Recover public key, if needed
+            if (fmt.has_private) {
+                if (const auto res = mbedtls_ecp_mul(&_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().fn(), default_secure_rng().arg());
+                    not mbedtls_err_check(res)) {
+                    clear();
+                    return mbedtls_err_cast(res);
+                }
+            }
+            // Safety checks
+            if (not has_public()) {
+                ESP_LOGW("KA", "Invalid public key loaded.");
+            } else if (has_private() != fmt.has_private) {
+                ESP_LOGW("KA", "Invalid private key loaded.");
+            } else if (fmt.has_private and not has_matching_public_private()) {
+                ESP_LOGE("KA", "Unable to recover public key.");
+            } else {
+                return mlab::result_success;
             }
         }
-        // Safety checks
-        if (not has_public()) {
-            ESP_LOGW("KA", "Invalid public key loaded.");
-            clear();
-            return false;
-        }
-        if (has_private() != fmt.has_private) {
-            ESP_LOGW("KA", "Invalid private key loaded.");
-            clear();
-            return false;
-        }
-        if (fmt.has_private and not has_matching_public_private()) {
-            ESP_LOGE("KA", "Unable to recover public key.");
-            clear();
-            return false;
-        }
-        return true;
+        clear();
+        return mbedtls_err::other;
     }
 
-    void keypair::generate() {
-        MBEDTLS_TRY_RET_VOID(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
+    mbedtls_result<> keypair::generate() {
+        MBEDTLS_TRY(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
     }
 
 

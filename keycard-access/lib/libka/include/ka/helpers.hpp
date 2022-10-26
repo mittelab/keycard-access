@@ -11,6 +11,7 @@
 #include <mbedtls/gcm.h>
 #include <mbedtls/hkdf.h>
 #include <mlab/bin_data.hpp>
+#include <mlab/result.hpp>
 #include <utility>
 
 #define MBEDTLS_TRY_DESC(FN, DESC)                                   \
@@ -65,6 +66,9 @@ namespace ka {
         aes_hw_accel_failed = MBEDTLS_ERR_AES_HW_ACCEL_FAILED,
         other = 0x0
     };
+
+    template <class... Tn>
+    using mbedtls_result = mlab::result<mbedtls_err, Tn...>;
 
     [[nodiscard]] mbedtls_err mbedtls_err_cast(int mbedtls_errno);
 

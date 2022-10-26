@@ -20,7 +20,8 @@ namespace ka {
         keypair &operator=(keypair const &) = delete;
         keypair &operator=(keypair &&) noexcept = default;
 
-        void generate();
+        mbedtls_result<> generate();
+
         void clear();
         void clear_private();
 
@@ -31,7 +32,10 @@ namespace ka {
         [[nodiscard]] mlab::bin_data export_key() const;
         [[nodiscard]] mlab::bin_data export_key(bool include_private) const;
 
-        [[nodiscard]] bool import_key(mlab::bin_data const &data);
+        [[nodiscard]] mbedtls_result<> import_key(mlab::bin_data const &data);
+
+        [[nodiscard]] mbedtls_result<mlab::bin_data> encrypt(mlab::bin_data const &data) const;
+        [[nodiscard]] mbedtls_result<mlab::bin_data> decrypt(mlab::bin_data const &data) const;
     };
 }// namespace ka
 
