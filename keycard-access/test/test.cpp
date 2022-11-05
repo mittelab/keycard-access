@@ -12,6 +12,7 @@ void test_keys() {
 
     TEST_ASSERT(k.has_private());
     TEST_ASSERT(k.has_public());
+    TEST_ASSERT(k.has_matching_public_private());
 
     const auto k_dump_sec = k.export_key(true);
     const auto k_dump_pub = k.export_key(false);
@@ -22,11 +23,15 @@ void test_keys() {
     keypair k_pub;
     keypair k_sec;
 
+    TEST_ASSERT(not k_pub.has_private());
+    TEST_ASSERT(not k_pub.has_matching_public_private());
+
     TEST_ASSERT(k_pub.import_key(k_dump_pub));
     TEST_ASSERT(k_sec.import_key(k_dump_sec));
 
     TEST_ASSERT(k_pub.has_public());
     TEST_ASSERT(not k_pub.has_private());
+    TEST_ASSERT(not k_pub.has_matching_public_private());
 
     TEST_ASSERT(k_sec.has_public());
     TEST_ASSERT(k_sec.has_private());
@@ -35,6 +40,7 @@ void test_keys() {
     TEST_ASSERT(k_copy.import_key(k_dump_pub));
     TEST_ASSERT(k_copy.has_public());
     TEST_ASSERT(not k_copy.has_private());
+    TEST_ASSERT(not k_copy.has_matching_public_private());
 
     TEST_ASSERT(k_copy.import_key(k_dump_sec));
     TEST_ASSERT(k_copy.has_public());

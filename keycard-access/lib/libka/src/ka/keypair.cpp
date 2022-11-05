@@ -55,9 +55,9 @@ namespace ka {
 
     mlab::bin_data keypair::export_key_internal(bool include_private) const {
         if (include_private) {
-            return mlab::bin_data::chain(key_format{0x0, true}.as_byte(), std::make_pair(std::cref(_kp->grp), std::cref(_kp->Q)));
+            return mlab::bin_data::chain(key_format{0x0, true}.as_byte(), _kp->d);
         } else {
-            return mlab::bin_data::chain(key_format{0x0, false}.as_byte(), _kp->d);
+            return mlab::bin_data::chain(key_format{0x0, false}.as_byte(), std::make_pair(std::cref(_kp->grp), std::cref(_kp->Q)));
         }
     }
 
