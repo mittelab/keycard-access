@@ -15,6 +15,7 @@ namespace ka {
         [[nodiscard]] mlab::bin_data export_key_internal(bool include_private) const;
 
     public:
+        keypair() = default;
         keypair(keypair const &) = delete;
         keypair(keypair &&) noexcept = default;
         keypair &operator=(keypair const &) = delete;

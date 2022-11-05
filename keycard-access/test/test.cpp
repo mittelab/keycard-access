@@ -1,4 +1,4 @@
-#include <ka/keys.hpp>
+#include <ka/keypair.hpp>
 #include <unity.h>
 
 using namespace ka;
@@ -22,8 +22,8 @@ void test_keys() {
     keypair k_pub;
     keypair k_sec;
 
-    TEST_ASSERT(k_pub.import_key(k_dump_pub, false));
-    TEST_ASSERT(k_sec.import_key(k_dump_sec, true));
+    TEST_ASSERT(k_pub.import_key(k_dump_pub));
+    TEST_ASSERT(k_sec.import_key(k_dump_sec));
 
     TEST_ASSERT(k_pub.has_public());
     TEST_ASSERT(not k_pub.has_private());

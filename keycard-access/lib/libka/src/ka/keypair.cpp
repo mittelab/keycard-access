@@ -102,7 +102,7 @@ namespace ka {
             return mbedtls_err::other;
         }
         // We know this format version 0, has a curve 25519 group
-        MBEDTLS_TRY_RET(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_CURVE25519), false)
+        MBEDTLS_TRY(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_CURVE25519))
         // Pull out private or public part
         if (fmt.has_private) {
             s >> _kp->d;
@@ -140,6 +140,7 @@ namespace ka {
 
     mbedtls_result<> keypair::generate() {
         MBEDTLS_TRY(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
+        return mlab::result_success;
     }
 
 
