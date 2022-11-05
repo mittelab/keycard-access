@@ -8,6 +8,23 @@
 #include <mbedtls/ecdh.h>
 #include <mlab/bin_data.hpp>
 
+/**
+ * @note ''esp_config.h'' must be included before ''aes.h'' to enable hardware AES.
+ * @{
+ */
+#include <mbedtls/esp_config.h>
+/**
+ * @}
+ */
+
+
+/**
+ * Guard against missing the definition of CONFIG_MBEDTLS_HKDF_C.
+ */
+#ifndef MBEDTLS_HKDF_C
+#error "libKA: config macro CONFIG_MBEDTLS_HKDF_C not found; make sure you have CONFIG_MBEDTLS_HKDF_C=y in your sdkconfig!"
+#endif
+
 namespace ka::ecies {
 
     namespace {
