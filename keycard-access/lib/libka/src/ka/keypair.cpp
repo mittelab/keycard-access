@@ -4,9 +4,9 @@
 
 #include <cstring>
 #include <esp_log.h>
+#include <ka/ecies.hpp>
 #include <ka/keypair.hpp>
 #include <ka/secure_rng.hpp>
-#include <ka/ecies.hpp>
 
 namespace ka {
     namespace {
