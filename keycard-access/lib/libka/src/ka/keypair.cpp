@@ -7,6 +7,8 @@
 #include <ka/ecies.hpp>
 #include <ka/keypair.hpp>
 #include <ka/secure_rng.hpp>
+#include <mbedtls/ecdsa.h>
+#include <mbedtls/md.h>
 
 namespace ka {
     namespace {
@@ -93,6 +95,49 @@ namespace ka {
         return ecies::decrypt(*_kp, data);
     }
 
+    mbedtls_result<mlab::bin_data> keypair::sign(mlab::bin_data const &data) const {
+        if (not has_private()) {
+            return mbedtls_err::ecp_invalid_key;
+        }
+        if (const auto r_hash = hash(data); not r_hash) {
+            return r_hash.error();
+        } else {
+            std::array<std::uint8_t, MBEDTLS_ECDSA_MAX_LEN> buffer{};
+            std::size_t written_length = 0;
+            MBEDTLS_TRY(mbedtls_ecdsa_write_signature(
+                    _kp, MBEDTLS_MD_SHA256,
+                    r_hash->data(), r_hash->size(),
+                    buffer.data(), &written_length,
+                    default_secure_rng().fn(), default_secure_rng().arg()))
+
+            return mlab::bin_data{std::begin(buffer), std::begin(buffer) + written_length};
+        }
+    }
+
+    mbedtls_result<> keypair::verify(mlab::bin_data const &data, mlab::bin_data const &signature) const {
+        if (not has_public()) {
+            return mbedtls_err::ecp_invalid_key;
+        }
+        if (const auto r_hash = hash(data); not r_hash) {
+            return r_hash.error();
+        } else {
+            MBEDTLS_TRY(mbedtls_ecdsa_read_signature(
+                    _kp, r_hash->data(), r_hash->size(), signature.data(), signature.size()))
+            return mlab::result_success;
+        }
+    }
+
+    mbedtls_result<std::array<std::uint8_t, 32>> keypair::hash(mlab::bin_data const &data) {
+        auto const *digest = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+        if (digest == nullptr) {
+            ESP_LOGE("KA", "Unsupported message digest SHA256!?");
+            return mbedtls_err::md_feature_unavailable;
+        }
+        std::array<std::uint8_t, 32> hash{};
+        MBEDTLS_TRY(mbedtls_md(digest, data.data(), data.size(), std::begin(hash)))
+        return hash;
+    }
+
     mbedtls_result<> keypair::import_key(mlab::bin_data const &data) {
         clear();
         mlab::bin_stream s{data};
@@ -101,8 +146,8 @@ namespace ka {
             ESP_LOGW("KA", "Unsupported key format %02x", fmt.version);
             return mbedtls_err::other;
         }
-        // We know this format version 0, has a curve 25519 group
-        MBEDTLS_TRY(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_CURVE25519))
+        // We know this format version 0, has a MBEDTLS_ECP_DP_SECP256R1
+        MBEDTLS_TRY(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_SECP256R1))
         // Pull out private or public part
         if (fmt.has_private) {
             s >> _kp->d;
@@ -139,7 +184,7 @@ namespace ka {
     }
 
     mbedtls_result<> keypair::generate() {
-        MBEDTLS_TRY(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_CURVE25519, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
+        MBEDTLS_TRY(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
         return mlab::result_success;
     }
 

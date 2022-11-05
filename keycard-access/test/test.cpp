@@ -3,8 +3,28 @@
 
 using namespace ka;
 
+static const unsigned char plaintext[] = "The quick brown fox jumps over the lazy dog";
+
+void test_sign_verify() {
+    const mlab::bin_data txt_data = mlab::bin_data::chain(plaintext);
+
+    keypair k;
+    TEST_ASSERT(k.generate());
+
+    const auto sig_res = k.sign(txt_data);
+    TEST_ASSERT(sig_res);
+    TEST_ASSERT_GREATER_OR_EQUAL(32, sig_res->size());
+
+    const auto ver_res = k.verify(txt_data, *sig_res);
+    TEST_ASSERT(ver_res);
+
+    const auto sig_of_sig_res = k.sign(*sig_res);
+    TEST_ASSERT(sig_of_sig_res);
+    ESP_LOGI("KA", "Attempting an invalid verification, errors here are normal");
+    TEST_ASSERT(not k.verify(txt_data, *sig_of_sig_res));
+}
+
 void test_encrypt_decrypt() {
-    static const unsigned char plaintext[] = "The quick brown fox jumps over the lazy dog";
     const mlab::bin_data txt_data = mlab::bin_data::chain(plaintext);
 
     keypair k;
@@ -12,6 +32,7 @@ void test_encrypt_decrypt() {
 
     const auto enc_res = k.encrypt(txt_data);
     TEST_ASSERT(enc_res);
+    TEST_ASSERT_GREATER_OR_EQUAL(txt_data.size(), enc_res->size());
     const auto dec_res = k.decrypt(*enc_res);
     TEST_ASSERT(dec_res);
     TEST_ASSERT_EQUAL(dec_res->size(), txt_data.size());
@@ -76,6 +97,7 @@ extern "C" void app_main() {
 
     RUN_TEST(test_keys);
     RUN_TEST(test_encrypt_decrypt);
+    RUN_TEST(test_sign_verify);
 
     UNITY_END();
 }

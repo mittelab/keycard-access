@@ -10,7 +10,10 @@
 namespace ka {
 
     class keypair {
-        managed<mbedtls_ecp_keypair, &mbedtls_ecp_keypair_init, &mbedtls_ecp_keypair_free> _kp;
+        /**
+         * @note Mutable because ECDSA wants non-const
+         */
+        mutable managed<mbedtls_ecp_keypair, &mbedtls_ecp_keypair_init, &mbedtls_ecp_keypair_free> _kp;
 
         [[nodiscard]] mlab::bin_data export_key_internal(bool include_private) const;
 
@@ -37,6 +40,11 @@ namespace ka {
 
         [[nodiscard]] mbedtls_result<mlab::bin_data> encrypt(mlab::bin_data const &data) const;
         [[nodiscard]] mbedtls_result<mlab::bin_data> decrypt(mlab::bin_data const &data) const;
+
+        [[nodiscard]] mbedtls_result<mlab::bin_data> sign(mlab::bin_data const &data) const;
+        [[nodiscard]] mbedtls_result<> verify(mlab::bin_data const &data, mlab::bin_data const &signature) const;
+
+        [[nodiscard]] static mbedtls_result<std::array<std::uint8_t, 32>> hash(mlab::bin_data const &data);
     };
 }// namespace ka
 
