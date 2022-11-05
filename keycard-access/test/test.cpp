@@ -3,6 +3,21 @@
 
 using namespace ka;
 
+void test_encrypt_decrypt() {
+    static const unsigned char plaintext[] = "The quick brown fox jumps over the lazy dog";
+    const mlab::bin_data txt_data = mlab::bin_data::chain(plaintext);
+
+    keypair k;
+    TEST_ASSERT(k.generate());
+
+    const auto enc_res = k.encrypt(txt_data);
+    TEST_ASSERT(enc_res);
+    const auto dec_res = k.decrypt(*enc_res);
+    TEST_ASSERT(dec_res);
+    TEST_ASSERT_EQUAL(dec_res->size(), txt_data.size());
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(txt_data.data(), dec_res->data(), std::min(txt_data.size(), dec_res->size()));
+}
+
 void test_keys() {
     keypair k;
     TEST_ASSERT(not k.has_private());
@@ -60,6 +75,7 @@ extern "C" void app_main() {
     UNITY_BEGIN();
 
     RUN_TEST(test_keys);
+    RUN_TEST(test_encrypt_decrypt);
 
     UNITY_END();
 }
