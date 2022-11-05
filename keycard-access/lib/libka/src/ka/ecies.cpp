@@ -151,7 +151,7 @@ namespace ka::ecies {
 
     mbedtls_result<> derive_symmetric_key(std::array<std::uint8_t, 32> const &salt, mbedtls_mpi const &secret, mbedtls_gcm_context &context) {
         if (const auto r = derive_symmetric_key(salt, secret); r) {
-            MBEDTLS_TRY(mbedtls_gcm_setkey(&context, MBEDTLS_CIPHER_ID_AES, r->data(), r->size()))
+            MBEDTLS_TRY(mbedtls_gcm_setkey(&context, MBEDTLS_CIPHER_ID_AES, r->data(), r->size() * 8))
             return mlab::result_success;
         } else {
             return r.error();
