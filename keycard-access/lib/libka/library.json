@@ -30,7 +30,7 @@
     "-std=c++17"
   ],
   "dependencies": {
-    "libSpookyAction": "https://git.mittelab.org/proj/libspookyaction.git#18671213",
+    "libSpookyAction": "https://git.mittelab.org/proj/libspookyaction.git#298461b5",
     "mittelab/mitteLib": "^1.0.3"
   }
 }
