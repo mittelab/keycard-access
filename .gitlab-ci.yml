@@ -10,7 +10,6 @@ stages:
 
 variables:
   PIO_PROJ_FOLDER: keycard-access
-  GIT_SUBMODULE_STRATEGY: recursive
 
 
 .pio-cache: &pio-cache

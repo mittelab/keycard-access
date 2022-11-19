@@ -9,8 +9,6 @@
 #include <ka/secure_rng.hpp>
 #include <mbedtls/ecdsa.h>
 #include <mbedtls/md.h>
-#include <wolfssl/wolfcrypt/ed25519.h>
-#include <wolfssl/wolfcrypt/ecc.h>
 
 namespace ka {
     namespace {
