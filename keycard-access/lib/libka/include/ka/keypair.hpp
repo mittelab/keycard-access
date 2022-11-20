@@ -51,9 +51,6 @@ namespace ka {
         raw_sec_key _sk{};
     };
 
-    /**
-     * @note serialize public with ''bd << my_key_pair;'' and secret with ''bd << include_secret << my_key_pair;''.
-     */
     class key_pair : public sec_key, public pub_key {
         void overwrite_pub_key();
     public:
