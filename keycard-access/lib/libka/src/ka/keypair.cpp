@@ -4,189 +4,138 @@
 
 #include <cstring>
 #include <esp_log.h>
-#include <ka/ecies.hpp>
 #include <ka/keypair.hpp>
-#include <ka/secure_rng.hpp>
-#include <mbedtls/ecdsa.h>
-#include <mbedtls/md.h>
+#include <sodium/crypto_scalarmult_curve25519.h>
+#include <sodium/randombytes.h>
 
 namespace ka {
-    namespace {
-        struct key_format {
-            unsigned version = 0x0;
-            bool has_private = false;
 
-            constexpr key_format() = default;
-            constexpr key_format(unsigned v, bool pvt) : version{v}, has_private{pvt} {}
+    namespace serialize {
+        static constexpr std::uint8_t pub_key_tag = 0x00;
+        static constexpr std::uint8_t sec_key_tag = 0x01;
+    }// namespace serialize
 
-            [[nodiscard]] constexpr std::uint8_t as_byte() const {
-                return std::uint8_t((version << 1) | (has_private ? 0b1 : 0b0));
-            }
-
-            [[nodiscard]] static constexpr key_format from_byte(std::uint8_t b) {
-                return {unsigned(b) >> 1, (b & 0b1) != 0};
-            }
-        };
-
-    }// namespace
-
-    void keypair::clear() {
-        clear_private();
-        mbedtls_ecp_point_free(&_kp->Q);
-        mbedtls_ecp_point_init(&_kp->Q);
-        assert(not has_public());
+    pub_key::pub_key(raw_pub_key pub_key_raw) : _pk{pub_key_raw} {
     }
 
-    void keypair::clear_private() {
-        mbedtls_mpi_free(&_kp->d);
-        mbedtls_mpi_init(&_kp->d);
-        assert(not has_private());
-    }
-
-    bool keypair::has_private() const {
-        return mbedtls_ecp_check_privkey(&_kp->grp, &_kp->d) == 0;
-    }
-
-    bool keypair::has_public() const {
-        return mbedtls_ecp_check_pubkey(&_kp->grp, &_kp->Q) == 0;
-    }
-
-    bool keypair::has_matching_public_private() const {
-        return has_public() and has_private() and mbedtls_ecp_check_pub_priv(_kp, _kp) == 0;
-    }
-
-    mlab::bin_data keypair::export_key_internal(bool include_private) const {
-        if (include_private) {
-            return mlab::bin_data::chain(key_format{0x0, true}.as_byte(), _kp->d);
+    pub_key::pub_key(mlab::range<std::uint8_t const *> pub_key_raw) : pub_key{} {
+        if (pub_key_raw.size() != raw_pub_key::key_size) {
+            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_pub_key::key_size);
         } else {
-            return mlab::bin_data::chain(key_format{0x0, false}.as_byte(), std::make_pair(std::cref(_kp->grp), std::cref(_kp->Q)));
+            std::copy(std::begin(pub_key_raw), std::end(pub_key_raw), std::begin(_pk));
         }
     }
 
-    mlab::bin_data keypair::export_key() const {
-        if (not has_public()) {
-            ESP_LOGE("KA", "Unable to save an empty key.");
-            return {};
+    sec_key::sec_key(raw_sec_key sec_key_raw) : _sk{sec_key_raw} {
+    }
+
+    sec_key::sec_key(mlab::range<std::uint8_t const *> sec_key_raw) : sec_key{} {
+        if (sec_key_raw.size() != raw_sec_key::key_size) {
+            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_sec_key::key_size);
         } else {
-            return export_key_internal(has_private());
+            std::copy(std::begin(sec_key_raw), std::end(sec_key_raw), std::begin(_sk));
         }
     }
 
-    mlab::bin_data keypair::export_key(bool include_private) const {
-        if (not has_public()) {
-            ESP_LOGE("KA", "Unable to save an empty key.");
-            return {};
+    raw_pub_key const &pub_key::raw_pk() const {
+        return _pk;
+    }
+
+    raw_sec_key const &sec_key::raw_sk() const {
+        return _sk;
+    }
+
+    key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {
+        overwrite_pub_key();
+    }
+
+    key_pair::key_pair(sec_key sk) : sec_key{sk}, pub_key{} {
+        overwrite_pub_key();
+    }
+
+    key_pair::key_pair(mlab::range<std::uint8_t const *> sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {
+        if (sec_key_raw.size() == raw_sec_key::key_size) {
+            overwrite_pub_key();
+        }
+    }
+
+
+    void key_pair::overwrite_pub_key() {
+        if (auto [pub_key_raw, success] = derive_pub_key(); success) {
+            _pk = pub_key_raw;
         } else {
-            return export_key_internal(include_private and has_private());
+            _pk = {};
+            _sk = {};
         }
     }
 
-    mbedtls_result<mlab::bin_data> keypair::encrypt(mlab::bin_data const &data) const {
-        if (not has_public()) {
-            return mbedtls_err::ecp_invalid_key;
+    std::pair<raw_pub_key, bool> sec_key::derive_pub_key() const {
+        raw_pub_key retval{};
+        if (crypto_scalarmult_curve25519_base(retval.data(), _sk.data()) != 0) {
+            ESP_LOGE("KA", "Could not derive public key from secret key.");
+            return {{}, false};
         }
-        return ecies::encrypt(*_kp, data);
+        return {retval, true};
     }
 
-    mbedtls_result<mlab::bin_data> keypair::decrypt(mlab::bin_data const &data) const {
-        if (not has_private()) {
-            return mbedtls_err::ecp_invalid_key;
+    bool key_pair::is_valid() const {
+        if (const auto [pub_key_raw, success] = derive_pub_key(); success) {
+            return raw_pk() == pub_key_raw;
         }
-        return ecies::decrypt(*_kp, data);
+        return false;
     }
 
-    mbedtls_result<mlab::bin_data> keypair::sign(mlab::bin_data const &data) const {
-        if (not has_private()) {
-            return mbedtls_err::ecp_invalid_key;
-        }
-        if (const auto r_hash = hash(data); not r_hash) {
-            return r_hash.error();
-        } else {
-            std::array<std::uint8_t, MBEDTLS_ECDSA_MAX_LEN> buffer{};
-            std::size_t written_length = 0;
-            MBEDTLS_TRY(mbedtls_ecdsa_write_signature(
-                    _kp, MBEDTLS_MD_SHA256,
-                    r_hash->data(), r_hash->size(),
-                    buffer.data(), &written_length,
-                    default_secure_rng().fn(), default_secure_rng().arg()))
-
-            return mlab::bin_data{std::begin(buffer), std::begin(buffer) + written_length};
+    void key_pair::generate() {
+        if (0 != crypto_box_keypair(_pk.data(), _sk.data())) {
+            ESP_LOGE("KA", "Unable to generate a new keypair.");
+            _pk = {};
+            _sk = {};
         }
     }
 
-    mbedtls_result<> keypair::verify(mlab::bin_data const &data, mlab::bin_data const &signature) const {
-        if (not has_public()) {
-            return mbedtls_err::ecp_invalid_key;
-        }
-        if (const auto r_hash = hash(data); not r_hash) {
-            return r_hash.error();
-        } else {
-            MBEDTLS_TRY(mbedtls_ecdsa_read_signature(
-                    _kp, r_hash->data(), r_hash->size(), signature.data(), signature.size()))
-            return mlab::result_success;
-        }
+    pub_key key_pair::drop_secret_key() const {
+        return pub_key{raw_pk()};
     }
 
-    mbedtls_result<std::array<std::uint8_t, 32>> keypair::hash(mlab::bin_data const &data) {
-        auto const *digest = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-        if (digest == nullptr) {
-            ESP_LOGE("KA", "Unsupported message digest SHA256!?");
-            return mbedtls_err::md_feature_unavailable;
+    bool key_pair::encrypt_for(pub_key const &recipient, mlab::bin_data &message) const {
+        // Use the same buffer for everything. Store the message length
+        const auto message_length = message.size();
+        // Accommodate nonce and mac code
+        message.resize(message.size() + crypto_box_curve25519xsalsa20poly1305_MACBYTES + crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
+        auto message_view = message.data_view(0, message_length);
+        auto ciphertext_view = message.data_view(0, message_length + crypto_box_curve25519xsalsa20poly1305_MACBYTES);
+        auto nonce_view = message.data_view(ciphertext_view.size());
+        // Generate nonce bytes
+        randombytes_buf(nonce_view.data(), nonce_view.size());
+        assert(nonce_view.size() == crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
+        // Pipe into crypto_box_easy, overlap is allowed
+        if (0 != crypto_box_easy(ciphertext_view.data(), message_view.data(), message_view.size(), nonce_view.data(),
+                                 recipient.raw_pk().data(), raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to encrypt.");
+            message.clear();
+            return false;
         }
-        std::array<std::uint8_t, 32> hash{};
-        MBEDTLS_TRY(mbedtls_md(digest, data.data(), data.size(), std::begin(hash)))
-        return hash;
+        return true;
     }
 
-    mbedtls_result<> keypair::import_key(mlab::bin_data const &data) {
-        clear();
-        mlab::bin_stream s{data};
-        const auto fmt = key_format::from_byte(s.pop());
-        if (fmt.version != 0) {
-            ESP_LOGW("KA", "Unsupported key format %02x", fmt.version);
-            return mbedtls_err::other;
+    bool key_pair::decrypt_from(pub_key const &sender, mlab::bin_data &ciphertext) const {
+        if (ciphertext.size() < crypto_box_curve25519xsalsa20poly1305_MACBYTES + crypto_box_curve25519xsalsa20poly1305_NONCEBYTES) {
+            ESP_LOGE("KA", "Invalid ciphertext, too short.");
+            return false;
         }
-        // We know this format version 0, has a MBEDTLS_ECP_DP_SECP256R1
-        MBEDTLS_TRY(mbedtls_ecp_group_load(&_kp->grp, MBEDTLS_ECP_DP_SECP256R1))
-        // Pull out private or public part
-        if (fmt.has_private) {
-            s >> _kp->d;
-        } else {
-            s >> std::make_pair(std::cref(_kp->grp), std::ref(_kp->Q));
+        const auto message_length = ciphertext.size() - crypto_box_curve25519xsalsa20poly1305_MACBYTES - crypto_box_curve25519xsalsa20poly1305_NONCEBYTES;
+        auto ciphertext_view = ciphertext.data_view(0, message_length + crypto_box_curve25519xsalsa20poly1305_MACBYTES);
+        auto nonce_view = ciphertext.data_view(ciphertext_view.size());
+        auto message_view = ciphertext.data_view(0, message_length);
+        assert(nonce_view.size() == crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
+        if (0 != crypto_box_open_easy(message_view.data(), ciphertext_view.data(), ciphertext_view.size(), nonce_view.data(),
+                                      sender.raw_pk().data(), raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to decrypt.");
+            ciphertext.clear();
+            return false;
         }
-        // Assert that the stream ends there.
-        if (s.bad()) {
-            ESP_LOGW("KA", "Invalid key format.");
-        } else if (not s.eof()) {
-            ESP_LOGW("KA", "Stray bytes in key sequence.");
-        } else {
-            // Recover public key, if needed
-            if (fmt.has_private) {
-                if (const auto res = mbedtls_ecp_mul(&_kp->grp, &_kp->Q, &_kp->d, &_kp->grp.G, default_secure_rng().fn(), default_secure_rng().arg());
-                    not mbedtls_err_check(res)) {
-                    clear();
-                    return mbedtls_err_cast(res);
-                }
-            }
-            // Safety checks
-            if (not has_public()) {
-                ESP_LOGW("KA", "Invalid public key loaded.");
-            } else if (has_private() != fmt.has_private) {
-                ESP_LOGW("KA", "Invalid private key loaded.");
-            } else if (fmt.has_private and not has_matching_public_private()) {
-                ESP_LOGE("KA", "Unable to recover public key.");
-            } else {
-                return mlab::result_success;
-            }
-        }
-        clear();
-        return mbedtls_err::other;
+        ciphertext.resize(message_length);
+        return true;
     }
-
-    mbedtls_result<> keypair::generate() {
-        MBEDTLS_TRY(mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, _kp, default_secure_rng().fn(), default_secure_rng().arg()))
-        return mlab::result_success;
-    }
-
 
 }// namespace ka
