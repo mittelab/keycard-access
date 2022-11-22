@@ -9,18 +9,22 @@
 #include <ka/member_token.hpp>
 #include <mlab/bin_data.hpp>
 #include <numeric>
+#include <sodium/crypto_hash_sha512.h>
+#include <sodium/randombytes.h>
 
-#define REQ_CMD_NAMED_RES(CMD, RNAME)                                                 \
+#define IMPL_REQ_CMD_NAMED_RES(CMD, RNAME)                                            \
     if (const auto RNAME = (CMD); not RNAME) {                                        \
         ESP_LOGW("KA", "Failed " #CMD " with %s", desfire::to_string(RNAME.error())); \
         return RNAME.error();                                                         \
     }
 
-#define REQ_CMD(CMD) REQ_CMD_NAMED_RES(CMD, _r)
-#define REQ_CMD_RES(CMD)      \
-    REQ_CMD_NAMED_RES(CMD, r) \
+#define REQ_CMD(CMD) IMPL_REQ_CMD_NAMED_RES(CMD, _r)
+#define REQ_CMD_RES(CMD)           \
+    IMPL_REQ_CMD_NAMED_RES(CMD, r) \
     else
-
+#define REQ_CMD_RES_AS(CMD, RES_VAR)     \
+    IMPL_REQ_CMD_NAMED_RES(CMD, RES_VAR) \
+    else
 namespace mlab {
     bin_data &operator<<(bin_data &bd, std::string const &s) {
         // Construct an uint8_t view over the string by casting pointers. This is accepted by bin_data
@@ -74,25 +78,105 @@ namespace ka {
         return mlab::result_success;
     }
 
+    member_token::r<bool> member_token::is_enrolled(gate::id_t gid) const {
+        return tagfs::does_app_exist(tag(), gate::id_to_app_id(gid));
+    }
+
+    enroll_ticket enroll_ticket::generate() {
+        enroll_ticket ticket{};
+        randombytes_buf(ticket._key.k.data(), ticket._key.k.size());
+        randombytes_buf(ticket._nonce.data(), ticket._nonce.size());
+        return ticket;
+    }
+
+    bool enroll_ticket::verify_enroll_file_content(mlab::bin_data const &content, const std::string &holder) const {
+        const auto expected_content = get_enroll_file_content(holder);
+        return expected_content.size() == content.size() and
+               std::equal(std::begin(content), std::end(content), std::begin(expected_content));
+    }
+
+    mlab::bin_data enroll_ticket::get_enroll_file_content(std::string const &holder) const {
+        const mlab::bin_data data = mlab::bin_data::chain(
+                mlab::prealloc(nonce().size() + holder.size()),
+                nonce(),
+                holder);
+        mlab::bin_data hash;
+        hash.resize(64);
+        if (0 != crypto_hash_sha512(hash.data(), data.data(), data.size())) {
+            ESP_LOGE("KA", "Could not hash holder and nonce.");
+            hash = {};
+        }
+        return hash;
+    }
+
+    std::pair<mlab::bin_data, standard_file_settings> enroll_ticket::get_enroll_file(const std::string &holder) const {
+        auto data = get_enroll_file_content(holder);
+        auto settings = standard_file_settings{
+                desfire::generic_file_settings{
+                        desfire::file_security::encrypted,
+                        desfire::access_rights{key().key_number}},
+                desfire::data_file_settings{data.size()}};
+        return {std::move(data), settings};
+    }
+
+    member_token::r<enroll_ticket> member_token::enroll_gate(gate::id_t gid, key_t const &gate_key) {
+        const desfire::app_id aid = gate::id_to_app_id(gid);
+        // Do not allow any change, only create/delete file with authentication.
+        // Important: we allow to change only the same key, otherwise the master can change access to the enrollment file
+        const desfire::key_rights key_rights{desfire::same_key, false, false, false, false};
+        // Retrieve the holder data that we will write in the enroll file
+        REQ_CMD_RES(get_holder()) {
+            // Generate ticket and enroll file content
+            const enroll_ticket ticket = enroll_ticket::generate();
+            const auto [content, settings] = ticket.get_enroll_file(*r);
+            // Create an app, allow one extra key
+            REQ_CMD(tagfs::delete_app_if_exists(tag(), aid))
+            REQ_CMD(tagfs::create_app(tag(), aid, gate_key, key_rights, 1))
+            // Authenticate with the default key and change it to the specific file key
+            REQ_CMD(tag().authenticate(key_t{ticket.key().key_number, {}}))
+            REQ_CMD(tag().change_key(ticket.key()))
+            REQ_CMD(tag().authenticate(ticket.key()))
+            // Now create the enrollment file
+            REQ_CMD(tag().create_file(gate_enroll_file, settings))
+            REQ_CMD(tag().write_data(gate_enroll_file, 0, content, desfire::file_security::encrypted))
+            // Make sure you're back on the gate master key
+            // TODO with_key_number
+            REQ_CMD(tag().authenticate(gate_key.key_number == 0 ? gate_key : key_t{0, gate_key.k}))
+            return ticket;
+        }
+    }
+
+    member_token::r<bool> member_token::verify_drop_enroll_ticket(gate::id_t gid, enroll_ticket const &ticket) const {
+        REQ_CMD_RES_AS(get_holder(), r_holder) {
+            REQ_CMD(tag().select_application(gate::id_to_app_id(gid)))
+            REQ_CMD(tag().authenticate(ticket.key()))
+            // Read the enroll file and compare
+            REQ_CMD_RES_AS(tag().read_data(gate_enroll_file, 0, 0xfffff, desfire::file_security::encrypted), r_read) {
+                if (ticket.verify_enroll_file_content(*r_read, *r_holder)) {
+                    // Delete the enroll file
+                    REQ_CMD(tag().delete_file(gate_enroll_file))
+                    // Reset authentication
+                    REQ_CMD(tag().select_application())
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+
     member_token::r<> member_token::setup_mad(std::string const &holder, std::string const &publisher) {
         // Copy the strings into a bin_data
         const auto bin_holder = mlab::from_string(holder);
         const auto bin_publisher = mlab::from_string(publisher);
         // Attempt to delete the existing app
         REQ_CMD(tagfs::delete_app_if_exists(tag(), mad_aid))
-        // The initial settings allow for changing the key
-        const desfire::app_settings initial_mad_settings{
-                desfire::app_crypto::aes_128,
-                desfire::key_rights{desfire::same_key, true, true, false, true},
-                1};
-        REQ_CMD(tag().create_application(mad_aid, initial_mad_settings))
         // Prepare an app with a random key
         REQ_CMD_RES(tagfs::create_app_for_ro(tag(), mad_aid)) {
             // Create file for MAD version 3
-            REQ_CMD(tagfs::create_ro_plain_value_file(tag(), mad_file_version, 0x3))
+            REQ_CMD(tagfs::create_ro_free_plain_value_file(tag(), mad_file_version, 0x3))
             // Create files with holder and publisher
-            REQ_CMD(tagfs::create_ro_plain_data_file(tag(), mad_file_card_holder, bin_holder))
-            REQ_CMD(tagfs::create_ro_plain_data_file(tag(), mad_file_card_publisher, bin_publisher))
+            REQ_CMD(tagfs::create_ro_free_plain_data_file(tag(), mad_file_card_holder, bin_holder))
+            REQ_CMD(tagfs::create_ro_free_plain_data_file(tag(), mad_file_card_publisher, bin_publisher))
             // Turn the app into read-only, discard the temporary key
             REQ_CMD(tagfs::make_app_ro(tag(), false))
         }
@@ -145,7 +229,7 @@ namespace ka {
     }
 
     namespace tagfs {
-        r<> create_ro_plain_value_file(desfire::tag &tag, desfire::file_id fid, std::int32_t value) {
+        r<> create_ro_free_plain_value_file(desfire::tag &tag, desfire::file_id fid, std::int32_t value) {
             // A value file can be directly created with no write access, because it takes an initial value
             const desfire::file_settings<desfire::file_type::value> ro_settings{
                     desfire::generic_file_settings{
@@ -155,7 +239,7 @@ namespace ka {
             return tag.create_file(fid, ro_settings);
         }
 
-        r<> create_ro_plain_data_file(desfire::tag &tag, desfire::file_id fid, mlab::bin_data const &value) {
+        r<> create_ro_free_plain_data_file(desfire::tag &tag, desfire::file_id fid, mlab::bin_data const &value) {
             // A data file must be created with write access, because we have to write on it before locking it.
             const desfire::file_settings<desfire::file_type::standard> init_settings{
                     desfire::generic_file_settings{
@@ -172,21 +256,107 @@ namespace ka {
             return mlab::result_success;
         }
 
+        namespace {
+            /**
+             * @todo Move to libspookyaction
+             * @{
+             */
+            [[nodiscard]] desfire::any_key make_default_key(desfire::cipher_type c) {
+                switch (c) {
+                    case desfire::cipher_type::none:
+                        return desfire::key<desfire::cipher_type::none>{};
+                    case desfire::cipher_type::des:
+                        return desfire::key<desfire::cipher_type::des>{};
+                    case desfire::cipher_type::des3_2k:
+                        return desfire::key<desfire::cipher_type::des3_2k>{};
+                    case desfire::cipher_type::des3_3k:
+                        return desfire::key<desfire::cipher_type::des3_3k>{};
+                    case desfire::cipher_type::aes128:
+                        return desfire::key<desfire::cipher_type::aes128>{};
+                    default:
+                        DESFIRE_LOGE("Unsupported cipher_type.");
+                        return {};
+                }
+            }
+            [[nodiscard]] desfire::any_key with_key_number(desfire::any_key const &k, std::uint8_t key_number) {
+                switch (k.type()) {
+                    case desfire::cipher_type::none:
+                        return desfire::key<desfire::cipher_type::none>{};
+                    case desfire::cipher_type::des:
+                        return desfire::key<desfire::cipher_type::des>{
+                                key_number,
+                                k.get<desfire::cipher_type::des>().k};
+                    case desfire::cipher_type::des3_2k:
+                        return desfire::key<desfire::cipher_type::des3_2k>{
+                                key_number,
+                                k.get<desfire::cipher_type::des3_2k>().k};
+                    case desfire::cipher_type::des3_3k:
+                        return desfire::key<desfire::cipher_type::des3_3k>{
+                                key_number,
+                                k.get<desfire::cipher_type::des3_3k>().k};
+                    case desfire::cipher_type::aes128:
+                        return desfire::key<desfire::cipher_type::aes128>{
+                                key_number,
+                                k.get<desfire::cipher_type::aes128>().k};
+                    default:
+                        DESFIRE_LOGE("Unsupported cipher_type.");
+                        return {};
+                }
+            }
+            [[nodiscard]] bool operator==(desfire::key_rights const &l, desfire::key_rights const &r) {
+                return l.allowed_to_change_keys == r.allowed_to_change_keys and
+                       l.create_delete_without_auth == r.create_delete_without_auth and
+                       l.dir_access_without_auth == r.dir_access_without_auth and
+                       l.config_changeable == r.config_changeable and
+                       l.master_key_changeable == r.master_key_changeable;
+            }
+            [[nodiscard]] bool operator!=(desfire::key_rights const &l, desfire::key_rights const &r) {
+                return not(l == r);
+            }
+            /**
+             * @}
+             */
+        }// namespace
+
+        r<> create_app(desfire::tag &tag, desfire::app_id aid, desfire::any_key master_key, desfire::key_rights const &key_rights, std::uint8_t extra_keys) {
+            // Patch the key number
+            if (master_key.key_number() != 0) {
+                master_key = with_key_number(master_key, 0);
+            }
+            // We need to change at least one key, but we try to recover as many settings as possible from key_rights.
+            // If key_rights has a setting that allows us to change key, we use that. Otherwise, we switch to master key
+            const desfire::key_actor<desfire::same_key_t> change_key_actor =
+                    key_rights.allowed_to_change_keys == master_key.key_number() or key_rights.allowed_to_change_keys == desfire::same_key
+                            ? key_rights.allowed_to_change_keys
+                            : master_key.key_number();
+            // Allow modifying config and keys initially
+            const desfire::key_rights inital_rights{change_key_actor, true, key_rights.dir_access_without_auth, key_rights.create_delete_without_auth, true};
+            const desfire::app_settings initial_settings{
+                    desfire::app_crypto_from_cipher(master_key.type()),
+                    inital_rights,
+                    std::uint8_t(std::min(unsigned(desfire::bits::max_keys_per_app), extra_keys + 1u))};
+            REQ_CMD(tag.create_application(aid, initial_settings))
+            // Enter the application with the default key
+            REQ_CMD(tag.select_application(aid))
+            REQ_CMD(tag.authenticate(make_default_key(master_key.type())))
+            // Change the master key
+            REQ_CMD(tag.change_key(master_key))
+            // Authenticate and update the app key rights, if needed
+            REQ_CMD(tag.authenticate(master_key))
+            if (key_rights != inital_rights) {
+                // Only change the rights if there is something different
+                REQ_CMD(tag.change_app_settings(key_rights))
+            }
+            return mlab::result_success;
+        }
+
         r<key_t> create_app_for_ro(desfire::tag &tag, desfire::app_id aid) {
             // Create a random key
             key_t k{};
+            // TODO use safer libsodium
             esp_fill_random(std::begin(k.k), k.k.size());
             // Settings for an app with one key that can change keys
-            const desfire::app_settings initial_ro_settings{
-                    desfire::app_crypto::aes_128,
-                    desfire::key_rights{desfire::same_key, true, true, false, true},
-                    1};
-            REQ_CMD(tag.create_application(aid, initial_ro_settings))
-            // Enter the application with the default key, then immediately change it to something random
-            REQ_CMD(tag.select_application(aid))
-            REQ_CMD(tag.authenticate(key_t{}))
-            REQ_CMD(tag.change_key(k))
-            REQ_CMD(tag.authenticate(k))
+            REQ_CMD(create_app(tag, aid, k, desfire::key_rights{k.key_number, true, true, false, true}))
             return k;
         }
 
