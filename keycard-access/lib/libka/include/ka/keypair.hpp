@@ -34,6 +34,7 @@ namespace ka {
         explicit pub_key(mlab::range<std::uint8_t const *> pub_key_raw);
 
         [[nodiscard]] raw_pub_key const &raw_pk() const;
+
     protected:
         raw_pub_key _pk{};
     };
@@ -47,12 +48,14 @@ namespace ka {
         [[nodiscard]] std::pair<raw_pub_key, bool> derive_pub_key() const;
 
         [[nodiscard]] raw_sec_key const &raw_sk() const;
+
     protected:
         raw_sec_key _sk{};
     };
 
     class key_pair : public sec_key, public pub_key {
         void overwrite_pub_key();
+
     public:
         key_pair() = default;
         explicit key_pair(sec_key sk);
