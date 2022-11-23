@@ -20,19 +20,6 @@ namespace ka {
         using r = desfire::tag::result<Tn...>;
 
         /**
-         * @addtogroup Error code characterization
-         * @brief Checks whether an error code in a result represents an unauthorized operation.
-         * @{
-         */
-        [[nodiscard]] bool is_unauthorized(desfire::error e);
-
-        template <class... Tn>
-        [[nodiscard]] bool is_unauthorized(r<Tn...> const &e);
-        /**
-         * @}
-         */
-
-        /**
          * @addtogroup Creating read-only, free-access files
          * @brief Creates a read-only value file with free unencrypted access in the current application.
          * The file can only be deleted afterwards, it is not possible to write on it, only read and it requires no authentication to read.
@@ -235,12 +222,6 @@ namespace ka {
 }// namespace ka
 
 namespace ka {
-
-
-    template <class... Tn>
-    bool tagfs::is_unauthorized(r<Tn...> const &e) {
-        return (not e) and is_unauthorized(e.error());
-    }
 
     desfire::tag &member_token::tag() const {
         return *_tag;
