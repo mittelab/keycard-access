@@ -28,7 +28,6 @@ namespace ka {
          * @param fid Id of the file to create
          * @param value Value of the file
          * @return A result representing whether the operation was successful or not.
-         * @todo Make sure that is is free access, e.g. rename to ro_free
          * @{
          */
         r<> create_ro_free_plain_value_file(desfire::tag &tag, desfire::file_id fid, std::int32_t value);
@@ -53,9 +52,8 @@ namespace ka {
          * @param tag
          * @param aid
          * @return
-         * @todo Allow specifying a custom key type
          */
-        [[nodiscard]] r<key_t> create_app_for_ro(desfire::tag &tag, desfire::app_id aid);
+        [[nodiscard]] r<desfire::any_key> create_app_for_ro(desfire::tag &tag, desfire::cipher_type cipher, desfire::app_id aid, desfire::random_oracle rng);
 
         /**
          * Creates a new app with key zero set to @p master_key, allowing for @p extra_keys extra keys.

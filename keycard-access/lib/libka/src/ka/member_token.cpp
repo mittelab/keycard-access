@@ -84,10 +84,8 @@ namespace ka {
 
     enroll_ticket enroll_ticket::generate() {
         enroll_ticket ticket{};
-        key_t::key_data kd{};
-        randombytes_buf(kd.data(), kd.size());
+        ticket._key.randomize(randombytes_buf);
         randombytes_buf(ticket._nonce.data(), ticket._nonce.size());
-        ticket._key.set_data(kd);
         return ticket;
     }
 
@@ -172,7 +170,7 @@ namespace ka {
         // Attempt to delete the existing app
         REQ_CMD(tagfs::delete_app_if_exists(tag(), mad_aid))
         // Prepare an app with a random key
-        REQ_CMD_RES(tagfs::create_app_for_ro(tag(), mad_aid)) {
+        REQ_CMD_RES(tagfs::create_app_for_ro(tag(), key_t::cipher, mad_aid, randombytes_buf)) {
             // Create file for MAD version 3
             REQ_CMD(tagfs::create_ro_free_plain_value_file(tag(), mad_file_version, 0x3))
             // Create files with holder and publisher
@@ -289,12 +287,9 @@ namespace ka {
             return mlab::result_success;
         }
 
-        r<key_t> create_app_for_ro(desfire::tag &tag, desfire::app_id aid) {
+        r<desfire::any_key> create_app_for_ro(desfire::tag &tag, desfire::cipher_type cipher, desfire::app_id aid, desfire::random_oracle rng) {
             // Create a random key
-            key_t k{};
-            key_t::key_data kd{};
-            randombytes_buf(kd.data(), kd.size());
-            k.set_data(kd);
+            const desfire::any_key k{cipher, rng};
             // Settings for an app with one key that can change keys
             REQ_CMD(create_app(tag, aid, k, desfire::key_rights{k.key_number(), true, true, false, true}))
             return k;
