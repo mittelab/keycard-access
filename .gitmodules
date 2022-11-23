@@ -1,0 +1,3 @@
+[submodule "keycard-access/lib/_libspookyaction"]
+	path = keycard-access/lib/_libspookyaction
+	url = https://git.mittelab.org/proj/libspookyaction.git
