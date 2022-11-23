@@ -84,8 +84,10 @@ namespace ka {
 
     enroll_ticket enroll_ticket::generate() {
         enroll_ticket ticket{};
-        randombytes_buf(ticket._key.k.data(), ticket._key.k.size());
+        key_t::key_data kd{};
+        randombytes_buf(kd.data(), kd.size());
         randombytes_buf(ticket._nonce.data(), ticket._nonce.size());
+        ticket._key.set_data(kd);
         return ticket;
     }
 
@@ -114,7 +116,7 @@ namespace ka {
         auto settings = standard_file_settings{
                 desfire::generic_file_settings{
                         desfire::file_security::encrypted,
-                        desfire::access_rights{key().key_number}},
+                        desfire::access_rights{key().key_number()}},
                 desfire::data_file_settings{data.size()}};
         return {std::move(data), settings};
     }
@@ -133,15 +135,14 @@ namespace ka {
             REQ_CMD(tagfs::delete_app_if_exists(tag(), aid))
             REQ_CMD(tagfs::create_app(tag(), aid, gate_key, key_rights, 1))
             // Authenticate with the default key and change it to the specific file key
-            REQ_CMD(tag().authenticate(key_t{ticket.key().key_number, {}}))
+            REQ_CMD(tag().authenticate(key_t{ticket.key().key_number(), {}}))
             REQ_CMD(tag().change_key(ticket.key()))
             REQ_CMD(tag().authenticate(ticket.key()))
             // Now create the enrollment file
             REQ_CMD(tag().create_file(gate_enroll_file, settings))
             REQ_CMD(tag().write_data(gate_enroll_file, 0, content, desfire::file_security::encrypted))
             // Make sure you're back on the gate master key
-            // TODO with_key_number
-            REQ_CMD(tag().authenticate(gate_key.key_number == 0 ? gate_key : key_t{0, gate_key.k}))
+            REQ_CMD(tag().authenticate(gate_key.with_key_number(0)))
             return ticket;
         }
     }
@@ -256,72 +257,10 @@ namespace ka {
             return mlab::result_success;
         }
 
-        namespace {
-            /**
-             * @todo Move to libspookyaction
-             * @{
-             */
-            [[nodiscard]] desfire::any_key make_default_key(desfire::cipher_type c) {
-                switch (c) {
-                    case desfire::cipher_type::none:
-                        return desfire::key<desfire::cipher_type::none>{};
-                    case desfire::cipher_type::des:
-                        return desfire::key<desfire::cipher_type::des>{};
-                    case desfire::cipher_type::des3_2k:
-                        return desfire::key<desfire::cipher_type::des3_2k>{};
-                    case desfire::cipher_type::des3_3k:
-                        return desfire::key<desfire::cipher_type::des3_3k>{};
-                    case desfire::cipher_type::aes128:
-                        return desfire::key<desfire::cipher_type::aes128>{};
-                    default:
-                        DESFIRE_LOGE("Unsupported cipher_type.");
-                        return {};
-                }
-            }
-            [[nodiscard]] desfire::any_key with_key_number(desfire::any_key const &k, std::uint8_t key_number) {
-                switch (k.type()) {
-                    case desfire::cipher_type::none:
-                        return desfire::key<desfire::cipher_type::none>{};
-                    case desfire::cipher_type::des:
-                        return desfire::key<desfire::cipher_type::des>{
-                                key_number,
-                                k.get<desfire::cipher_type::des>().k};
-                    case desfire::cipher_type::des3_2k:
-                        return desfire::key<desfire::cipher_type::des3_2k>{
-                                key_number,
-                                k.get<desfire::cipher_type::des3_2k>().k};
-                    case desfire::cipher_type::des3_3k:
-                        return desfire::key<desfire::cipher_type::des3_3k>{
-                                key_number,
-                                k.get<desfire::cipher_type::des3_3k>().k};
-                    case desfire::cipher_type::aes128:
-                        return desfire::key<desfire::cipher_type::aes128>{
-                                key_number,
-                                k.get<desfire::cipher_type::aes128>().k};
-                    default:
-                        DESFIRE_LOGE("Unsupported cipher_type.");
-                        return {};
-                }
-            }
-            [[nodiscard]] bool operator==(desfire::key_rights const &l, desfire::key_rights const &r) {
-                return l.allowed_to_change_keys == r.allowed_to_change_keys and
-                       l.create_delete_without_auth == r.create_delete_without_auth and
-                       l.dir_access_without_auth == r.dir_access_without_auth and
-                       l.config_changeable == r.config_changeable and
-                       l.master_key_changeable == r.master_key_changeable;
-            }
-            [[nodiscard]] bool operator!=(desfire::key_rights const &l, desfire::key_rights const &r) {
-                return not(l == r);
-            }
-            /**
-             * @}
-             */
-        }// namespace
-
         r<> create_app(desfire::tag &tag, desfire::app_id aid, desfire::any_key master_key, desfire::key_rights const &key_rights, std::uint8_t extra_keys) {
             // Patch the key number
             if (master_key.key_number() != 0) {
-                master_key = with_key_number(master_key, 0);
+                master_key.set_key_number(0);
             }
             // We need to change at least one key, but we try to recover as many settings as possible from key_rights.
             // If key_rights has a setting that allows us to change key, we use that. Otherwise, we switch to master key
@@ -338,7 +277,7 @@ namespace ka {
             REQ_CMD(tag.create_application(aid, initial_settings))
             // Enter the application with the default key
             REQ_CMD(tag.select_application(aid))
-            REQ_CMD(tag.authenticate(make_default_key(master_key.type())))
+            REQ_CMD(tag.authenticate(desfire::any_key(master_key.type())))
             // Change the master key
             REQ_CMD(tag.change_key(master_key))
             // Authenticate and update the app key rights, if needed
@@ -353,10 +292,11 @@ namespace ka {
         r<key_t> create_app_for_ro(desfire::tag &tag, desfire::app_id aid) {
             // Create a random key
             key_t k{};
-            // TODO use safer libsodium
-            esp_fill_random(std::begin(k.k), k.k.size());
+            key_t::key_data kd{};
+            randombytes_buf(kd.data(), kd.size());
+            k.set_data(kd);
             // Settings for an app with one key that can change keys
-            REQ_CMD(create_app(tag, aid, k, desfire::key_rights{k.key_number, true, true, false, true}))
+            REQ_CMD(create_app(tag, aid, k, desfire::key_rights{k.key_number(), true, true, false, true}))
             return k;
         }
 
