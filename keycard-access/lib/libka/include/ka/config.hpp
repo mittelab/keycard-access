@@ -5,15 +5,15 @@
 #ifndef KEYCARDACCESS_CONFIG_HPP
 #define KEYCARDACCESS_CONFIG_HPP
 
-#include <desfire/data.hpp>
+#include <desfire/keys.hpp>
 #include <string>
 
 namespace ka {
 
-    using key_t = desfire::key<desfire::cipher_type::aes128>;
+    using tag_key = desfire::key<desfire::cipher_type::aes128>;
 
     struct config {
-        key_t master_key;
+        tag_key master_key;
         std::string differentiation_salt;
     };
 
