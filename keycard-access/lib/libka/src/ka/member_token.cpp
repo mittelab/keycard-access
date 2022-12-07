@@ -86,22 +86,22 @@ namespace ka {
                std::equal(std::begin(content), std::end(content), std::begin(expected_content));
     }
 
-    mlab::bin_data ticket::get_file_content(std::string const &holder) const {
+    mlab::bin_data ticket::get_file_content(std::string const &text) const {
         const mlab::bin_data data = mlab::bin_data::chain(
-                mlab::prealloc(salt().size() + holder.size()),
+                mlab::prealloc(salt().size() + text.size()),
                 salt(),
-                holder);
+                text);
         mlab::bin_data hash;
         hash.resize(64);
         if (0 != crypto_hash_sha512(hash.data(), data.data(), data.size())) {
-            ESP_LOGE("KA", "Could not hash holder and salt.");
+            ESP_LOGE("KA", "Could not hash text and salt.");
             hash = {};
         }
         return hash;
     }
 
-    std::pair<mlab::bin_data, standard_file_settings> ticket::get_file(const std::string &holder) const {
-        auto data = get_file_content(holder);
+    std::pair<mlab::bin_data, standard_file_settings> ticket::get_file(const std::string &text) const {
+        auto data = get_file_content(text);
         auto settings = standard_file_settings{
                 desfire::generic_file_settings{
                         desfire::file_security::encrypted,
@@ -109,6 +109,38 @@ namespace ka {
                 desfire::data_file_settings{data.size()}};
         return {std::move(data), settings};
     }
+
+    member_token::r<> member_token::install_ticket(desfire::file_id fid, ticket const &t, std::string const &text) {
+        // Authenticate with the default tag_key and change it to the specific file tag_key
+        TRY(tag().authenticate(tag_key{t.key().key_number(), {}}))
+        TRY(tag().change_key(t.key()))
+        TRY(tag().authenticate(t.key()))
+        // Now create the ticket file
+        TRY(desfire::fs::delete_file_if_exists(tag(), fid));
+        const auto [content, settings] = t.get_file(text);
+        TRY(tag().create_file(fid, settings))
+        TRY(tag().write_data(fid, 0, content, desfire::file_security::encrypted))
+        // Make sure you're back on the app without authentication
+        const auto this_app = tag().active_app();
+        TRY(tag().select_application())
+        TRY(tag().select_application(this_app))
+        return mlab::result_success;
+    }
+
+    member_token::r<bool> member_token::verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const {
+        // Read the enroll file and compare
+        TRY_RESULT_AS(tag().read_data(fid, 0, 0xfffff, desfire::file_security::encrypted), r_read) {
+            if (delete_after_verification) {
+                TRY(tag().delete_file(fid))
+            }
+            // Reset authentication
+            const auto this_app = tag().active_app();
+            TRY(tag().select_application())
+            TRY(tag().select_application(this_app))
+            return t.verify_file_content(*r_read, text);
+        }
+    }
+
 
     member_token::r<ticket> member_token::enroll_gate(gate::id_t gid, tag_key const &gate_key) {
         const desfire::app_id aid = gate::id_to_app_id(gid);
@@ -119,38 +151,22 @@ namespace ka {
         TRY_RESULT(get_holder()) {
             // Generate ticket and enroll file content
             const ticket ticket = ticket::generate();
-            const auto [content, settings] = ticket.get_file(*r);
             // Create an app, allow one extra tag_key
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
             TRY(desfire::fs::create_app(tag(), aid, gate_key, key_rights, 1))
-            // Authenticate with the default tag_key and change it to the specific file tag_key
-            TRY(tag().authenticate(tag_key{ticket.key().key_number(), {}}))
-            TRY(tag().change_key(ticket.key()))
-            TRY(tag().authenticate(ticket.key()))
-            // Now create the enrollment file
-            TRY(tag().create_file(gate_enroll_file, settings))
-            TRY(tag().write_data(gate_enroll_file, 0, content, desfire::file_security::encrypted))
+            // Install the ticket
+            TRY(install_ticket(gate_enroll_file, ticket, *r))
             // Make sure you're back on the gate master tag_key
             TRY(tag().authenticate(gate_key.with_key_number(0)))
             return ticket;
         }
     }
 
-    member_token::r<bool> member_token::verify_drop_enroll_ticket(gate::id_t gid, ticket const &ticket) const {
+    member_token::r<bool> member_token::verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const {
         TRY_RESULT_AS(get_holder(), r_holder) {
             TRY(tag().select_application(gate::id_to_app_id(gid)))
             TRY(tag().authenticate(ticket.key()))
-            // Read the enroll file and compare
-            TRY_RESULT_AS(tag().read_data(gate_enroll_file, 0, 0xfffff, desfire::file_security::encrypted), r_read) {
-                if (ticket.verify_file_content(*r_read, *r_holder)) {
-                    // Delete the enroll file
-                    TRY(tag().delete_file(gate_enroll_file))
-                    // Reset authentication
-                    TRY(tag().select_application())
-                    return true;
-                }
-                return false;
-            }
+            return verify_ticket(gate_enroll_file, ticket, *r_holder, delete_after_verification);
         }
     }
 

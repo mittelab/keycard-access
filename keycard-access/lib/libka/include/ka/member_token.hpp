@@ -30,8 +30,8 @@ namespace ka {
         explicit ticket(std::uint8_t key_no);
 
         [[nodiscard]] bool verify_file_content(mlab::bin_data const &content, std::string const &holder) const;
-        [[nodiscard]] mlab::bin_data get_file_content(std::string const &holder) const;
-        [[nodiscard]] std::pair<mlab::bin_data, standard_file_settings> get_file(std::string const &holder) const;
+        [[nodiscard]] mlab::bin_data get_file_content(std::string const &text) const;
+        [[nodiscard]] std::pair<mlab::bin_data, standard_file_settings> get_file(std::string const &text) const;
 
         /**
          * @brief Generates an enroll ticket with random @ref tag_key and @ref salt.
@@ -96,6 +96,9 @@ namespace ka {
          * @}
          */
 
+        r<> install_ticket(desfire::file_id fid, ticket const &t, std::string const &text);
+        r<bool> verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const;
+
         /**
          * @addtogroup Enrollment
          * @{
@@ -114,7 +117,7 @@ namespace ka {
           * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
-        r<bool> verify_drop_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
+        r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const;
         r<bool> is_enrolled(gate::id_t gid) const;
         /**
           * @}
