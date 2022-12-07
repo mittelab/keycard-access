@@ -71,12 +71,12 @@ namespace ka {
         return desfire::fs::does_app_exist(tag(), gate::id_to_app_id(gid));
     }
 
-    ticket::ticket(std::uint8_t key_no) : _key{key_no, {}}, _nonce{} {}
+    ticket::ticket(std::uint8_t key_no) : _key{key_no, {}}, _salt{} {}
 
     ticket ticket::generate(std::uint8_t key_no) {
         ticket ticket{key_no};
         ticket._key.randomize(randombytes_buf);
-        randombytes_buf(ticket._nonce.data(), ticket._nonce.size());
+        randombytes_buf(ticket._salt.data(), ticket._salt.size());
         return ticket;
     }
 
@@ -88,13 +88,13 @@ namespace ka {
 
     mlab::bin_data ticket::get_file_content(std::string const &holder) const {
         const mlab::bin_data data = mlab::bin_data::chain(
-                mlab::prealloc(nonce().size() + holder.size()),
-                nonce(),
+                mlab::prealloc(salt().size() + holder.size()),
+                salt(),
                 holder);
         mlab::bin_data hash;
         hash.resize(64);
         if (0 != crypto_hash_sha512(hash.data(), data.data(), data.size())) {
-            ESP_LOGE("KA", "Could not hash holder and nonce.");
+            ESP_LOGE("KA", "Could not hash holder and salt.");
             hash = {};
         }
         return hash;

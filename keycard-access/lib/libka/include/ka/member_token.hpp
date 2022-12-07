@@ -21,9 +21,9 @@ namespace ka {
         tag_key _key{1, {}};
 
         /**
-         * @brief Nonce used to generate the file content hash.
+         * @brief Salt used to generate the file content hash.
          */
-        std::array<std::uint8_t, 32> _nonce{};
+        std::array<std::uint8_t, 32> _salt{};
 
     public:
         ticket() = default;
@@ -34,12 +34,12 @@ namespace ka {
         [[nodiscard]] std::pair<mlab::bin_data, standard_file_settings> get_file(std::string const &holder) const;
 
         /**
-         * @brief Generates an enroll ticket with random @ref tag_key and @ref nonce.
+         * @brief Generates an enroll ticket with random @ref tag_key and @ref salt.
          */
         [[nodiscard]] static ticket generate(std::uint8_t key_no = 1);
 
         [[nodiscard]] inline tag_key const &key() const;
-        [[nodiscard]] inline std::array<std::uint8_t, 32> const &nonce() const;
+        [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
     };
 
     /**
@@ -105,13 +105,13 @@ namespace ka {
           * This app contains one file, at @ref gate_enroll_file, which is encrypted
           * with the returned tag_key (randomly generated).
           * This file contains the hash of the current card holder @ref get_holder,
-          * with a unique (randomly generated) nonce, for increased security.
+          * with a unique (randomly generated) salt, for increased security.
           * At this point, without the returned @ref ticket, cloning or forging
           * the card requires to break the card crypto.
           * @note Using a randomized tag_key with a known file content would be enough to
           * prevent cloning or forging, but in this way we can verify that the card
           * has not been reassigned. By hashing we keep the file size under control, and
-          * by adding a nonce we strengthen the amount of random bits that need to be guessed.
+          * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
         r<bool> verify_drop_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
@@ -159,8 +159,8 @@ namespace ka {
         return _key;
     }
 
-    std::array<std::uint8_t, 32> const &ticket::nonce() const {
-        return _nonce;
+    std::array<std::uint8_t, 32> const &ticket::salt() const {
+        return _salt;
     }
 
 }// namespace ka
