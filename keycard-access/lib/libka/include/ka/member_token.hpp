@@ -42,6 +42,16 @@ namespace ka {
         [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
     };
 
+    enum struct gate_status : std::uint8_t {
+        unknown = 0b00,
+        enrolled = 0b01,
+        verified = 0b10,
+        broken = enrolled | verified
+    };
+
+    [[nodiscard]] inline bool operator &(gate_status gs1, gate_status gs2);
+    [[nodiscard]] inline gate_status operator |(gate_status gs1, gate_status gs2);
+
     /**
      * @note Conventions: methods do perform authentication with the root tag_key.
      */
@@ -62,6 +72,7 @@ namespace ka {
         static constexpr desfire::file_id mad_file_card_publisher{0x2};
 
         static constexpr desfire::file_id gate_enroll_file{0x00};
+        static constexpr desfire::file_id gate_authentication_file{0x01};
 
         template <class... Tn>
         using r = desfire::tag::result<Tn...>;
@@ -118,7 +129,7 @@ namespace ka {
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
         r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const;
-        r<bool> is_enrolled(gate::id_t gid) const;
+        r<gate_status> get_gate_status(gate::id_t gid) const;
         /**
           * @}
           */
@@ -164,6 +175,16 @@ namespace ka {
 
     std::array<std::uint8_t, 32> const &ticket::salt() const {
         return _salt;
+    }
+
+    bool operator &(gate_status gs1, gate_status gs2) {
+        using numeric_t = std::underlying_type_t<gate_status>;
+        return (static_cast<numeric_t>(gs1) & static_cast<numeric_t>(gs2)) != 0;
+    }
+
+    gate_status operator |(gate_status gs1, gate_status gs2) {
+        using numeric_t = std::underlying_type_t<gate_status>;
+        return static_cast<gate_status>(static_cast<numeric_t>(gs1) | static_cast<numeric_t>(gs2));
     }
 
 }// namespace ka

@@ -67,8 +67,31 @@ namespace ka {
         return mlab::result_success;
     }
 
-    member_token::r<bool> member_token::is_enrolled(gate::id_t gid) const {
-        return desfire::fs::does_app_exist(tag(), gate::id_to_app_id(gid));
+    member_token::r<gate_status> member_token::get_gate_status(gate::id_t gid) const {
+        const auto aid = gate::id_to_app_id(gid);
+        TRY_RESULT(desfire::fs::does_app_exist(tag(), aid)) {
+            if (not *r) {
+                return gate_status::unknown;
+            }
+        }
+        TRY(tag().select_application(aid));
+        TRY_RESULT(desfire::fs::which_files_exist(tag(), {gate_enroll_file, gate_authentication_file})) {
+            gate_status retval = gate_status::unknown;
+            for (desfire::file_id fid : *r) {
+                switch (fid) {
+                    case gate_enroll_file:
+                        retval = retval | gate_status::enrolled;
+                        break;
+                    case gate_authentication_file:
+                        retval = retval | gate_status::verified;
+                        break;
+                    default:
+                        ESP_LOGE("KA", "Unknown file in gate app.");
+                        return gate_status::broken;
+                }
+            }
+            return retval;
+        }
     }
 
     ticket::ticket(std::uint8_t key_no) : _key{key_no, {}}, _salt{} {}
