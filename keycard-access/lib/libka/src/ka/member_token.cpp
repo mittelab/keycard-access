@@ -74,7 +74,7 @@ namespace ka {
                 return gate_status::unknown;
             }
         }
-        TRY(tag().select_application(aid));
+        TRY(tag().select_application(aid))
         TRY_RESULT(desfire::fs::which_files_exist(tag(), {gate_enroll_file, gate_authentication_file})) {
             gate_status retval = gate_status::unknown;
             for (desfire::file_id fid : *r) {
@@ -83,7 +83,7 @@ namespace ka {
                         retval = retval | gate_status::enrolled;
                         break;
                     case gate_authentication_file:
-                        retval = retval | gate_status::verified;
+                        retval = retval | gate_status::auth_ready;
                         break;
                     default:
                         ESP_LOGE("KA", "Unknown file in gate app.");
@@ -139,7 +139,7 @@ namespace ka {
         TRY(tag().change_key(t.key()))
         TRY(tag().authenticate(t.key()))
         // Now create the ticket file
-        TRY(desfire::fs::delete_file_if_exists(tag(), fid));
+        TRY(desfire::fs::delete_file_if_exists(tag(), fid))
         const auto [content, settings] = t.get_file(text);
         TRY(tag().create_file(fid, settings))
         TRY(tag().write_data(fid, 0, content, desfire::file_security::encrypted))
@@ -150,14 +150,54 @@ namespace ka {
         return mlab::result_success;
     }
 
+    member_token::r<> member_token::write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) {
+        TRY(tag().select_application(gate::id_to_app_id(gid)))
+        // Assume the key slot is free, thus default key
+        TRY(tag().authenticate(tag_key{auth_file_key.key_number(), {}}))
+        TRY(tag().change_key(auth_file_key))
+        TRY(desfire::fs::delete_file_if_exists(tag(), gate_authentication_file))
+        const standard_file_settings auth_file_settings{
+                desfire::generic_file_settings{
+                        desfire::file_security::encrypted,
+                        desfire::access_rights{auth_file_key.key_number()}},
+                desfire::data_file_settings{identity.size()}};
+        TRY(tag().create_file(gate_authentication_file, auth_file_settings))
+        TRY(tag().write_data(gate_authentication_file, 0, mlab::bin_data::chain(identity), desfire::file_security::encrypted))
+        return mlab::result_success;
+    }
+
+
+    member_token::r<bool> member_token::authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const {
+        TRY_RESULT(get_gate_status(gid)) {
+            if (*r != gate_status::auth_ready) {
+                return false;
+            }
+        }
+        TRY(tag().select_application(gate::id_to_app_id(gid)))
+        TRY(tag().authenticate(auth_file_key))
+        TRY_RESULT(tag().read_data(gate_authentication_file, 0, identity.size(), desfire::file_security::encrypted)) {
+            if (identity.size() != r->size()) {
+                return false;
+            }
+            const auto identity_data_range = mlab::make_range(
+                    reinterpret_cast<std::uint8_t const *>(identity.c_str()),
+                    reinterpret_cast<std::uint8_t const *>(identity.c_str() + identity.size())
+            );
+            return std::equal(std::begin(identity_data_range), std::end(identity_data_range), std::begin(*r));
+        }
+    }
+
     member_token::r<bool> member_token::verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const {
         // Read the enroll file and compare
         TRY_RESULT_AS(tag().read_data(fid, 0, 0xfffff, desfire::file_security::encrypted), r_read) {
+            // Save the currently active app
+            const auto this_app = tag().active_app();
             if (delete_after_verification) {
                 TRY(tag().delete_file(fid))
+                // Make sure the key is reset to default
+                TRY(tag().change_key(tag_key{tag().active_key_no(), {}}))
             }
             // Reset authentication
-            const auto this_app = tag().active_app();
             TRY(tag().select_application())
             TRY(tag().select_application(this_app))
             return t.verify_file_content(*r_read, text);
@@ -169,6 +209,7 @@ namespace ka {
         const desfire::app_id aid = gate::id_to_app_id(gid);
         // Do not allow any change, only create/delete file with authentication.
         // Important: we allow to change only the same tag_key, otherwise the master can change access to the enrollment file
+        // TODO: Should the key right allow listing files, so that we can check the gate status without authentication?
         const desfire::key_rights key_rights{desfire::same_key, false, false, false, false};
         // Retrieve the holder data that we will write in the enroll file
         TRY_RESULT(get_holder()) {

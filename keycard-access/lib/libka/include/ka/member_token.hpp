@@ -45,8 +45,8 @@ namespace ka {
     enum struct gate_status : std::uint8_t {
         unknown = 0b00,
         enrolled = 0b01,
-        verified = 0b10,
-        broken = enrolled | verified
+        auth_ready = 0b10,
+        broken = enrolled | auth_ready
     };
 
     [[nodiscard]] inline bool operator &(gate_status gs1, gate_status gs2);
@@ -129,6 +129,8 @@ namespace ka {
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
         r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const;
+        r<> write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity);
+        r<bool> authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const;
         r<gate_status> get_gate_status(gate::id_t gid) const;
         /**
           * @}
