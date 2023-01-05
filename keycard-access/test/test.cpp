@@ -86,7 +86,7 @@ namespace ut {
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
                 TEST_ASSERT(instance.tag->change_key(default_k));
                 TEST_ASSERT(instance.tag->authenticate(default_k));
-                break;
+                return;
             }
         }
         TEST_FAIL_MESSAGE("Unable to find the correct key.");
@@ -125,9 +125,10 @@ namespace ut {
     }
 
     void test_keys() {
-        key_pair const k;
+        key_pair k;
         TEST_ASSERT(not k.is_valid());
 
+        k.generate();
         TEST_ASSERT(k.is_valid());
 
         key_pair const k2{k.raw_sk()};
