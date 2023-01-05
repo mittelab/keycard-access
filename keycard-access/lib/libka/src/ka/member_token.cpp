@@ -43,26 +43,56 @@ namespace ka {
         return tag().get_card_uid();
     }
 
+    member_token::r<> member_token::unlock() {
+        TRY(tag().select_application())
+        return tag().authenticate(root_key());
+    }
+
     member_token::r<> member_token::try_set_root_key(desfire::any_key k) {
         TRY(tag().select_application(desfire::root_app))
-        TRY(tag().authenticate(k))
-        set_root_key(std::move(k));
+        // Can I enter with the current root key?
+        if (tag().authenticate(root_key())) {
+            TRY_RESULT(tag().change_key(k)) {
+                _root_key = std::move(k);
+                TRY(tag().authenticate(root_key()))
+            }
+        } else {
+            // No, can I enter with the key that was supplied?
+            TRY_RESULT(tag().authenticate(k)) {
+                _root_key = std::move(k);
+            }
+        }
         return mlab::result_success;
     }
 
-    member_token::r<> member_token::setup_root_key(config const &cfg) {
-        static constexpr desfire::key_rights root_app_rights{
-                .allowed_to_change_keys{/* unused for PICC */},
-                .master_key_changeable = true,
-                .dir_access_without_auth = true,
-                .create_delete_without_auth = false,
-                .config_changeable = false};
+    member_token::r<> member_token::setup_root_settings(config const &cfg) {
+        TRY(unlock())
         // Try retrieveing the id
-        TRY_RESULT(id()) {
+        TRY_RESULT_AS(id(), r_id) {
             // Use the id to compute the tag_key
-            auto k = get_default_root_key(*r, cfg);
-            TRY(tag().change_key(k))
-            TRY(tag().change_app_settings(root_app_rights))
+            TRY_RESULT(try_set_root_key(get_default_root_key(*r_id, cfg))) {
+                // Now verify that we have desired settings
+                TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
+                    // If we got so far, we have at least a changeable master key. For MAD setup,
+                    // we want dir_access_without_auth!
+                    if (not r_settings->rights.dir_access_without_auth) {
+                        if (not r_settings->rights.config_changeable) {
+                            ESP_LOGW("KA", "This key has no acces w/o auth and frozen config, so I cannot setup the MAD according to spec.");
+                            return desfire::error::picc_integrity_error;
+                        }
+                        // Change the config allowing dir access without path, and possibly no create/delete w/o auth
+                        desfire::key_rights new_rights = r_settings->rights;
+                        new_rights.create_delete_without_auth = false;
+                        new_rights.dir_access_without_auth = true;
+                        TRY(tag().change_app_settings(new_rights))
+                    } else if (r_settings->rights.create_delete_without_auth and r_settings->rights.config_changeable) {
+                        // Better not have the create/delete w/o auth
+                        desfire::key_rights new_rights = r_settings->rights;
+                        new_rights.create_delete_without_auth = false;
+                        TRY(tag().change_app_settings(new_rights))
+                    }
+                }
+            }
         }
         return mlab::result_success;
     }

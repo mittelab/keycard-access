@@ -86,8 +86,8 @@ namespace ka {
         member_token &operator=(member_token &&) = default;
 
         [[nodiscard]] inline desfire::any_key const &root_key() const;
-        inline void set_root_key(desfire::any_key k);
         [[nodiscard]] r<> try_set_root_key(desfire::any_key k);
+        [[nodiscard]] r<> unlock();
 
         [[nodiscard]] inline desfire::tag &tag() const;
 
@@ -101,7 +101,7 @@ namespace ka {
          * @addtogroup Provisioning
          * @{
          */
-        r<> setup_root_key(config const &cfg = system_config());
+        r<> setup_root_settings(config const &cfg = system_config());
         r<> setup_mad(std::string const &holder, std::string const &publisher);
         /**
          * @}
@@ -168,9 +168,6 @@ namespace ka {
         return _root_key;
     }
 
-    void member_token::set_root_key(desfire::any_key k) {
-        _root_key = std::move(k);
-    }
     tag_key const &ticket::key() const {
         return _key;
     }
