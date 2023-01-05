@@ -101,7 +101,7 @@ namespace ut {
         }
     }
 
-    void test_tag_reset_root_key() {
+    void test_tag_reset_root_key_and_format() {
         TEST_ASSERT(instance.tag != nullptr);
         if (instance.tag == nullptr) {
             return;
@@ -126,24 +126,16 @@ namespace ut {
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
                 TEST_ASSERT(instance.tag->change_key(default_k));
                 TEST_ASSERT(instance.tag->authenticate(default_k));
+                ESP_LOGW("TEST", "We will now format the tag. Remove it if you hold your data dear!");
+                for (unsigned i = 5; i > 0; --i) {
+                    ESP_LOGW("TEST", "Formatting in %d seconds...", i);
+                    std::this_thread::sleep_for(1s);
+                }
+                TEST_ASSERT(instance.tag->format_picc());
                 return;
             }
         }
         TEST_FAIL_MESSAGE("Unable to find the correct key.");
-    }
-
-    void test_tag_format() {
-        TEST_ASSERT(instance.tag != nullptr);
-        if (instance.tag == nullptr) {
-            return;
-        }
-        TEST_ASSERT(instance.tag->authenticate(desfire::key<desfire::cipher_type::des>{}));
-        ESP_LOGW("TEST", "We will now format the tag. Remove it if you hold your data dear!");
-        for (unsigned i = 5; i > 0; --i) {
-            ESP_LOGW("TEST", "Formatting in %d seconds...", i);
-            std::this_thread::sleep_for(1s);
-        }
-        TEST_ASSERT(instance.tag->format_picc());
     }
 
     void test_mad() {
@@ -222,10 +214,11 @@ extern "C" void app_main() {
             ESP_LOGE("TEST", "Could not find any tag!");
         }
 
-        RUN_TEST(ut::test_tag_reset_root_key);
-        RUN_TEST(ut::test_tag_format);
+        RUN_TEST(ut::test_tag_reset_root_key_and_format);
         RUN_TEST(ut::test_mad);
 
+        // Always conclude with a format test so that it leaves the test suite clean
+        RUN_TEST(ut::test_tag_reset_root_key_and_format);
     }
 
     UNITY_END();
