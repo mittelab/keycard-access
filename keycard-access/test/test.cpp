@@ -72,6 +72,28 @@ namespace ut {
     template <class Result>
     [[nodiscard]] bool passthru_and(bool &dest, Result const &res);
 
+    struct suppress_log {
+        const char * const tag;
+        esp_log_level_t const previous_log_level;
+
+        explicit suppress_log(const char *tag_) : tag{tag_}, previous_log_level{esp_log_level_get(tag)} {
+            suppress();
+        }
+
+        void suppress() {
+            esp_log_level_set(tag, ESP_LOG_NONE);
+        }
+
+        void restore() {
+            esp_log_level_set(tag, previous_log_level);
+        }
+
+        ~suppress_log() {
+            restore();
+        }
+
+    };
+
     struct {
         std::unique_ptr<pn532::esp32::hsu_channel> channel;
         std::unique_ptr<pn532::controller> controller;
@@ -119,10 +141,12 @@ namespace ut {
                 desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}
         };
         // Ok now attempt to retrieve the root keys among those we usually use for testing.
-        ESP_LOGW("TEST", "Attempt to recover the root key (warnings/errors here are normal).");
+        ESP_LOGI("TEST", "Attempt to recover the root key.");
         TEST_ASSERT(instance.tag->select_application());
         for (auto const &key : keys_to_test) {
+            auto suppress = suppress_log{DESFIRE_TAG};
             if (instance.tag->authenticate(key)) {
+                suppress.restore();
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
                 TEST_ASSERT(instance.tag->change_key(default_k));
                 TEST_ASSERT(instance.tag->authenticate(default_k));
@@ -146,12 +170,13 @@ namespace ut {
 
         member_token token{*instance.tag};
         TEST_ASSERT(token.setup_root_settings());
-        TEST_ASSERT(token.setup_mad("user", "Mittelab"));
-        TEST_ASSERT(token.unlock());
+        TEST_ASSERT(token.setup_mad(ut::test_holder, ut::test_publisher));
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
+        auto suppress = suppress_log{DESFIRE_TAG};
         TEST_ASSERT_FALSE(instance.tag->get_card_uid());
+        suppress.restore();
         TEST_ASSERT(instance.tag->select_application());
 
         const auto r_mad_version = token.get_mad_version();
@@ -174,6 +199,7 @@ namespace ut {
 
         // Check that the mad application is not trivially writable
         TEST_ASSERT(instance.tag->select_application(member_token::mad_aid));
+        suppress.suppress();
         TEST_ASSERT_FALSE(instance.tag->create_file(0x00, desfire::file_settings<desfire::file_type::value>{}));
     }
 }
