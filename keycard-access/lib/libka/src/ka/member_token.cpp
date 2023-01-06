@@ -172,7 +172,7 @@ namespace ka {
         TRY(desfire::fs::delete_file_if_exists(tag(), fid))
         const auto [content, settings] = t.get_file(text);
         TRY(tag().create_file(fid, settings))
-        TRY(tag().write_data(fid, 0, content, desfire::file_security::encrypted))
+        TRY(tag().write_data(fid, 0, content, desfire::cipher_mode::ciphered))
         // Make sure you're back on the app without authentication
         const auto this_app = tag().active_app();
         TRY(tag().select_application())
@@ -192,7 +192,7 @@ namespace ka {
                         desfire::access_rights{auth_file_key.key_number()}},
                 desfire::data_file_settings{identity.size()}};
         TRY(tag().create_file(gate_authentication_file, auth_file_settings))
-        TRY(tag().write_data(gate_authentication_file, 0, mlab::bin_data::chain(identity), desfire::file_security::encrypted))
+        TRY(tag().write_data(gate_authentication_file, 0, mlab::bin_data::chain(identity), desfire::cipher_mode::ciphered))
         return mlab::result_success;
     }
 
@@ -205,7 +205,7 @@ namespace ka {
         }
         TRY(tag().select_application(gate::id_to_app_id(gid)))
         TRY(tag().authenticate(auth_file_key))
-        TRY_RESULT(tag().read_data(gate_authentication_file, 0, identity.size(), desfire::file_security::encrypted)) {
+        TRY_RESULT(tag().read_data(gate_authentication_file, 0, identity.size(), desfire::cipher_mode::ciphered)) {
             if (identity.size() != r->size()) {
                 return false;
             }
@@ -219,7 +219,7 @@ namespace ka {
 
     member_token::r<bool> member_token::verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const {
         // Read the enroll file and compare
-        TRY_RESULT_AS(tag().read_data(fid, 0, 0xfffff, desfire::file_security::encrypted), r_read) {
+        TRY_RESULT_AS(tag().read_data(fid, 0, 0xfffff, desfire::cipher_mode::ciphered), r_read) {
             // Save the currently active app
             const auto this_app = tag().active_app();
             if (delete_after_verification) {
@@ -294,21 +294,21 @@ namespace ka {
 
     member_token::r<std::string> member_token::get_holder() const {
         TRY(tag().select_application(mad_aid))
-        TRY_RESULT(tag().read_data(mad_file_card_holder, 0, 0xffffff, desfire::file_security::none)) {
+        TRY_RESULT(tag().read_data(mad_file_card_holder, 0, 0xffffff, desfire::cipher_mode::plain)) {
             return mlab::to_string(*r);
         }
     }
 
     member_token::r<std::string> member_token::get_publisher() const {
         TRY(tag().select_application(mad_aid))
-        TRY_RESULT(tag().read_data(mad_file_card_publisher, 0, 0xffffff, desfire::file_security::none)) {
+        TRY_RESULT(tag().read_data(mad_file_card_publisher, 0, 0xffffff, desfire::cipher_mode::plain)) {
             return mlab::to_string(*r);
         }
     }
 
     member_token::r<unsigned> member_token::get_mad_version() const {
         TRY(tag().select_application(mad_aid))
-        TRY_RESULT(tag().get_value(mad_file_version, desfire::file_security::none)) {
+        TRY_RESULT(tag().get_value(mad_file_version, desfire::cipher_mode::plain)) {
             return unsigned(*r);
         }
     }
