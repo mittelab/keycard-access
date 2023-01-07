@@ -257,7 +257,7 @@ extern "C" void app_main() {
 namespace ut {
 
     template <class Result>
-    [[nodiscard]] bool passthru_set(bool &dest, Result const &res) {
+    bool passthru_set(bool &dest, Result const &res) {
         if constexpr (std::is_same_v<Result, bool>) {
             dest = res;
         } else if constexpr(std::is_same_v<decltype(*res), bool>) {
@@ -269,7 +269,7 @@ namespace ut {
     }
 
     template <class Result>
-    [[nodiscard]] bool passthru_and(bool &dest, Result const &res) {
+    bool passthru_and(bool &dest, Result const &res) {
         if constexpr (std::is_same_v<Result, bool>) {
             dest &= res;
         } else if constexpr(std::is_same_v<decltype(*res), bool>) {

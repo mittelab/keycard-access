@@ -82,13 +82,13 @@ namespace ka {
                         }
                         // Change the config allowing dir access without path, and possibly no create/delete w/o auth
                         desfire::key_rights new_rights = r_settings->rights;
-                        new_rights.create_delete_without_auth = false;
+                        new_rights.create_delete_without_master_key = false;
                         new_rights.dir_access_without_auth = true;
                         TRY(tag().change_app_settings(new_rights))
-                    } else if (r_settings->rights.create_delete_without_auth and r_settings->rights.config_changeable) {
+                    } else if (r_settings->rights.create_delete_without_master_key and r_settings->rights.config_changeable) {
                         // Better not have the create/delete w/o auth
                         desfire::key_rights new_rights = r_settings->rights;
-                        new_rights.create_delete_without_auth = false;
+                        new_rights.create_delete_without_master_key = false;
                         TRY(tag().change_app_settings(new_rights))
                     }
                 }
@@ -128,7 +128,7 @@ namespace ka {
 
     ticket ticket::generate(std::uint8_t key_no) {
         ticket ticket{key_no};
-        ticket._key.randomize(randombytes_buf);
+        ticket._key.randomize(desfire::random_oracle{randombytes_buf});
         randombytes_buf(ticket._salt.data(), ticket._salt.size());
         return ticket;
     }
@@ -172,7 +172,7 @@ namespace ka {
         TRY(desfire::fs::delete_file_if_exists(tag(), fid))
         const auto [content, settings] = t.get_file(text);
         TRY(tag().create_file(fid, settings))
-         TRY(tag().write_data(fid, content, desfire::cipher_mode::ciphered, 0))
+        TRY(tag().write_data(fid, content, desfire::cipher_mode::ciphered, 0))
         // Make sure you're back on the app without authentication
         const auto this_app = tag().active_app();
         TRY(tag().select_application())
@@ -271,7 +271,7 @@ namespace ka {
         // Attempt to delete the existing app
         TRY(desfire::fs::delete_app_if_exists(tag(), mad_aid))
         // Prepare an app with a random tag_key
-        TRY_RESULT(desfire::fs::create_app_for_ro(tag(), tag_key::cipher, mad_aid, randombytes_buf)) {
+        TRY_RESULT(desfire::fs::create_app_for_ro(tag(), tag_key::cipher, mad_aid, desfire::random_oracle{randombytes_buf})) {
             // Create file for MAD version 3
             TRY(desfire::fs::create_ro_free_plain_value_file(tag(), mad_file_version, 0x3))
             // Create files with holder and publisher
