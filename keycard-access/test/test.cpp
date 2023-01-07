@@ -100,6 +100,7 @@ namespace ut {
         bool did_pass_controller_test = false;
         member_token::id_t nfc_id{};
         std::unique_ptr<desfire::tag> tag;
+        bool warn_before_formatting = true;
     } instance{};
 
     void test_wake_channel() {
@@ -150,10 +151,12 @@ namespace ut {
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
                 TEST_ASSERT(instance.tag->change_key(default_k));
                 TEST_ASSERT(instance.tag->authenticate(default_k));
-                ESP_LOGW("TEST", "We will now format the tag. Remove it if you hold your data dear!");
-                for (unsigned i = 5; i > 0; --i) {
-                    ESP_LOGW("TEST", "Formatting in %d seconds...", i);
-                    std::this_thread::sleep_for(1s);
+                if (instance.warn_before_formatting) {
+                    ESP_LOGW("TEST", "We will now format the tag. Remove it if you hold your data dear!");
+                    for (unsigned i = 5; i > 0; --i) {
+                        ESP_LOGW("TEST", "Formatting in %d seconds...", i);
+                        std::this_thread::sleep_for(1s);
+                    }
                 }
                 TEST_ASSERT(instance.tag->format_picc());
                 return;
@@ -188,7 +191,7 @@ namespace ut {
         TEST_ASSERT(r_publisher);
 
         if (r_mad_version) {
-            TEST_ASSERT_EQUAL(*r_mad_version, member_token::mad_file_version);
+            TEST_ASSERT_EQUAL(*r_mad_version, 0x03);
         }
         if (r_holder) {
             TEST_ASSERT(*r_holder == test_holder);
@@ -244,6 +247,7 @@ extern "C" void app_main() {
         RUN_TEST(ut::test_mad);
 
         // Always conclude with a format test so that it leaves the test suite clean
+        ut::instance.warn_before_formatting = false;
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
     }
 
