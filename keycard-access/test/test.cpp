@@ -1,6 +1,7 @@
 #include "pinout.hpp"
 #include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/tag.hpp>
+#include <desfire/fs.hpp>
 #include <ka/keypair.hpp>
 #include <ka/member_token.hpp>
 #include <pn532/controller.hpp>
@@ -71,6 +72,9 @@ namespace ut {
 
     template <class Result>
     [[nodiscard]] bool passthru_and(bool &dest, Result const &res);
+
+    template <bool B, class Result>
+    [[nodiscard]] bool ok_and(Result const &res);
 
     struct suppress_log {
         const char * const tag;
@@ -205,6 +209,66 @@ namespace ut {
         suppress.suppress();
         TEST_ASSERT_FALSE(instance.tag->create_file(0x00, desfire::file_settings<desfire::file_type::value>{}));
     }
+
+    void test_ticket() {
+        TEST_ASSERT(instance.tag != nullptr);
+        if (instance.tag == nullptr) {
+            return;
+        }
+
+        member_token token{*instance.tag};
+
+        auto suppress = suppress_log{DESFIRE_TAG};
+        TEST_ASSERT(token.try_set_root_key(member_token::get_default_root_key(instance.nfc_id)));
+        suppress.restore();
+
+        TEST_ASSERT(token.unlock());
+
+        const auto aid = desfire::app_id{0x11, 0x12, 0x13};
+        const auto fid = desfire::file_id{0x00};
+        const auto app_master_key = tag_key{0x00, desfire::random_oracle{esp_fill_random}};
+
+        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
+        TEST_ASSERT(desfire::fs::create_app(token.tag(), aid, app_master_key, desfire::key_rights{}, 1));
+
+        const auto t = ticket{0x01 /* use key no 1 */};
+
+        TEST_ASSERT(token.install_ticket(fid, t, "foo bar"));
+
+        suppress.suppress();
+        // This should not be readable at this point
+        TEST_ASSERT_FALSE(token.tag().read_data(fid, desfire::trust_card));
+        suppress.restore();
+
+        // Neither with the app master key
+        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
+        suppress.suppress();
+        TEST_ASSERT_FALSE(token.tag().read_data(fid, desfire::trust_card));
+        suppress.restore();
+
+        // Nor changeable with the app master key
+        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
+        suppress.suppress();
+        TEST_ASSERT_FALSE(token.tag().change_file_settings(fid, {desfire::file_security::none, desfire::access_rights{}}, desfire::trust_card));
+        suppress.restore();
+
+        // Need the to be on the app to be able to verify it
+        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
+
+        TEST_ASSERT(ok_and<true>(token.verify_ticket(fid, t, "foo bar")));
+        // Should be repeatable if not deleted
+        TEST_ASSERT(ok_and<false>(token.verify_ticket(fid, t, "foo bar baz")));
+        TEST_ASSERT(token.clear_ticket(fid, t));
+        suppress.suppress();
+        TEST_ASSERT(ok_and<false>(token.verify_ticket(fid, t, "foo bar")));
+        suppress.restore();
+
+        TEST_ASSERT(not desfire::fs::does_file_exist(token.tag(), fid));
+
+        // Ok delete app
+        TEST_ASSERT(token.unlock());
+        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
+    }
 }
 
 extern "C" void app_main() {
@@ -245,6 +309,7 @@ extern "C" void app_main() {
 
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
         RUN_TEST(ut::test_mad);
+        RUN_TEST(ut::test_ticket);
 
         // Always conclude with a format test so that it leaves the test suite clean
         ut::instance.warn_before_formatting = false;
@@ -278,6 +343,12 @@ namespace ut {
             dest &= bool(res);
         }
         return dest;
+    }
+
+
+    template <bool B, class Result>
+    bool ok_and(Result const &res) {
+        return res and *res == B;
     }
 
 }

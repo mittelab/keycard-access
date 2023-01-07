@@ -44,8 +44,7 @@ namespace ka {
     }
 
     member_token::r<> member_token::unlock() {
-        TRY(tag().select_application())
-        return tag().authenticate(root_key());
+        return desfire::fs::login_app(tag(), desfire::root_app, root_key());
     }
 
     member_token::r<> member_token::try_set_root_key(desfire::any_key k) {
@@ -156,27 +155,46 @@ namespace ka {
     std::pair<mlab::bin_data, standard_file_settings> ticket::get_file(const std::string &text) const {
         auto data = get_file_content(text);
         auto settings = standard_file_settings{
-                desfire::generic_file_settings{
-                        desfire::file_security::encrypted,
-                        desfire::access_rights{key().key_number()}},
-                desfire::data_file_settings{data.size()}};
+                desfire::file_security::encrypted,
+                // Exclusive access to the required key
+                desfire::access_rights{key().key_number()},
+                data.size()};
         return {std::move(data), settings};
     }
 
+    member_token::r<> member_token::check_app_for_ticket_prerequisite(const ticket &t) const {
+        if (tag().active_key_no() != 0) {
+            ESP_LOGE("KA", "The app is not unlocked with the master key.");
+            return desfire::error::permission_denied;
+        }
+        // Assert that the app settings allows keys to change themselves, otherwise security is broken
+        TRY_RESULT(tag().get_app_settings()) {
+            if (r->rights.allowed_to_change_keys != desfire::same_key) {
+                ESP_LOGE("KA", "Tickets can only be used on apps where each key can change itself.");
+                return desfire::error::permission_denied;
+            }
+            if (r->max_num_keys <= t.key().key_number()) {
+                ESP_LOGE("KA", "The app does not allow for the specified ticket key number %d", t.key().key_number());
+                return desfire::error::permission_denied;
+            }
+        }
+        return mlab::result_success;
+    }
+
     member_token::r<> member_token::install_ticket(desfire::file_id fid, ticket const &t, std::string const &text) {
+        TRY(check_app_for_ticket_prerequisite(t))
+        // Create the ticket file first, so that is compatible also with apps that do not allow creating without auth
+        TRY(desfire::fs::delete_file_if_exists(tag(), fid))
+        const auto [content, settings] = t.get_file(text);
+        TRY(tag().create_file(fid, settings))
         // Authenticate with the default tag_key and change it to the specific file tag_key
         TRY(tag().authenticate(tag_key{t.key().key_number(), {}}))
         TRY(tag().change_key(t.key()))
         TRY(tag().authenticate(t.key()))
-        // Now create the ticket file
-        TRY(desfire::fs::delete_file_if_exists(tag(), fid))
-        const auto [content, settings] = t.get_file(text);
-        TRY(tag().create_file(fid, settings))
+        // Now write the content as the new key
         TRY(tag().write_data(fid, content, desfire::cipher_mode::ciphered, 0))
         // Make sure you're back on the app without authentication
-        const auto this_app = tag().active_app();
-        TRY(tag().select_application())
-        TRY(tag().select_application(this_app))
+        TRY(desfire::fs::logout_app(tag()))
         return mlab::result_success;
     }
 
@@ -203,8 +221,7 @@ namespace ka {
                 return false;
             }
         }
-        TRY(tag().select_application(gate::id_to_app_id(gid)))
-        TRY(tag().authenticate(auth_file_key))
+        TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), auth_file_key))
         TRY_RESULT(tag().read_data(gate_authentication_file, desfire::cipher_mode::ciphered, 0, identity.size())) {
             if (identity.size() != r->size()) {
                 return false;
@@ -217,21 +234,25 @@ namespace ka {
         }
     }
 
-    member_token::r<bool> member_token::verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const {
+    member_token::r<bool> member_token::verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text) const {
+        TRY(check_app_for_ticket_prerequisite(t))
         // Read the enroll file and compare
-        TRY_RESULT_AS(tag().read_data(fid, desfire::cipher_mode::ciphered, 0, 0xfffff), r_read) {
-            // Save the currently active app
-            const auto this_app = tag().active_app();
-            if (delete_after_verification) {
-                TRY(tag().delete_file(fid))
-                // Make sure the key is reset to default
-                TRY(tag().change_key(tag_key{tag().active_key_no(), {}}))
-            }
-            // Reset authentication
-            TRY(tag().select_application())
-            TRY(tag().select_application(this_app))
+        TRY(tag().authenticate(t.key()))
+        TRY_RESULT_AS(tag().read_data(fid, desfire::cipher_mode::ciphered), r_read) {
+            TRY(desfire::fs::logout_app(tag()))
             return t.verify_file_content(*r_read, text);
         }
+    }
+
+
+    member_token::r<> member_token::clear_ticket(desfire::file_id fid, const ticket &t) {
+        TRY(check_app_for_ticket_prerequisite(t))
+        TRY(tag().delete_file(fid))
+        // Make sure the key is reset to default
+        TRY(tag().authenticate(t.key()))
+        TRY(tag().change_key(tag_key{t.key().key_number(), {}}))
+        TRY(desfire::fs::logout_app(tag()))
+        return mlab::result_success;
     }
 
 
@@ -256,11 +277,10 @@ namespace ka {
         }
     }
 
-    member_token::r<bool> member_token::verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const {
+    member_token::r<bool> member_token::verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const {
         TRY_RESULT_AS(get_holder(), r_holder) {
-            TRY(tag().select_application(gate::id_to_app_id(gid)))
-            TRY(tag().authenticate(ticket.key()))
-            return verify_ticket(gate_enroll_file, ticket, *r_holder, delete_after_verification);
+            TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), ticket.key()))
+            return verify_ticket(gate_enroll_file, ticket, *r_holder);
         }
     }
 

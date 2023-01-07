@@ -107,8 +107,45 @@ namespace ka {
          * @}
          */
 
+        r<> check_app_for_ticket_prerequisite(ticket const &t) const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @param text
+         * @return
+         */
         r<> install_ticket(desfire::file_id fid, ticket const &t, std::string const &text);
-        r<bool> verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text, bool delete_after_verification) const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @param text
+         * @return
+         */
+        r<bool> verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text) const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @return
+         */
+        r<> clear_ticket(desfire::file_id fid, ticket const &t);
 
         /**
          * @addtogroup Enrollment
@@ -128,7 +165,7 @@ namespace ka {
           * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
-        r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket, bool delete_after_verification) const;
+        member_token::r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
         r<> write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity);
         r<bool> authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const;
         r<gate_status> get_gate_status(gate::id_t gid) const;
