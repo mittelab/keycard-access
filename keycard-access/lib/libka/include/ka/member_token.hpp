@@ -11,6 +11,10 @@
 
 namespace ka {
 
+    template <class... Tn>
+    using r = desfire::tag::result<Tn...>;
+
+
     using tag_key = desfire::key<desfire::cipher_type::aes128>;
     using standard_file_settings = desfire::file_settings<desfire::file_type::standard>;
 
@@ -40,6 +44,47 @@ namespace ka {
 
         [[nodiscard]] inline tag_key const &key() const;
         [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @param text
+         * @return
+         */
+        r<> install(desfire::tag &tag, desfire::file_id fid, std::string const &text) const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_prerequisites.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @param text
+         * @return
+         */
+        r<bool> verify(desfire::tag &tag, desfire::file_id fid, std::string const &text) const;
+
+        /**
+         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
+         * Moreover, it is expected that the key number required by @p t is actually available in the selected
+         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
+         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_prerequisites.
+         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
+         * @param fid
+         * @param t
+         * @return
+         */
+        r<> clear(desfire::tag &tag, desfire::file_id fid) const;
+
+        r<> check_app_for_prerequisites(desfire::tag &tag) const;
+
     };
 
     enum struct gate_status : std::uint8_t {
@@ -74,9 +119,6 @@ namespace ka {
         static constexpr desfire::file_id gate_enroll_file{0x00};
         static constexpr desfire::file_id gate_authentication_file{0x01};
 
-        template <class... Tn>
-        using r = desfire::tag::result<Tn...>;
-
         using id_t = std::array<std::uint8_t, 7>;
 
         explicit member_token(desfire::tag &tag);
@@ -107,46 +149,6 @@ namespace ka {
          * @}
          */
 
-        r<> check_app_for_ticket_prerequisite(ticket const &t) const;
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @param text
-         * @return
-         */
-        r<> install_ticket(desfire::file_id fid, ticket const &t, std::string const &text);
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @param text
-         * @return
-         */
-        r<bool> verify_ticket(desfire::file_id fid, ticket const &t, std::string const &text) const;
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @return
-         */
-        r<> clear_ticket(desfire::file_id fid, ticket const &t);
-
         /**
          * @addtogroup Enrollment
          * @{
@@ -165,7 +167,7 @@ namespace ka {
           * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
         r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
-        member_token::r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
+        r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
         r<> write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity);
         r<bool> authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const;
         r<gate_status> get_gate_status(gate::id_t gid) const;

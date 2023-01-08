@@ -233,7 +233,7 @@ namespace ut {
 
         const auto t = ticket{0x01 /* use key no 1 */};
 
-        TEST_ASSERT(token.install_ticket(fid, t, "foo bar"));
+        TEST_ASSERT(t.install(token.tag(), fid, "foo bar"));
 
         suppress.suppress();
         // This should not be readable at this point
@@ -254,27 +254,27 @@ namespace ut {
 
         // Need the to be on the app to be able to verify it
         TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(ok_and<true>(token.verify_ticket(fid, t, "foo bar")));
+        TEST_ASSERT(ok_and<true>(t.verify(token.tag(), fid, "foo bar")));
 
         suppress.suppress();
         // Should not work outside the app
         TEST_ASSERT(desfire::fs::logout_app(token.tag()));
         auto suppress_ka = suppress_log{"KA"};
-        TEST_ASSERT_FALSE(token.verify_ticket(fid, t, "foo bar"));
+        TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
         suppress_ka.restore();
         suppress.restore();
 
         // Should be repeatable if not deleted
         TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(ok_and<false>(token.verify_ticket(fid, t, "foo bar baz")));
+        TEST_ASSERT(ok_and<false>(t.verify(token.tag(), fid, "foo bar baz")));
 
         TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(token.clear_ticket(fid, t));
+        TEST_ASSERT(t.clear(token.tag(), fid));
 
         suppress.suppress();
         suppress_ka.suppress();
         TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT_FALSE(token.verify_ticket(fid, t, "foo bar"));
+        TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
         suppress_ka.restore();
         suppress.restore();
 
