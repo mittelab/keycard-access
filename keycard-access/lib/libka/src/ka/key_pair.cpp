@@ -4,7 +4,7 @@
 
 #include <cstring>
 #include <esp_log.h>
-#include <ka/keypair.hpp>
+#include <ka/key_pair.hpp>
 #include <sodium/crypto_scalarmult_curve25519.h>
 #include <sodium/randombytes.h>
 

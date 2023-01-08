@@ -1,9 +1,10 @@
 #include "pinout.hpp"
 #include <desfire/esp32/cipher_provider.hpp>
-#include <desfire/tag.hpp>
 #include <desfire/fs.hpp>
-#include <ka/keypair.hpp>
+#include <desfire/tag.hpp>
+#include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
+#include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/desfire_pcd.hpp>
 #include <pn532/esp32/hsu.hpp>
@@ -65,7 +66,7 @@ namespace ut {
 
         constexpr auto test_holder = "user";
         constexpr auto test_publisher = "Mittelab";
-    }
+    }// namespace
 
     template <class Result>
     [[nodiscard]] bool passthru_set(bool &dest, Result const &res);
@@ -77,7 +78,7 @@ namespace ut {
     [[nodiscard]] bool ok_and(Result const &res);
 
     struct suppress_log {
-        const char * const tag;
+        const char *const tag;
         esp_log_level_t const previous_log_level;
 
         explicit suppress_log(const char *tag_) : tag{tag_}, previous_log_level{esp_log_level_get(tag)} {
@@ -95,7 +96,6 @@ namespace ut {
         ~suppress_log() {
             restore();
         }
-
     };
 
     struct {
@@ -143,8 +143,7 @@ namespace ut {
                 desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
                 desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
                 desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
-                desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}
-        };
+                desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
         // Ok now attempt to retrieve the root keys among those we usually use for testing.
         ESP_LOGI("TEST", "Attempt to recover the root key.");
         TEST_ASSERT(instance.tag->select_application());
@@ -177,7 +176,7 @@ namespace ut {
 
         member_token token{*instance.tag};
         TEST_ASSERT(token.setup_root_settings());
-        TEST_ASSERT(token.setup_mad(ut::test_holder, ut::test_publisher));
+        TEST_ASSERT(token.setup_mad({ut::test_holder, ut::test_publisher}));
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
@@ -226,7 +225,7 @@ namespace ut {
 
         const auto aid = desfire::app_id{0x11, 0x12, 0x13};
         const auto fid = desfire::file_id{0x00};
-        const auto app_master_key = tag_key{0x00, desfire::random_oracle{esp_fill_random}};
+        const auto app_master_key = key_type{0x00, desfire::random_oracle{esp_fill_random}};
 
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
         TEST_ASSERT(desfire::fs::create_app(token.tag(), aid, app_master_key, desfire::key_rights{}, 1));
@@ -284,7 +283,7 @@ namespace ut {
         TEST_ASSERT(token.unlock());
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
     }
-}
+}// namespace ut
 
 extern "C" void app_main() {
     UNITY_BEGIN();
@@ -340,7 +339,7 @@ namespace ut {
     bool passthru_set(bool &dest, Result const &res) {
         if constexpr (std::is_same_v<Result, bool>) {
             dest = res;
-        } else if constexpr(std::is_same_v<decltype(*res), bool>) {
+        } else if constexpr (std::is_same_v<decltype(*res), bool>) {
             dest = res and *res;
         } else {
             dest = bool(res);
@@ -352,7 +351,7 @@ namespace ut {
     bool passthru_and(bool &dest, Result const &res) {
         if constexpr (std::is_same_v<Result, bool>) {
             dest &= res;
-        } else if constexpr(std::is_same_v<decltype(*res), bool>) {
+        } else if constexpr (std::is_same_v<decltype(*res), bool>) {
             dest &= res and *res;
         } else {
             dest &= bool(res);
@@ -366,4 +365,4 @@ namespace ut {
         return res and *res == B;
     }
 
-}
+}// namespace ut

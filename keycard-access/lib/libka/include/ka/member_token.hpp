@@ -5,100 +5,16 @@
 #ifndef KEYCARDACCESS_MEMBER_TOKEN_HPP
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
-#include "config.hpp"
-#include "gate.hpp"
-#include <desfire/tag.hpp>
+#include <ka/config.hpp>
+#include <ka/data.hpp>
+#include <ka/gate.hpp>
 
 namespace ka {
 
-    template <class... Tn>
-    using r = desfire::tag::result<Tn...>;
-
-
-    using tag_key = desfire::key<desfire::cipher_type::aes128>;
-    using standard_file_settings = desfire::file_settings<desfire::file_type::standard>;
-
-    class ticket {
-        /**
-         * @brief Key used to access the enrollment file.
-         */
-        tag_key _key{1, {}};
-
-        /**
-         * @brief Salt used to generate the file content hash.
-         */
-        std::array<std::uint8_t, 32> _salt{};
-
-    public:
-        ticket() = default;
-        explicit ticket(std::uint8_t key_no);
-
-        [[nodiscard]] bool verify_file_content(mlab::bin_data const &content, std::string const &holder) const;
-        [[nodiscard]] mlab::bin_data get_file_content(std::string const &text) const;
-        [[nodiscard]] std::pair<mlab::bin_data, standard_file_settings> get_file(std::string const &text) const;
-
-        /**
-         * @brief Generates an enroll ticket with random @ref tag_key and @ref salt.
-         */
-        [[nodiscard]] static ticket generate(std::uint8_t key_no = 1);
-
-        [[nodiscard]] inline tag_key const &key() const;
-        [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_ticket_prerequisite.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @param text
-         * @return
-         */
-        r<> install(desfire::tag &tag, desfire::file_id fid, std::string const &text) const;
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_prerequisites.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @param text
-         * @return
-         */
-        r<bool> verify(desfire::tag &tag, desfire::file_id fid, std::string const &text) const;
-
-        /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_prerequisites.
-         * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
-         * @param fid
-         * @param t
-         * @return
-         */
-        r<> clear(desfire::tag &tag, desfire::file_id fid) const;
-
-        r<> check_app_for_prerequisites(desfire::tag &tag) const;
-
-    };
-
-    enum struct gate_status : std::uint8_t {
-        unknown = 0b00,
-        enrolled = 0b01,
-        auth_ready = 0b10,
-        broken = enrolled | auth_ready
-    };
-
-    [[nodiscard]] inline bool operator &(gate_status gs1, gate_status gs2);
-    [[nodiscard]] inline gate_status operator |(gate_status gs1, gate_status gs2);
+    class ticket;
 
     /**
-     * @note Conventions: methods do perform authentication with the root tag_key.
+     * @note Conventions: methods do perform authentication with the root key_type.
      */
     class member_token {
         /**
@@ -135,6 +51,7 @@ namespace ka {
 
         [[nodiscard]] r<std::string> get_holder() const;
         [[nodiscard]] r<std::string> get_publisher() const;
+        [[nodiscard]] r<identity> get_identity() const;
         [[nodiscard]] r<unsigned> get_mad_version() const;
 
         [[nodiscard]] r<std::vector<gate::id_t>> get_enrolled_gates() const;
@@ -144,7 +61,7 @@ namespace ka {
          * @{
          */
         r<> setup_root_settings(config const &cfg = system_config());
-        r<> setup_mad(std::string const &holder, std::string const &publisher);
+        r<> setup_mad(identity const &id);
         /**
          * @}
          */
@@ -154,22 +71,24 @@ namespace ka {
          * @{
          */
         /**
-          * Creates a new app for this gate, controlled by the master tag_key @p gate_key.
+          * Creates a new app for this gate, controlled by the master key_type @p gate_key.
           * This app contains one file, at @ref gate_enroll_file, which is encrypted
-          * with the returned tag_key (randomly generated).
+          * with the returned key_type (randomly generated).
           * This file contains the hash of the current card holder @ref get_holder,
           * with a unique (randomly generated) salt, for increased security.
           * At this point, without the returned @ref ticket, cloning or forging
           * the card requires to break the card crypto.
-          * @note Using a randomized tag_key with a known file content would be enough to
+          * @note Using a randomized key_type with a known file content would be enough to
           * prevent cloning or forging, but in this way we can verify that the card
           * has not been reassigned. By hashing we keep the file size under control, and
           * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
-        r<ticket> enroll_gate(gate::id_t gid, tag_key const &gate_key);
+        r<ticket> install_enroll_ticket(gate::id_t gid, key_type const &gate_app_key);
         r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
-        r<> write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity);
-        r<bool> authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const;
+
+
+        r<> write_auth_file(gate::id_t gid, key_type const &auth_file_key, std::string const &identity);
+        r<bool> authenticate(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) const;
         r<gate_status> get_gate_status(gate::id_t gid) const;
         /**
           * @}
@@ -181,18 +100,18 @@ namespace ka {
         [[nodiscard]] r<id_t> id() const;
 
         /**
-         * @brief A differentiated root tag_key to be used with a token.
-         * Note that we do not use a pre-shared tag_key for this, rather, we simply derive an
-         * token-specific tag_key to differentiate from @ref config::master_key. The user is free to
+         * @brief A differentiated root key_type to be used with a token.
+         * Note that we do not use a pre-shared key_type for this, rather, we simply derive an
+         * token-specific key_type to differentiate from @ref config::master_key. The user is free to
          * tamper with their token. In the worst case, they might delete the access application
          * and need a redeploy.
          * This uses @ref desfire::kdf_an10922 to differentiate @ref config::master_key into a token-specific
-         * root tag_key. It uses the @p token_id and @ref config::differentiation_salt as differentiation input data.
+         * root key_type. It uses the @p token_id and @ref config::differentiation_salt as differentiation input data.
          * @param token_id Id of the token
          * @param cfg Current configuration
-         * @return A tag_key which gives root access to the card.
+         * @return A key_type which gives root access to the card.
          */
-        [[nodiscard]] static tag_key get_default_root_key(id_t token_id, config const &cfg = system_config());
+        [[nodiscard]] static key_type get_default_root_key(id_t token_id, config const &cfg = system_config());
     };
 
 }// namespace ka
@@ -205,24 +124,6 @@ namespace ka {
 
     desfire::any_key const &member_token::root_key() const {
         return _root_key;
-    }
-
-    tag_key const &ticket::key() const {
-        return _key;
-    }
-
-    std::array<std::uint8_t, 32> const &ticket::salt() const {
-        return _salt;
-    }
-
-    bool operator &(gate_status gs1, gate_status gs2) {
-        using numeric_t = std::underlying_type_t<gate_status>;
-        return (static_cast<numeric_t>(gs1) & static_cast<numeric_t>(gs2)) != 0;
-    }
-
-    gate_status operator |(gate_status gs1, gate_status gs2) {
-        using numeric_t = std::underlying_type_t<gate_status>;
-        return static_cast<gate_status>(static_cast<numeric_t>(gs1) | static_cast<numeric_t>(gs2));
     }
 
 }// namespace ka

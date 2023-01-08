@@ -2,39 +2,15 @@
 // Created by spak on 9/29/22.
 //
 
-#include <algorithm>
-#include <desfire/esp32/cipher_provider.hpp>
-#include <desfire/kdf.hpp>
 #include <ka/member_token.hpp>
-#include <mlab/bin_data.hpp>
-#include <numeric>
-#include <sodium/crypto_hash_sha512.h>
-#include <sodium/randombytes.h>
+#include <ka/ticket.hpp>
 
+// Override the log prefix
 #define DESFIRE_FS_LOG_PREFIX "KA"
+#include <desfire/kdf.hpp>
+#include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/fs.hpp>
-
-namespace mlab {
-    bin_data &operator<<(bin_data &bd, std::string const &s) {
-        // Construct an uint8_t view over the string by casting pointers. This is accepted by bin_data
-        const mlab::range<std::uint8_t const *> view{
-                reinterpret_cast<std::uint8_t const *>(s.c_str()),
-                reinterpret_cast<std::uint8_t const *>(s.c_str() + s.size())};
-        return bd << view;
-    }
-
-    [[nodiscard]] bin_data from_string(std::string const &s) {
-        bin_data retval;
-        retval << prealloc(s.size()) << s;
-        return retval;
-    }
-    [[nodiscard]] std::string to_string(bin_data const &bd) {
-        const mlab::range<char const *> view{
-                reinterpret_cast<char const *>(bd.data()),
-                reinterpret_cast<char const *>(bd.data() + bd.size())};
-        return std::string{std::begin(view), std::end(view)};
-    }
-}// namespace mlab
+#include <sodium/randombytes.h>
 
 namespace ka {
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
@@ -68,7 +44,7 @@ namespace ka {
         TRY(unlock())
         // Try retrieveing the id
         TRY_RESULT_AS(id(), r_id) {
-            // Use the id to compute the tag_key
+            // Use the id to compute the key_type
             TRY_RESULT(try_set_root_key(get_default_root_key(*r_id, cfg))) {
                 // Now verify that we have desired settings
                 TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
@@ -123,121 +99,24 @@ namespace ka {
         }
     }
 
-    ticket::ticket(std::uint8_t key_no) : _key{key_no, {}}, _salt{} {}
-
-    ticket ticket::generate(std::uint8_t key_no) {
-        ticket ticket{key_no};
-        ticket._key.randomize(desfire::random_oracle{randombytes_buf});
-        randombytes_buf(ticket._salt.data(), ticket._salt.size());
-        return ticket;
-    }
-
-    bool ticket::verify_file_content(mlab::bin_data const &content, const std::string &holder) const {
-        const auto expected_content = get_file_content(holder);
-        return expected_content.size() == content.size() and
-               std::equal(std::begin(content), std::end(content), std::begin(expected_content));
-    }
-
-    mlab::bin_data ticket::get_file_content(std::string const &text) const {
-        const mlab::bin_data data = mlab::bin_data::chain(
-                mlab::prealloc(salt().size() + text.size()),
-                salt(),
-                text);
-        mlab::bin_data hash;
-        hash.resize(64);
-        if (0 != crypto_hash_sha512(hash.data(), data.data(), data.size())) {
-            ESP_LOGE("KA", "Could not hash text and salt.");
-            hash = {};
-        }
-        return hash;
-    }
-
-    std::pair<mlab::bin_data, standard_file_settings> ticket::get_file(const std::string &text) const {
-        auto data = get_file_content(text);
-        auto settings = standard_file_settings{
-                desfire::file_security::encrypted,
-                // Exclusive access to the required key
-                desfire::access_rights{key().key_number()},
-                data.size()};
-        return {std::move(data), settings};
-    }
-
-    r<> ticket::install(desfire::tag &tag, desfire::file_id fid, std::string const &text) const {
-        TRY(check_app_for_prerequisites(tag))
-        // Create the ticket file first, so that is compatible also with apps that do not allow creating without auth
-        TRY(desfire::fs::delete_file_if_exists(tag, fid))
-        const auto [content, settings] = get_file(text);
-        TRY(tag.create_file(fid, settings))
-        // Authenticate with the default tag_key and change it to the specific file tag_key
-        TRY(tag.authenticate(tag_key{key().key_number(), {}}))
-        TRY(tag.change_key(key()))
-        TRY(tag.authenticate(key()))
-        // Now write the content as the new key
-        TRY(tag.write_data(fid, content, desfire::cipher_mode::ciphered, 0))
-        // Make sure you're back on the app without authentication
-        TRY(desfire::fs::logout_app(tag))
-        return mlab::result_success;
-    }
-
-    r<bool> ticket::verify(desfire::tag &tag, desfire::file_id fid, std::string const &text) const {
-        TRY(check_app_for_prerequisites(tag))
-        // Read the enroll file and compare
-        TRY(tag.authenticate(key()))
-        TRY_RESULT_AS(tag.read_data(fid, desfire::cipher_mode::ciphered), r_read) {
-            TRY(desfire::fs::logout_app(tag))
-            return verify_file_content(*r_read, text);
-        }
-    }
-
-
-    r<> ticket::clear(desfire::tag &tag, desfire::file_id fid) const {
-        TRY(check_app_for_prerequisites(tag))
-        TRY(tag.delete_file(fid))
-        // Make sure the key is reset to default
-        TRY(tag.authenticate(key()))
-        TRY(tag.change_key(tag_key{key().key_number(), {}}))
-        TRY(desfire::fs::logout_app(tag))
-        return mlab::result_success;
-    }
-
-
-    r<> ticket::check_app_for_prerequisites(desfire::tag &tag) const {
-        if (tag.active_key_no() != 0) {
-            ESP_LOGE("KA", "The app is not unlocked with the master key.");
-            return desfire::error::permission_denied;
-        }
-        // Assert that the app settings allows keys to change themselves, otherwise security is broken
-        TRY_RESULT(tag.get_app_settings()) {
-            if (r->rights.allowed_to_change_keys != desfire::same_key) {
-                ESP_LOGE("KA", "Tickets can only be used on apps where each key can change itself.");
-                return desfire::error::permission_denied;
-            }
-            if (r->max_num_keys <= key().key_number()) {
-                ESP_LOGE("KA", "The app does not allow for the specified ticket key number %d", key().key_number());
-                return desfire::error::permission_denied;
-            }
-        }
-        return mlab::result_success;
-    }
-
-    r<> member_token::write_auth_file(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) {
+    r<> member_token::write_auth_file(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) {
         TRY(tag().select_application(gate::id_to_app_id(gid)))
         // Assume the key slot is free, thus default key
-        TRY(tag().authenticate(tag_key{auth_file_key.key_number(), {}}))
+        TRY(tag().authenticate(key_type{auth_file_key.key_number(), {}}))
         TRY(tag().change_key(auth_file_key))
         TRY(desfire::fs::delete_file_if_exists(tag(), gate_authentication_file))
-        const standard_file_settings auth_file_settings{
+        const std_file_settings auth_file_settings{
                 desfire::generic_file_settings{
                         desfire::file_security::encrypted,
                         desfire::access_rights{auth_file_key.key_number()}},
                 desfire::data_file_settings{identity.size()}};
         TRY(tag().create_file(gate_authentication_file, auth_file_settings))
-        TRY(tag().write_data(gate_authentication_file, mlab::bin_data::chain(identity), desfire::cipher_mode::ciphered, 0))
+        TRY(tag().write_data(gate_authentication_file, mlab::data_from_string(identity), desfire::cipher_mode::ciphered, 0))
         return mlab::result_success;
     }
 
 
-    r<bool> member_token::authenticate(gate::id_t gid, tag_key const &auth_file_key, std::string const &identity) const {
+    r<bool> member_token::authenticate(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) const {
         TRY_RESULT(get_gate_status(gid)) {
             if (*r != gate_status::auth_ready) {
                 return false;
@@ -256,23 +135,23 @@ namespace ka {
         }
     }
 
-    r<ticket> member_token::enroll_gate(gate::id_t gid, tag_key const &gate_key) {
+    r<ticket> member_token::install_enroll_ticket(gate::id_t gid, key_type const &gate_app_key) {
         const desfire::app_id aid = gate::id_to_app_id(gid);
         // Do not allow any change, only create/delete file with authentication.
-        // Important: we allow to change only the same tag_key, otherwise the master can change access to the enrollment file
-        // TODO: Should the key right allow listing files, so that we can check the gate status without authentication?
-        const desfire::key_rights key_rights{desfire::same_key, false, false, false, false};
+        // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
+        const desfire::key_rights key_rights{desfire::same_key, false, true, false, false};
         // Retrieve the holder data that we will write in the enroll file
+        // TODO: use identity
         TRY_RESULT(get_holder()) {
             // Generate ticket and enroll file content
             const ticket ticket = ticket::generate();
-            // Create an app, allow one extra tag_key
+            // Create an app, allow one extra key_type
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
-            TRY(desfire::fs::create_app(tag(), aid, gate_key, key_rights, 1))
+            TRY(desfire::fs::create_app(tag(), aid, gate_app_key, key_rights, 1))
             // Install the ticket
             TRY(ticket.install(tag(), gate_enroll_file, *r))
-            // Make sure you're back on the gate master tag_key
-            TRY(tag().authenticate(gate_key.with_key_number(0)))
+            // Make sure you're back on the gate master key_type
+            TRY(tag().authenticate(gate_app_key.with_key_number(0)))
             return ticket;
         }
     }
@@ -284,30 +163,30 @@ namespace ka {
         }
     }
 
-    r<> member_token::setup_mad(std::string const &holder, std::string const &publisher) {
+    r<> member_token::setup_mad(identity const &id) {
         // Copy the strings into a bin_data
-        const auto bin_holder = mlab::from_string(holder);
-        const auto bin_publisher = mlab::from_string(publisher);
+        const auto bin_holder = mlab::data_from_string(id.holder);
+        const auto bin_publisher = mlab::data_from_string(id.publisher);
         // Attempt to delete the existing app
         TRY(desfire::fs::delete_app_if_exists(tag(), mad_aid))
-        // Prepare an app with a random tag_key
-        TRY_RESULT(desfire::fs::create_app_for_ro(tag(), tag_key::cipher, mad_aid, desfire::random_oracle{randombytes_buf})) {
+        // Prepare an app with a random key_type
+        TRY_RESULT(desfire::fs::create_app_for_ro(tag(), key_type::cipher, mad_aid, desfire::random_oracle{randombytes_buf})) {
             // Create file for MAD version 3
             TRY(desfire::fs::create_ro_free_plain_value_file(tag(), mad_file_version, 0x3))
             // Create files with holder and publisher
             TRY(desfire::fs::create_ro_free_plain_data_file(tag(), mad_file_card_holder, bin_holder))
             TRY(desfire::fs::create_ro_free_plain_data_file(tag(), mad_file_card_publisher, bin_publisher))
-            // Turn the app into read-only, discard the temporary tag_key
+            // Turn the app into read-only, discard the temporary key_type
             TRY(desfire::fs::make_app_ro(tag(), false))
         }
         return mlab::result_success;
     }
 
-    tag_key member_token::get_default_root_key(member_token::id_t token_id, config const &cfg) {
+    key_type member_token::get_default_root_key(member_token::id_t token_id, config const &cfg) {
         desfire::esp32::default_cipher_provider provider{};
         // Collect the differentiation data
         desfire::bin_data input_data;
-        input_data << token_id << cfg.differentiation_salt;
+        input_data << token_id << mlab::view_from_string(cfg.differentiation_salt);
         return desfire::kdf_an10922(cfg.master_key, provider, input_data);
     }
 
@@ -315,15 +194,27 @@ namespace ka {
     r<std::string> member_token::get_holder() const {
         TRY(tag().select_application(mad_aid))
         TRY_RESULT(tag().read_data(mad_file_card_holder, desfire::cipher_mode::plain)) {
-            return mlab::to_string(*r);
+            return mlab::data_to_string(*r);
         }
     }
 
     r<std::string> member_token::get_publisher() const {
         TRY(tag().select_application(mad_aid))
         TRY_RESULT(tag().read_data(mad_file_card_publisher, desfire::cipher_mode::plain)) {
-            return mlab::to_string(*r);
+            return mlab::data_to_string(*r);
         }
+    }
+
+    r<identity> member_token::get_identity() const {
+        TRY(tag().select_application(mad_aid))
+        identity id{};
+        TRY_RESULT(tag().read_data(mad_file_card_holder, desfire::cipher_mode::plain)) {
+            id.holder = mlab::data_to_string(*r);
+        }
+        TRY_RESULT(tag().read_data(mad_file_card_publisher, desfire::cipher_mode::plain)) {
+            id.publisher = mlab::data_to_string(*r);
+        }
+        return id;
     }
 
     r<unsigned> member_token::get_mad_version() const {

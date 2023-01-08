@@ -2,8 +2,8 @@
 // Created by spak on 10/5/22.
 //
 
-#ifndef KEYCARDACCESS_KEYPAIR_HPP
-#define KEYCARDACCESS_KEYPAIR_HPP
+#ifndef KEYCARDACCESS_KEY_PAIR_HPP
+#define KEYCARDACCESS_KEY_PAIR_HPP
 
 #include <array>
 #include <mlab/bin_data.hpp>
@@ -87,4 +87,4 @@ namespace ka {
     }
 
 }//namespace ka
-#endif//KEYCARDACCESS_KEYPAIR_HPP
+#endif//KEYCARDACCESS_KEY_PAIR_HPP
