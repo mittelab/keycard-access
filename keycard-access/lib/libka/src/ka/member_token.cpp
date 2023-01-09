@@ -141,15 +141,14 @@ namespace ka {
         // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
         const desfire::key_rights key_rights{desfire::same_key, false, true, false, false};
         // Retrieve the holder data that we will write in the enroll file
-        // TODO: use identity
-        TRY_RESULT(get_holder()) {
+        TRY_RESULT(get_identity()) {
             // Generate ticket and enroll file content
             const ticket ticket = ticket::generate();
             // Create an app, allow one extra key_type
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
             TRY(desfire::fs::create_app(tag(), aid, gate_app_key, key_rights, 1))
             // Install the ticket
-            TRY(ticket.install(tag(), gate_enroll_file, *r))
+            TRY(ticket.install(tag(), gate_enroll_file, r->concat()))
             // Make sure you're back on the gate master key_type
             TRY(tag().authenticate(gate_app_key.with_key_number(0)))
             return ticket;
@@ -157,9 +156,9 @@ namespace ka {
     }
 
     r<bool> member_token::verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const {
-        TRY_RESULT_AS(get_holder(), r_holder) {
+        TRY_RESULT(get_identity()) {
             TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), ticket.key()))
-            return ticket.verify(tag(), gate_enroll_file, *r_holder);
+            return ticket.verify(tag(), gate_enroll_file, r->concat());
         }
     }
 

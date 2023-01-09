@@ -17,9 +17,19 @@ namespace ka {
     template <class... Tn>
     using r = desfire::tag::result<Tn...>;
 
+    namespace util {
+        [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
+        /**
+         * Escapes backslashes and newlines (with a backslash in front).
+         */
+        [[nodiscard]] std::string escape(std::string const &text);
+    }
+
     struct identity {
         std::string holder;
         std::string publisher;
+
+        [[nodiscard]] std::string concat() const;
     };
 
     enum struct gate_status : std::uint8_t {
