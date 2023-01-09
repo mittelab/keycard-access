@@ -66,6 +66,8 @@ namespace ut {
 
         constexpr auto test_holder = "user";
         constexpr auto test_publisher = "Mittelab";
+
+        constexpr auto the_one_key = one_key_to_bind_them{};
     }// namespace
 
     template <class Result>
@@ -102,7 +104,7 @@ namespace ut {
         std::unique_ptr<pn532::esp32::hsu_channel> channel;
         std::unique_ptr<pn532::controller> controller;
         bool did_pass_controller_test = false;
-        member_token::id_t nfc_id{};
+        token_id nfc_id{};
         std::unique_ptr<desfire::tag> tag;
         bool warn_before_formatting = true;
     } instance{};
@@ -136,7 +138,7 @@ namespace ut {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::array<desfire::any_key, 9> keys_to_test{
                 default_k,
-                member_token::get_default_root_key(instance.nfc_id),
+                the_one_key.derive_token_root_key(instance.nfc_id),
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},
@@ -175,7 +177,7 @@ namespace ut {
         }
 
         member_token token{*instance.tag};
-        TEST_ASSERT(token.setup_root_settings());
+        TEST_ASSERT(token.setup_root(the_one_key));
         TEST_ASSERT(token.setup_mad({ut::test_holder, ut::test_publisher}));
 
         // Mad must be readable without auth
@@ -218,7 +220,7 @@ namespace ut {
         member_token token{*instance.tag};
 
         auto suppress = suppress_log{DESFIRE_TAG};
-        TEST_ASSERT(token.try_set_root_key(member_token::get_default_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
         TEST_ASSERT(token.unlock());

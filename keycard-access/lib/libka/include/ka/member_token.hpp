@@ -6,7 +6,7 @@
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
 #include <ka/config.hpp>
-#include <ka/data.hpp>
+#include <ka/key_manager.hpp>
 #include <ka/gate.hpp>
 
 namespace ka {
@@ -35,16 +35,13 @@ namespace ka {
         static constexpr desfire::file_id gate_enroll_file{0x00};
         static constexpr desfire::file_id gate_authentication_file{0x01};
 
-        using id_t = std::array<std::uint8_t, 7>;
-
         explicit member_token(desfire::tag &tag);
         member_token(member_token const &) = delete;
         member_token(member_token &&) = default;
         member_token &operator=(member_token const &) = delete;
         member_token &operator=(member_token &&) = default;
 
-        [[nodiscard]] inline desfire::any_key const &root_key() const;
-        [[nodiscard]] r<> try_set_root_key(desfire::any_key k);
+        [[nodiscard]] r<> try_set_root_key(token_root_key const &k);
         [[nodiscard]] r<> unlock();
 
         [[nodiscard]] inline desfire::tag &tag() const;
@@ -54,13 +51,13 @@ namespace ka {
         [[nodiscard]] r<identity> get_identity() const;
         [[nodiscard]] r<unsigned> get_mad_version() const;
 
-        [[nodiscard]] r<std::vector<gate::id_t>> get_enrolled_gates() const;
+        [[nodiscard]] r<std::vector<gate_id>> get_enrolled_gates() const;
 
         /**
          * @addtogroup Provisioning
          * @{
          */
-        r<> setup_root_settings(config const &cfg = system_config());
+        r<> setup_root(one_key_to_bind_them const &onekey);
         r<> setup_mad(identity const &id);
         /**
          * @}
@@ -83,13 +80,13 @@ namespace ka {
           * has not been reassigned. By hashing we keep the file size under control, and
           * by adding a salt we strengthen the amount of random bits that need to be guessed.
           */
-        r<ticket> install_enroll_ticket(gate::id_t gid, key_type const &gate_app_key);
-        r<bool> verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const;
+        r<ticket> install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey);
+        r<bool> verify_enroll_ticket(gate_id gid, ticket const &ticket) const;
 
 
-        r<> write_auth_file(gate::id_t gid, key_type const &auth_file_key, std::string const &identity);
-        r<bool> authenticate(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) const;
-        r<gate_status> get_gate_status(gate::id_t gid) const;
+        r<> write_auth_file(gate_id gid, key_type const &auth_file_key, std::string const &identity);
+        r<bool> authenticate(gate_id gid, key_type const &auth_file_key, std::string const &identity) const;
+        r<gate_status> get_gate_status(gate_id gid) const;
         /**
           * @}
           */
@@ -97,21 +94,7 @@ namespace ka {
         /**
          * @brief The ID of the token, as in @ref desfire::tag::get_card_uid().
          */
-        [[nodiscard]] r<id_t> id() const;
-
-        /**
-         * @brief A differentiated root key_type to be used with a token.
-         * Note that we do not use a pre-shared key_type for this, rather, we simply derive an
-         * token-specific key_type to differentiate from @ref config::master_key. The user is free to
-         * tamper with their token. In the worst case, they might delete the access application
-         * and need a redeploy.
-         * This uses @ref desfire::kdf_an10922 to differentiate @ref config::master_key into a token-specific
-         * root key_type. It uses the @p token_id and @ref config::differentiation_salt as differentiation input data.
-         * @param token_id Id of the token
-         * @param cfg Current configuration
-         * @return A key_type which gives root access to the card.
-         */
-        [[nodiscard]] static key_type get_default_root_key(id_t token_id, config const &cfg = system_config());
+        [[nodiscard]] r<token_id> id() const;
     };
 
 }// namespace ka
@@ -120,10 +103,6 @@ namespace ka {
 
     desfire::tag &member_token::tag() const {
         return *_tag;
-    }
-
-    desfire::any_key const &member_token::root_key() const {
-        return _root_key;
     }
 
 }// namespace ka

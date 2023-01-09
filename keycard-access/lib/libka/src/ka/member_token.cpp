@@ -8,44 +8,39 @@
 // Override the log prefix
 #define DESFIRE_FS_LOG_PREFIX "KA"
 #include <desfire/kdf.hpp>
-#include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/fs.hpp>
 #include <sodium/randombytes.h>
 
 namespace ka {
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
 
-    r<member_token::id_t> member_token::id() const {
+    r<token_id> member_token::id() const {
         return tag().get_card_uid();
     }
 
     r<> member_token::unlock() {
-        return desfire::fs::login_app(tag(), desfire::root_app, root_key());
+        return desfire::fs::login_app(tag(), desfire::root_app, _root_key);
     }
 
-    r<> member_token::try_set_root_key(desfire::any_key k) {
+    r<> member_token::try_set_root_key(token_root_key const &k) {
         TRY(tag().select_application(desfire::root_app))
         // Can I enter with the current root key?
-        if (tag().authenticate(root_key())) {
-            TRY_RESULT(tag().change_key(k)) {
-                _root_key = std::move(k);
-                TRY(tag().authenticate(root_key()))
-            }
-        } else {
-            // No, can I enter with the key that was supplied?
-            TRY_RESULT(tag().authenticate(k)) {
-                _root_key = std::move(k);
-            }
+        // TODO suppress log
+        if (tag().authenticate(_root_key)) {
+            TRY(tag().change_key(k))
         }
+        // Can I enter with the key that was supplied?
+        TRY(tag().authenticate(k))
+        _root_key = k;
         return mlab::result_success;
     }
 
-    r<> member_token::setup_root_settings(config const &cfg) {
+    r<> member_token::setup_root(one_key_to_bind_them const &onekey) {
         TRY(unlock())
         // Try retrieveing the id
         TRY_RESULT_AS(id(), r_id) {
             // Use the id to compute the key_type
-            TRY_RESULT(try_set_root_key(get_default_root_key(*r_id, cfg))) {
+            TRY_RESULT(try_set_root_key(onekey.derive_token_root_key(*r_id))) {
                 // Now verify that we have desired settings
                 TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
                     // If we got so far, we have at least a changeable master key. For MAD setup,
@@ -72,7 +67,7 @@ namespace ka {
         return mlab::result_success;
     }
 
-    r<gate_status> member_token::get_gate_status(gate::id_t gid) const {
+    r<gate_status> member_token::get_gate_status(gate_id gid) const {
         const auto aid = gate::id_to_app_id(gid);
         TRY_RESULT(desfire::fs::does_app_exist(tag(), aid)) {
             if (not *r) {
@@ -99,7 +94,7 @@ namespace ka {
         }
     }
 
-    r<> member_token::write_auth_file(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) {
+    r<> member_token::write_auth_file(gate_id gid, key_type const &auth_file_key, std::string const &identity) {
         TRY(tag().select_application(gate::id_to_app_id(gid)))
         // Assume the key slot is free, thus default key
         TRY(tag().authenticate(key_type{auth_file_key.key_number(), {}}))
@@ -116,7 +111,7 @@ namespace ka {
     }
 
 
-    r<bool> member_token::authenticate(gate::id_t gid, key_type const &auth_file_key, std::string const &identity) const {
+    r<bool> member_token::authenticate(gate_id gid, key_type const &auth_file_key, std::string const &identity) const {
         TRY_RESULT(get_gate_status(gid)) {
             if (*r != gate_status::auth_ready) {
                 return false;
@@ -135,7 +130,7 @@ namespace ka {
         }
     }
 
-    r<ticket> member_token::install_enroll_ticket(gate::id_t gid, key_type const &gate_app_key) {
+    r<ticket> member_token::install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey) {
         const desfire::app_id aid = gate::id_to_app_id(gid);
         // Do not allow any change, only create/delete file with authentication.
         // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
@@ -146,16 +141,16 @@ namespace ka {
             const ticket ticket = ticket::generate();
             // Create an app, allow one extra key_type
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
-            TRY(desfire::fs::create_app(tag(), aid, gate_app_key, key_rights, 1))
+            TRY(desfire::fs::create_app(tag(), aid, gkey, key_rights, 1))
             // Install the ticket
             TRY(ticket.install(tag(), gate_enroll_file, r->concat()))
             // Make sure you're back on the gate master key_type
-            TRY(tag().authenticate(gate_app_key.with_key_number(0)))
+            TRY(tag().authenticate(gkey.with_key_number(0)))
             return ticket;
         }
     }
 
-    r<bool> member_token::verify_enroll_ticket(gate::id_t gid, ticket const &ticket) const {
+    r<bool> member_token::verify_enroll_ticket(gate_id gid, ticket const &ticket) const {
         TRY_RESULT(get_identity()) {
             TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), ticket.key()))
             return ticket.verify(tag(), gate_enroll_file, r->concat());
@@ -180,15 +175,6 @@ namespace ka {
         }
         return mlab::result_success;
     }
-
-    key_type member_token::get_default_root_key(member_token::id_t token_id, config const &cfg) {
-        desfire::esp32::default_cipher_provider provider{};
-        // Collect the differentiation data
-        desfire::bin_data input_data;
-        input_data << token_id << mlab::view_from_string(cfg.differentiation_salt);
-        return desfire::kdf_an10922(cfg.master_key, provider, input_data);
-    }
-
 
     r<std::string> member_token::get_holder() const {
         TRY(tag().select_application(mad_aid))
@@ -224,11 +210,11 @@ namespace ka {
     }
 
 
-    r<std::vector<gate::id_t>> member_token::get_enrolled_gates() const {
+    r<std::vector<gate_id>> member_token::get_enrolled_gates() const {
         TRY(tag().select_application(desfire::root_app))
         TRY_RESULT(tag().get_application_ids()) {
             // Filter those in range
-            std::vector<gate::id_t> gates;
+            std::vector<gate_id> gates;
             for (desfire::app_id const &aid : *r) {
                 if (gate::is_gate_app(aid)) {
                     gates.push_back(gate::app_id_to_id(aid));

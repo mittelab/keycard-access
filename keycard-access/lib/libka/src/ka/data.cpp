@@ -41,6 +41,7 @@ namespace ka {
     std::string identity::concat() const {
         return util::escape(holder) + "\n" + util::escape(publisher);
     }
+
 }
 
 namespace mlab {

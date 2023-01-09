@@ -8,14 +8,12 @@
 #include <ka/data.hpp>
 #include <string>
 
+#ifndef KEYCARD_ACCESS_SALT
+#define KEYCARD_ACCESS_SALT "Mlab Super Hash"
+#endif
+
 namespace ka {
 
-    struct config {
-        key_type master_key;
-        std::string differentiation_salt;
-    };
-
-    [[nodiscard]] config const &system_config();
 }// namespace ka
 
 #endif//KEYCARDACCESS_CONFIG_HPP

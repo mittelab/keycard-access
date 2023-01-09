@@ -5,6 +5,7 @@
 #ifndef KEYCARDACCESS_GATE_HPP
 #define KEYCARDACCESS_GATE_HPP
 
+#include <ka/data.hpp>
 #include <cstdint>
 #include <desfire/data.hpp>
 
@@ -27,30 +28,28 @@ namespace ka {
          */
         static constexpr std::uint32_t max_gate_id = gate_aid_range_end - gate_aid_range_begin;
 
-        using id_t = std::uint32_t;
-
-        [[nodiscard]] inline id_t id() const;
+        [[nodiscard]] inline gate_id id() const;
         [[nodiscard]] inline desfire::app_id app_id() const;
 
-        [[nodiscard]] inline static constexpr desfire::app_id id_to_app_id(id_t id);
-        [[nodiscard]] inline static constexpr id_t app_id_to_id(desfire::app_id id);
+        [[nodiscard]] inline static constexpr desfire::app_id id_to_app_id(gate_id id);
+        [[nodiscard]] inline static constexpr gate_id app_id_to_id(desfire::app_id id);
         [[nodiscard]] inline static constexpr bool is_gate_app(desfire::app_id id);
 
-        inline explicit gate(id_t id);
+        inline explicit gate(gate_id id);
         gate(gate const &) = delete;
         gate(gate &&) = default;
         gate &operator=(gate const &) = delete;
         gate &operator=(gate &&) = default;
 
     private:
-        id_t _id;
+        gate_id _id;
     };
 }// namespace ka
 
 namespace ka {
-    gate::gate(ka::gate::id_t id) : _id{id} {}
+    gate::gate(gate_id id) : _id{id} {}
 
-    id_t gate::id() const {
+    gate_id gate::id() const {
         return _id;
     }
 
@@ -58,14 +57,14 @@ namespace ka {
         return id_to_app_id(id());
     }
 
-    constexpr desfire::app_id gate::id_to_app_id(ka::gate::id_t id) {
+    constexpr desfire::app_id gate::id_to_app_id(gate_id id) {
         const std::uint32_t app_id_uint = id + gate_aid_range_begin;
         return {std::uint8_t((app_id_uint >> 16) & 0xff),
                 std::uint8_t((app_id_uint >> 8) & 0xff),
                 std::uint8_t(app_id_uint & 0xff)};
     }
 
-    constexpr ka::gate::id_t gate::app_id_to_id(desfire::app_id id) {
+    constexpr gate_id gate::app_id_to_id(desfire::app_id id) {
         const std::uint32_t app_id_uint =
                 (std::uint32_t(id[2]) << 16) |
                 (std::uint32_t(id[1]) << 8) |
