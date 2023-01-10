@@ -193,6 +193,57 @@ namespace ut {
         TEST_ASSERT_FALSE(instance.tag->create_file(0x00, desfire::file_settings<desfire::file_type::value>{}));
     }
 
+    void test_enroll_and_auth() {
+        TEST_ASSERT(instance.tag != nullptr);
+        if (instance.tag == nullptr) {
+            return;
+        }
+
+        member_token token{*instance.tag};
+        constexpr gate_id gid = 0x00;
+
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
+        TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
+        suppress.restore();
+
+        TEST_ASSERT(token.get_identity());
+        auto r_status = token.get_gate_status(gid);
+        TEST_ASSERT(r_status);
+        TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
+
+        auto gkey = the_one_key.derive_gate_app_master_key(instance.nfc_id, gid);
+        const auto r_enroll_ticket = token.install_enroll_ticket(gid, gkey);
+
+        TEST_ASSERT(r_enroll_ticket);
+
+        r_status = token.get_gate_status(gid);
+        TEST_ASSERT(r_status);
+        TEST_ASSERT_EQUAL(*r_status, gate_status::enrolled);
+        TEST_ASSERT(ok_and<true>(token.verify_enroll_ticket(gid, *r_enroll_ticket)));
+
+        const auto auth_ticket = ticket::generate();
+
+        TEST_ASSERT(token.install_auth_ticket(gid, gkey, auth_ticket));
+
+        r_status = token.get_gate_status(gid);
+        TEST_ASSERT(r_status);
+        TEST_ASSERT_EQUAL(*r_status, gate_status::auth_ready);
+
+        TEST_ASSERT(ok_and<true>(token.verify_auth_ticket(gid, auth_ticket)));
+
+        TEST_ASSERT(token.authenticate(gid, auth_ticket));
+
+        TEST_ASSERT(token.unlock_root());
+        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), gate::id_to_app_id(gid)));
+
+        r_status = token.get_gate_status(gid);
+        TEST_ASSERT(r_status);
+        TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
+
+        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
+        TEST_ASSERT_FALSE(token.authenticate(gid, auth_ticket));
+    }
+
     void test_ticket() {
         TEST_ASSERT(instance.tag != nullptr);
         if (instance.tag == nullptr) {
@@ -306,6 +357,7 @@ extern "C" void app_main() {
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
         RUN_TEST(ut::test_mad);
         RUN_TEST(ut::test_ticket);
+        RUN_TEST(ut::test_enroll_and_auth);
 
         // Always conclude with a format test so that it leaves the test suite clean
         ut::instance.warn_before_formatting = false;
