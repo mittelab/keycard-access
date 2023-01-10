@@ -50,10 +50,7 @@ namespace ka {
         r<> install(desfire::tag &tag, desfire::file_id fid, std::string const &original_text) const;
 
         /**
-         * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
-         * Moreover, it is expected that the key number required by @p t is actually available in the selected
-         * application, and that the given application has @ref desfire::key_rights::allowed_to_change_keys set
-         * to @ref desfire::same_key. All these conditions are checked via @ref check_app_for_prerequisites.
+         * @note The caller is responsible for selecting the appropriate app.
          * @note On a successful call, the @ref tag will be in a unauthenticated state, on the current app.
          * @param fid
          * @param t

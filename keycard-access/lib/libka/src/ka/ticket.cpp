@@ -66,7 +66,6 @@ namespace ka {
     }
 
     r<bool> ticket::verify(desfire::tag &tag, desfire::file_id fid, std::string const &text_to_verify) const {
-        TRY(check_app_for_prerequisites(tag))
         // Read the enroll file and compare
         TRY(tag.authenticate(key()))
         TRY_RESULT_AS(tag.read_data(fid, desfire::cipher_mode::ciphered), r_read) {
