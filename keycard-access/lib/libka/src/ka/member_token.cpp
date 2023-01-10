@@ -2,6 +2,7 @@
 // Created by spak on 9/29/22.
 //
 
+#include <desfire/esp32/utils.hpp>
 #include <desfire/kdf.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/member_token.hpp>
@@ -22,10 +23,12 @@ namespace ka {
     r<> member_token::try_set_root_key(token_root_key const &k) {
         TRY(tag().select_application(desfire::root_app))
         // Can I enter with the current root key?
-        // TODO suppress log
+        desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
         if (tag().authenticate(_root_key)) {
+            suppress.restore();
             TRY(tag().change_key(k))
         }
+        suppress.restore();
         // Can I enter with the key that was supplied?
         TRY(tag().authenticate(k))
         _root_key = k;

@@ -1,5 +1,6 @@
 #include "pinout.hpp"
 #include <desfire/esp32/cipher_provider.hpp>
+#include <desfire/esp32/utils.hpp>
 #include <desfire/tag.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/key_pair.hpp>
@@ -68,6 +69,8 @@ namespace ut {
         constexpr auto test_publisher = "Mittelab";
 
         constexpr auto the_one_key = one_key_to_bind_them{};
+
+        using namespace ::desfire::esp32;
     }// namespace
 
     template <class Result>
@@ -78,27 +81,6 @@ namespace ut {
 
     template <bool B, class Result>
     [[nodiscard]] bool ok_and(Result const &res);
-
-    struct suppress_log {
-        const char *const tag;
-        esp_log_level_t const previous_log_level;
-
-        explicit suppress_log(const char *tag_) : tag{tag_}, previous_log_level{esp_log_level_get(tag)} {
-            suppress();
-        }
-
-        void suppress() {
-            esp_log_level_set(tag, ESP_LOG_NONE);
-        }
-
-        void restore() {
-            esp_log_level_set(tag, previous_log_level);
-        }
-
-        ~suppress_log() {
-            restore();
-        }
-    };
 
     struct {
         std::unique_ptr<pn532::esp32::hsu_channel> channel;
@@ -150,7 +132,7 @@ namespace ut {
         ESP_LOGI("TEST", "Attempt to recover the root key.");
         TEST_ASSERT(instance.tag->select_application());
         for (auto const &key : keys_to_test) {
-            auto suppress = suppress_log{DESFIRE_TAG};
+            auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
             if (instance.tag->authenticate(key)) {
                 suppress.restore();
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
@@ -182,7 +164,7 @@ namespace ut {
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
-        auto suppress = suppress_log{DESFIRE_TAG};
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
         TEST_ASSERT_FALSE(instance.tag->get_card_uid());
         suppress.restore();
         TEST_ASSERT(instance.tag->select_application());
@@ -219,7 +201,7 @@ namespace ut {
 
         member_token token{*instance.tag};
 
-        auto suppress = suppress_log{DESFIRE_TAG};
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
         TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
@@ -260,9 +242,8 @@ namespace ut {
         suppress.suppress();
         // Should not work outside the app
         TEST_ASSERT(desfire::fs::logout_app(token.tag()));
-        auto suppress_ka = suppress_log{"KA"};
+        suppress = suppress_log{DESFIRE_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
-        suppress_ka.restore();
         suppress.restore();
 
         // Should be repeatable if not deleted
@@ -273,10 +254,8 @@ namespace ut {
         TEST_ASSERT(t.clear(token.tag(), fid));
 
         suppress.suppress();
-        suppress_ka.suppress();
         TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
         TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
-        suppress_ka.restore();
         suppress.restore();
 
         TEST_ASSERT(ok_and<false>(desfire::fs::does_file_exist(token.tag(), fid)));
