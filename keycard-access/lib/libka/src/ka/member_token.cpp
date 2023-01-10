@@ -10,6 +10,17 @@
 #include <sodium/randombytes.h>
 
 namespace ka {
+
+    namespace {
+        r<> assert_key_number(ticket const &t, std::uint8_t keyno, const char *ticket_name) {
+            if (t.key().key_number() != keyno) {
+                ESP_LOGE("KA", "Invalid %s ticket, key number is %d, should be %d.", ticket_name, t.key().key_number(), keyno);
+                return desfire::error::no_such_key;
+            }
+            return mlab::result_success;
+        }
+    }
+
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
 
     r<token_id> member_token::id() const {
@@ -65,17 +76,29 @@ namespace ka {
     }
 
     r<gate_status> member_token::get_gate_status(gate_id gid) const {
-        TRY(unlock_root())
-        const auto aid = gate::id_to_app_id(gid);
-        TRY_RESULT(desfire::fs::does_app_exist(tag(), aid)) {
-            if (not *r) {
+        // Attempt at selecting the gate app
+        desfire::esp32::suppress_log suppress{DESFIRE_DEFAULT_LOG_PREFIX};
+        if (const auto r_sel_app = tag().select_application(gate::id_to_app_id(gid)); not r_sel_app) {
+            if (r_sel_app.error() == desfire::error::app_not_found) {
                 return gate_status::unknown;
             }
+            DESFIRE_FAIL_CMD("select_application", r_sel_app)
         }
-        TRY(tag().select_application(aid))
-        TRY_RESULT(desfire::fs::which_files_exist(tag(), {gate_enroll_file, gate_authentication_file})) {
+        // Attempt at listing the files
+        if (const auto r_files = desfire::fs::which_files_exist(tag(), {gate_enroll_file, gate_authentication_file}); not r_files) {
+            switch (r_files.error()) {
+                case desfire::error::authentication_error:
+                    [[fallthrough]];
+                case desfire::error::permission_denied:
+                    return gate_status::broken;
+                    break;
+                default:
+                    DESFIRE_FAIL_CMD("desfire::fs::which_files_exist", r_files)
+                    break;
+            }
+        } else {
             gate_status retval = gate_status::unknown;
-            for (desfire::file_id fid : *r) {
+            for (desfire::file_id fid : *r_files) {
                 switch (fid) {
                     case gate_enroll_file:
                         retval = retval | gate_status::enrolled;
@@ -93,24 +116,6 @@ namespace ka {
     }
 
 
-    r<> member_token::install_ticket(desfire::app_id aid, desfire::file_id fid, app_master_key const &mkey, ticket const &t) {
-        // Do not allow any change, only create/delete file with authentication.
-        // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
-        const desfire::key_rights key_rights{desfire::same_key, false, true, false, false};
-        // Retrieve the holder data that we will write in the enroll file
-        TRY_RESULT(get_identity()) {
-            TRY(unlock_root())
-            // Create an app, allow one extra key_type
-            TRY(desfire::fs::delete_app_if_exists(tag(), aid))
-            TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights, 1))
-            // Install the ticket
-            TRY(t.install(tag(), fid, r->concat()))
-            // Make sure you're back on the gate master key_type
-            TRY(tag().authenticate(mkey.with_key_number(0)))
-        }
-        return mlab::result_success;
-    }
-
     r<identity, bool> member_token::verify_ticket(desfire::app_id aid, desfire::file_id fid, ticket const &t) const {
         TRY_RESULT(get_identity()) {
             TRY(desfire::fs::login_app(tag(), aid, t.key()))
@@ -118,31 +123,56 @@ namespace ka {
         }
     }
 
-    r<ticket> member_token::install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey) {
-        const ticket t = ticket::generate();
-        TRY(install_ticket(gate::id_to_app_id(gid), gate_enroll_file, gkey, t))
+    r<ticket> member_token::install_enroll_ticket(gate_id gid) {
+        const ticket t = ticket::generate(0);
+        const auto aid = gate::id_to_app_id(gid);
+        // Do not allow any change, only create/delete file with authentication.
+        // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
+        const desfire::key_rights key_rights{desfire::same_key, true, true, false, false};
+        // Retrieve the holder data that we will write in the enroll file
+        TRY_RESULT(get_identity()) {
+            TRY(unlock_root())
+            // Create an app, allow one extra key_type
+            TRY(desfire::fs::delete_app_if_exists(tag(), aid))
+            TRY(desfire::fs::create_app(tag(), aid, t.key(), key_rights, 1))
+            // Install the ticket
+            TRY(t.install(tag(), gate_enroll_file, r->concat()))
+        }
         return t;
     }
 
-    r<bool> member_token::verify_enroll_ticket(gate_id gid, ticket const &t) const {
-        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_enroll_file, t)) {
+    r<bool> member_token::verify_enroll_ticket(gate_id gid, ticket const &enroll_ticket) const {
+        TRY(assert_key_number(enroll_ticket, 0, "enroll"))
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_enroll_file, enroll_ticket)) {
             return r->second;
         }
     }
 
-    r<> member_token::install_auth_ticket(gate_id gid, gate_app_master_key const &gkey, ticket const &t) {
-        return install_ticket(gate::id_to_app_id(gid), gate_authentication_file, gkey, t);
+    r<> member_token::switch_enroll_to_auth_ticket(gate_id gid, ticket const &verified_enroll_ticket, ticket const &auth_ticket) {
+        TRY(assert_key_number(verified_enroll_ticket, 0, "enroll"))
+        TRY(assert_key_number(auth_ticket, 0, "auth"))
+        TRY_RESULT(get_identity()) {
+            const auto aid = gate::id_to_app_id(gid);
+            const auto temp_master_key = key_type{0, desfire::random_oracle{randombytes_buf}};
+            TRY(desfire::fs::login_app(tag(), aid, verified_enroll_ticket.key()))
+            TRY(verified_enroll_ticket.clear(tag(), gate_enroll_file, temp_master_key))
+            TRY(desfire::fs::login_app(tag(), aid, temp_master_key))
+            TRY(auth_ticket.install(tag(), gate_authentication_file, r->concat(), temp_master_key))
+            TRY(desfire::fs::logout_app(tag()))
+        }
+        return mlab::result_success;
     }
 
-    r<bool> member_token::verify_auth_ticket(gate_id gid, ticket const &t) const {
-        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, t)) {
+    r<bool> member_token::verify_auth_ticket(gate_id gid, ticket const &auth_ticket) const {
+        TRY(assert_key_number(auth_ticket, 0, "auth"))
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, auth_ticket)) {
             return r->second;
         }
     }
 
-    r<identity> member_token::authenticate(gate_id gid, ticket const &t) const {
-        // Fast-lane!
-        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, t)) {
+    r<identity> member_token::authenticate(gate_id gid, ticket const &auth_ticket) const {
+        TRY(assert_key_number(auth_ticket, 0, "auth"))
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, auth_ticket)) {
             if (r->second) {
                 return r->first;
             }

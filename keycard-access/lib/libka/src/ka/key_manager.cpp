@@ -24,7 +24,7 @@ namespace ka {
         return token_root_key{0, derived_key_data};
     }
 
-    gate_app_master_key one_key_to_bind_them::derive_gate_app_master_key(token_id const &id, gate_id gid) const {
+    gate_app_shared_key one_key_to_bind_them::derive_gate_app_master_key(token_id const &id, gate_id gid) const {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
         const std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> gate_key_context{
                 'g', 'a', 't', 'e',
@@ -40,7 +40,7 @@ namespace ka {
                          raw().data())) {
             ESP_LOGE("KA", "Unable to derive gate key.");
         }
-        return gate_app_master_key{0, derived_key_data};
+        return gate_app_shared_key{0, derived_key_data};
     }
 
     one_key_to_bind_them::one_key_to_bind_them(const std::string &password) : one_key_to_bind_them{} {

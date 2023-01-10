@@ -31,7 +31,7 @@ namespace ka {
         /**
          * @brief Generates an ticket with random @ref key_type and @ref salt.
          */
-        [[nodiscard]] static ticket generate(std::uint8_t key_no = 1);
+        [[nodiscard]] static ticket generate(std::uint8_t key_no);
 
         [[nodiscard]] inline key_type const &key() const;
         [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
@@ -47,7 +47,7 @@ namespace ka {
          * @param original_text
          * @return
          */
-        r<> install(desfire::tag &tag, desfire::file_id fid, std::string const &original_text) const;
+        r<> install(desfire::tag &tag, desfire::file_id fid, std::string const &original_text, key_type const &previous_key = key_type{}) const;
 
         /**
          * @note The caller is responsible for selecting the appropriate app.
@@ -69,7 +69,7 @@ namespace ka {
          * @param t
          * @return
          */
-        r<> clear(desfire::tag &tag, desfire::file_id fid) const;
+        r<> clear(desfire::tag &tag, desfire::file_id fid, key_type const &previous_key = key_type{}) const;
 
         r<> check_app_for_prerequisites(desfire::tag &tag) const;
     };

@@ -48,14 +48,16 @@ namespace ka {
         return {std::move(data), settings};
     }
 
-    r<> ticket::install(desfire::tag &tag, desfire::file_id fid, std::string const &original_text) const {
+    r<> ticket::install(desfire::tag &tag, desfire::file_id fid, std::string const &original_text, key_type const &previous_key) const {
         TRY(check_app_for_prerequisites(tag))
         // Create the ticket file first, so that is compatible also with apps that do not allow creating without auth
         TRY(desfire::fs::delete_file_if_exists(tag, fid))
         const auto [content, settings] = get_file(original_text);
         TRY(tag.create_file(fid, settings))
         // Authenticate with the default key_type and change it to the specific file key_type
-        TRY(tag.authenticate(key_type{key().key_number(), {}}))
+        if (tag.active_key_no() != key().key_number()) {
+            TRY(tag.authenticate(previous_key.with_key_number(key().key_number())))
+        }
         TRY(tag.change_key(key()))
         TRY(tag.authenticate(key()))
         // Now write the content as the new key
@@ -75,22 +77,19 @@ namespace ka {
     }
 
 
-    r<> ticket::clear(desfire::tag &tag, desfire::file_id fid) const {
+    r<> ticket::clear(desfire::tag &tag, desfire::file_id fid, key_type const &previous_key) const {
         TRY(check_app_for_prerequisites(tag))
         TRY(tag.delete_file(fid))
         // Make sure the key is reset to default
-        TRY(tag.authenticate(key()))
-        TRY(tag.change_key(key_type{key().key_number(), {}}))
+        if (tag.active_key_no() != key().key_number()) {
+            TRY(tag.authenticate(key()))
+        }
+        TRY(tag.change_key(previous_key.with_key_number(key().key_number())))
         TRY(desfire::fs::logout_app(tag))
         return mlab::result_success;
     }
 
-
     r<> ticket::check_app_for_prerequisites(desfire::tag &tag) const {
-        if (tag.active_key_no() != 0) {
-            ESP_LOGE("KA", "The app is not unlocked with the master key.");
-            return desfire::error::permission_denied;
-        }
         // Assert that the app settings allows keys to change themselves, otherwise security is broken
         TRY_RESULT(tag.get_app_settings()) {
             if (r->rights.allowed_to_change_keys != desfire::same_key) {

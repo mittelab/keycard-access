@@ -132,7 +132,7 @@ namespace ut {
         ESP_LOGI("TEST", "Attempt to recover the root key.");
         TEST_ASSERT(instance.tag->select_application());
         for (auto const &key : keys_to_test) {
-            auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
+            auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
             if (instance.tag->authenticate(key)) {
                 suppress.restore();
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
@@ -164,7 +164,7 @@ namespace ut {
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
         TEST_ASSERT_FALSE(instance.tag->get_card_uid());
         suppress.restore();
         TEST_ASSERT(instance.tag->select_application());
@@ -202,7 +202,7 @@ namespace ut {
         member_token token{*instance.tag};
         constexpr gate_id gid = 0x00;
 
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
         TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
@@ -211,9 +211,7 @@ namespace ut {
         TEST_ASSERT(r_status);
         TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
 
-        auto gkey = the_one_key.derive_gate_app_master_key(instance.nfc_id, gid);
-        const auto r_enroll_ticket = token.install_enroll_ticket(gid, gkey);
-
+        const auto r_enroll_ticket = token.install_enroll_ticket(gid);
         TEST_ASSERT(r_enroll_ticket);
 
         r_status = token.get_gate_status(gid);
@@ -221,9 +219,15 @@ namespace ut {
         TEST_ASSERT_EQUAL(*r_status, gate_status::enrolled);
         TEST_ASSERT(ok_and<true>(token.verify_enroll_ticket(gid, *r_enroll_ticket)));
 
-        const auto auth_ticket = ticket::generate();
+        const auto auth_ticket = ticket::generate(0);
 
-        TEST_ASSERT(token.install_auth_ticket(gid, gkey, auth_ticket));
+        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
+        TEST_ASSERT_FALSE(token.verify_auth_ticket(gid, auth_ticket));
+        suppress.restore();
+        TEST_ASSERT(token.switch_enroll_to_auth_ticket(gid, *r_enroll_ticket, auth_ticket));
+        suppress.suppress();
+        TEST_ASSERT_FALSE(token.verify_enroll_ticket(gid, *r_enroll_ticket));
+        suppress.restore();
 
         r_status = token.get_gate_status(gid);
         TEST_ASSERT(r_status);
@@ -240,7 +244,7 @@ namespace ut {
         TEST_ASSERT(r_status);
         TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
 
-        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
+        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(token.authenticate(gid, auth_ticket));
     }
 
@@ -252,7 +256,7 @@ namespace ut {
 
         member_token token{*instance.tag};
 
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
         TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
@@ -294,7 +298,7 @@ namespace ut {
         // Should not work outside the app
         TEST_ASSERT(token.unlock_root());
         suppress.restore();
-        suppress = suppress_log{DESFIRE_LOG_PREFIX, "KA"};
+        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
         suppress.restore();
 
