@@ -35,32 +35,28 @@ namespace ka {
         return mlab::result_success;
     }
 
-    r<> member_token::setup_root(one_key_to_bind_them const &onekey) {
+    r<> member_token::setup_root(token_root_key const &tkey) {
         TRY(unlock())
-        // Try retrieveing the id
-        TRY_RESULT_AS(id(), r_id) {
-            // Use the id to compute the key_type
-            TRY_RESULT(try_set_root_key(onekey.derive_token_root_key(*r_id))) {
-                // Now verify that we have desired settings
-                TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
-                    // If we got so far, we have at least a changeable master key. For MAD setup,
-                    // we want dir_access_without_auth!
-                    if (not r_settings->rights.dir_access_without_auth) {
-                        if (not r_settings->rights.config_changeable) {
-                            ESP_LOGW("KA", "This key has no acces w/o auth and frozen config, so I cannot setup the MAD according to spec.");
-                            return desfire::error::picc_integrity_error;
-                        }
-                        // Change the config allowing dir access without path, and possibly no create/delete w/o auth
-                        desfire::key_rights new_rights = r_settings->rights;
-                        new_rights.create_delete_without_master_key = false;
-                        new_rights.dir_access_without_auth = true;
-                        TRY(tag().change_app_settings(new_rights))
-                    } else if (r_settings->rights.create_delete_without_master_key and r_settings->rights.config_changeable) {
-                        // Better not have the create/delete w/o auth
-                        desfire::key_rights new_rights = r_settings->rights;
-                        new_rights.create_delete_without_master_key = false;
-                        TRY(tag().change_app_settings(new_rights))
+        TRY_RESULT(try_set_root_key(tkey)) {
+            // Now verify that we have desired settings
+            TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
+                // If we got so far, we have at least a changeable master key. For MAD setup,
+                // we want dir_access_without_auth!
+                if (not r_settings->rights.dir_access_without_auth) {
+                    if (not r_settings->rights.config_changeable) {
+                        ESP_LOGW("KA", "This key has no acces w/o auth and frozen config, so I cannot setup the MAD according to spec.");
+                        return desfire::error::picc_integrity_error;
                     }
+                    // Change the config allowing dir access without path, and possibly no create/delete w/o auth
+                    desfire::key_rights new_rights = r_settings->rights;
+                    new_rights.create_delete_without_master_key = false;
+                    new_rights.dir_access_without_auth = true;
+                    TRY(tag().change_app_settings(new_rights))
+                } else if (r_settings->rights.create_delete_without_master_key and r_settings->rights.config_changeable) {
+                    // Better not have the create/delete w/o auth
+                    desfire::key_rights new_rights = r_settings->rights;
+                    new_rights.create_delete_without_master_key = false;
+                    TRY(tag().change_app_settings(new_rights))
                 }
             }
         }
@@ -94,66 +90,60 @@ namespace ka {
         }
     }
 
-    r<> member_token::write_auth_file(gate_id gid, key_type const &auth_file_key, std::string const &identity) {
-        TRY(tag().select_application(gate::id_to_app_id(gid)))
-        // Assume the key slot is free, thus default key
-        TRY(tag().authenticate(key_type{auth_file_key.key_number(), {}}))
-        TRY(tag().change_key(auth_file_key))
-        TRY(desfire::fs::delete_file_if_exists(tag(), gate_authentication_file))
-        const std_file_settings auth_file_settings{
-                desfire::generic_file_settings{
-                        desfire::file_security::encrypted,
-                        desfire::access_rights{auth_file_key.key_number()}},
-                desfire::data_file_settings{identity.size()}};
-        TRY(tag().create_file(gate_authentication_file, auth_file_settings))
-        TRY(tag().write_data(gate_authentication_file, mlab::data_from_string(identity), desfire::cipher_mode::ciphered, 0))
-        return mlab::result_success;
-    }
 
-
-    r<bool> member_token::authenticate(gate_id gid, key_type const &auth_file_key, std::string const &identity) const {
-        TRY_RESULT(get_gate_status(gid)) {
-            if (*r != gate_status::auth_ready) {
-                return false;
-            }
-        }
-        TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), auth_file_key))
-        TRY_RESULT(tag().read_data(gate_authentication_file, desfire::cipher_mode::ciphered, 0, identity.size())) {
-            if (identity.size() != r->size()) {
-                return false;
-            }
-            const auto identity_data_range = mlab::make_range(
-                    reinterpret_cast<std::uint8_t const *>(identity.c_str()),
-                    reinterpret_cast<std::uint8_t const *>(identity.c_str() + identity.size())
-            );
-            return std::equal(std::begin(identity_data_range), std::end(identity_data_range), std::begin(*r));
-        }
-    }
-
-    r<ticket> member_token::install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey) {
-        const desfire::app_id aid = gate::id_to_app_id(gid);
+    r<> member_token::install_ticket(desfire::app_id aid, desfire::file_id fid, app_master_key const &mkey, ticket const &t) {
         // Do not allow any change, only create/delete file with authentication.
         // Important: we allow to change only the same key_type, otherwise the master can change access to the enrollment file
         const desfire::key_rights key_rights{desfire::same_key, false, true, false, false};
         // Retrieve the holder data that we will write in the enroll file
         TRY_RESULT(get_identity()) {
-            // Generate ticket and enroll file content
-            const ticket ticket = ticket::generate();
             // Create an app, allow one extra key_type
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
-            TRY(desfire::fs::create_app(tag(), aid, gkey, key_rights, 1))
+            TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights, 1))
             // Install the ticket
-            TRY(ticket.install(tag(), gate_enroll_file, r->concat()))
+            TRY(t.install(tag(), fid, r->concat()))
             // Make sure you're back on the gate master key_type
-            TRY(tag().authenticate(gkey.with_key_number(0)))
-            return ticket;
+            TRY(tag().authenticate(mkey.with_key_number(0)))
+        }
+        return mlab::result_success;
+    }
+
+    r<identity, bool> member_token::verify_ticket(desfire::app_id aid, desfire::file_id fid, ticket const &t) const {
+        TRY_RESULT(get_identity()) {
+            TRY(desfire::fs::login_app(tag(), aid, t.key()))
+            return std::pair<identity, bool>{std::move(*r), t.verify(tag(), fid, r->concat())};
         }
     }
 
-    r<bool> member_token::verify_enroll_ticket(gate_id gid, ticket const &ticket) const {
-        TRY_RESULT(get_identity()) {
-            TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), ticket.key()))
-            return ticket.verify(tag(), gate_enroll_file, r->concat());
+    r<ticket> member_token::install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey) {
+        const ticket t = ticket::generate();
+        TRY(install_ticket(gate::id_to_app_id(gid), gate_enroll_file, gkey, t))
+        return t;
+    }
+
+    r<bool> member_token::verify_enroll_ticket(gate_id gid, ticket const &t) const {
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_enroll_file, t)) {
+            return r->second;
+        }
+    }
+
+    r<> member_token::install_auth_ticket(gate_id gid, gate_app_master_key const &gkey, ticket const &t) {
+        return install_ticket(gate::id_to_app_id(gid), gate_authentication_file, gkey, t);
+    }
+
+    r<bool> member_token::verify_auth_ticket(gate_id gid, ticket const &t) const {
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, t)) {
+            return r->second;
+        }
+    }
+
+    r<identity> member_token::authenticate(gate_id gid, ticket const &t) const {
+        // Fast-lane!
+        TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, t)) {
+            if (r->second) {
+                return r->first;
+            }
+            return desfire::error::authentication_error;
         }
     }
 

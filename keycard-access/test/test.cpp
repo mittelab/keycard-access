@@ -159,7 +159,7 @@ namespace ut {
         }
 
         member_token token{*instance.tag};
-        TEST_ASSERT(token.setup_root(the_one_key));
+        TEST_ASSERT(token.setup_root(the_one_key.derive_token_root_key(instance.nfc_id)));
         TEST_ASSERT(token.setup_mad({ut::test_holder, ut::test_publisher}));
 
         // Mad must be readable without auth

@@ -23,6 +23,8 @@ namespace ka {
         mutable desfire::tag *_tag;
         desfire::any_key _root_key;
 
+        r<> install_ticket(desfire::app_id aid, desfire::file_id fid, app_master_key const &mkey, ticket const &t);
+        [[nodiscard]] r<identity, bool> verify_ticket(desfire::app_id aid, desfire::file_id fid, ticket const &t) const;
     public:
         /**
          * @brief Application directory app id as required by AN10787 §3.10.
@@ -57,7 +59,7 @@ namespace ka {
          * @addtogroup Provisioning
          * @{
          */
-        r<> setup_root(one_key_to_bind_them const &onekey);
+        r<> setup_root(token_root_key const &rkey);
         r<> setup_mad(identity const &id);
         /**
          * @}
@@ -67,26 +69,60 @@ namespace ka {
          * @addtogroup Enrollment
          * @{
          */
+
         /**
-          * Creates a new app for this gate, controlled by the master key_type @p gate_key.
-          * This app contains one file, at @ref gate_enroll_file, which is encrypted
-          * with the returned key_type (randomly generated).
-          * This file contains the hash of the current card holder @ref get_holder,
-          * with a unique (randomly generated) salt, for increased security.
-          * At this point, without the returned @ref ticket, cloning or forging
-          * the card requires to break the card crypto.
-          * @note Using a randomized key_type with a known file content would be enough to
-          * prevent cloning or forging, but in this way we can verify that the card
-          * has not been reassigned. By hashing we keep the file size under control, and
-          * by adding a salt we strengthen the amount of random bits that need to be guessed.
-          */
-        r<ticket> install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey);
-        r<bool> verify_enroll_ticket(gate_id gid, ticket const &ticket) const;
+         * To be run by the programmer. Creates a new app for the gate and installs a ticket on @ref gate_enroll_file,
+         * which certifies for the current @ref identity. The ticket is then returned and should be transmitted securely
+         * to the gate, which can then use it to certify the authenticity of the card and the identity of the holder.
+         * @note This method will wipe the gate app.
+         * @param gid
+         * @param gkey
+         * @return
+         */
+        [[nodiscard]] r<ticket> install_enroll_ticket(gate_id gid, gate_app_master_key const &gkey);
 
+        /**
+         * To be run by the programmer. Verifies the ticket @p t, which should be the output of  @ref install_enroll_ticket,
+         * and certifies the authenticity of the card and the identity of the holder.
+         * @param gid
+         * @param ticket
+         * @return
+         */
+        [[nodiscard]] r<bool> verify_enroll_ticket(gate_id gid, ticket const &t) const;
 
-        r<> write_auth_file(gate_id gid, key_type const &auth_file_key, std::string const &identity);
-        r<bool> authenticate(gate_id gid, key_type const &auth_file_key, std::string const &identity) const;
-        r<gate_status> get_gate_status(gate_id gid) const;
+        /**
+         * To be run by the gate. Creates a new app for the gate and installs @p t on @ref gate_authentication_file,
+         * which certifies for the current @ref identity. This is an enrollment operation which is intended to follow
+         * a successful call to @ref verify_enroll_ticket: after asserting the identity and authenticity, a gate will
+         * install its own file for future authentication.
+         * @note This method will wipe the gate app.
+         * @param gid
+         * @param gkey
+         * @param t
+         * @return
+         */
+        r<> install_auth_ticket(gate_id gid, gate_app_master_key const &gkey, ticket const &t);
+
+        /**
+         * To be run by the gate. Verifies the ticket @p t, which was previously installed via @ref install_auth_ticket,
+         * and certifies the authenticity of the card and the identity of the holder.
+         * @param gid
+         * @param t
+         * @return
+         */
+        [[nodiscard]] r<bool> verify_auth_ticket(gate_id gid, ticket const &t) const;
+
+        /**
+         * @brief Fast-lane authentication method.
+         * This method is analoguous to @ref verify_auth_ticket but will return the identity that was certified.
+         * If the identity cannot be certified, @ref desfire::error::authentication_error will be returned.
+         * @param gid
+         * @param t
+         * @return
+         */
+        [[nodiscard]] r<identity> authenticate(gate_id gid, ticket const &t) const;
+
+        [[nodiscard]] r<gate_status> get_gate_status(gate_id gid) const;
         /**
           * @}
           */
