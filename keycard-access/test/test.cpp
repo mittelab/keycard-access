@@ -1,7 +1,7 @@
 #include "pinout.hpp"
 #include <desfire/esp32/cipher_provider.hpp>
-#include <desfire/fs.hpp>
 #include <desfire/tag.hpp>
+#include <ka/desfire_fs.hpp>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
 #include <ka/ticket.hpp>

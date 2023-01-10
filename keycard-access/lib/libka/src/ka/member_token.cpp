@@ -2,13 +2,10 @@
 // Created by spak on 9/29/22.
 //
 
+#include <desfire/kdf.hpp>
+#include <ka/desfire_fs.hpp>
 #include <ka/member_token.hpp>
 #include <ka/ticket.hpp>
-
-// Override the log prefix
-#define DESFIRE_FS_LOG_PREFIX "KA"
-#include <desfire/kdf.hpp>
-#include <desfire/fs.hpp>
 #include <sodium/randombytes.h>
 
 namespace ka {

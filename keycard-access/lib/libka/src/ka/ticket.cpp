@@ -5,7 +5,7 @@
 #include <ka/ticket.hpp>
 #include <sodium/crypto_hash_sha512.h>
 #include <sodium/randombytes.h>
-#include <desfire/fs.hpp>
+#include <ka/desfire_fs.hpp>
 
 namespace ka {
 
