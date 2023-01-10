@@ -44,7 +44,7 @@ namespace ka {
         member_token &operator=(member_token &&) = default;
 
         [[nodiscard]] r<> try_set_root_key(token_root_key const &k);
-        [[nodiscard]] r<> unlock();
+        [[nodiscard]] r<> unlock_root() const;
 
         [[nodiscard]] inline desfire::tag &tag() const;
 

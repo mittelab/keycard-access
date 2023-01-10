@@ -205,7 +205,7 @@ namespace ut {
         TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
-        TEST_ASSERT(token.unlock());
+        TEST_ASSERT(token.unlock_root());
 
         const auto aid = desfire::app_id{0x11, 0x12, 0x13};
         const auto fid = desfire::file_id{0x00};
@@ -241,7 +241,8 @@ namespace ut {
 
         suppress.suppress();
         // Should not work outside the app
-        TEST_ASSERT(desfire::fs::logout_app(token.tag()));
+        TEST_ASSERT(token.unlock_root());
+        suppress.restore();
         suppress = suppress_log{DESFIRE_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
         suppress.restore();
@@ -261,7 +262,7 @@ namespace ut {
         TEST_ASSERT(ok_and<false>(desfire::fs::does_file_exist(token.tag(), fid)));
 
         // Ok delete app
-        TEST_ASSERT(token.unlock());
+        TEST_ASSERT(token.unlock_root());
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
     }
 }// namespace ut

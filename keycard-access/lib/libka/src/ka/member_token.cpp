@@ -13,10 +13,11 @@ namespace ka {
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
 
     r<token_id> member_token::id() const {
+        TRY(unlock_root())
         return tag().get_card_uid();
     }
 
-    r<> member_token::unlock() {
+    r<> member_token::unlock_root() const {
         return desfire::fs::login_app(tag(), desfire::root_app, _root_key);
     }
 
@@ -36,7 +37,7 @@ namespace ka {
     }
 
     r<> member_token::setup_root(token_root_key const &tkey) {
-        TRY(unlock())
+        TRY(unlock_root())
         TRY_RESULT(try_set_root_key(tkey)) {
             // Now verify that we have desired settings
             TRY_RESULT_AS(tag().get_app_settings(), r_settings) {
@@ -64,6 +65,7 @@ namespace ka {
     }
 
     r<gate_status> member_token::get_gate_status(gate_id gid) const {
+        TRY(unlock_root())
         const auto aid = gate::id_to_app_id(gid);
         TRY_RESULT(desfire::fs::does_app_exist(tag(), aid)) {
             if (not *r) {
@@ -97,6 +99,7 @@ namespace ka {
         const desfire::key_rights key_rights{desfire::same_key, false, true, false, false};
         // Retrieve the holder data that we will write in the enroll file
         TRY_RESULT(get_identity()) {
+            TRY(unlock_root())
             // Create an app, allow one extra key_type
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
             TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights, 1))
@@ -151,6 +154,7 @@ namespace ka {
         // Copy the strings into a bin_data
         const auto bin_holder = mlab::data_from_string(id.holder);
         const auto bin_publisher = mlab::data_from_string(id.publisher);
+        TRY(unlock_root())
         // Attempt to delete the existing app
         TRY(desfire::fs::delete_app_if_exists(tag(), mad_aid))
         // Prepare an app with a random key_type
@@ -201,7 +205,7 @@ namespace ka {
 
 
     r<std::vector<gate_id>> member_token::get_enrolled_gates() const {
-        TRY(tag().select_application(desfire::root_app))
+        TRY(unlock_root())
         TRY_RESULT(tag().get_application_ids()) {
             // Filter those in range
             std::vector<gate_id> gates;
