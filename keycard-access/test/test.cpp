@@ -237,6 +237,13 @@ namespace ut {
 
         TEST_ASSERT(token.authenticate(gid, auth_ticket));
 
+        // Check that it can be authenticated also with a member token with an unknown password
+        {
+            member_token token_no_root{*instance.tag};
+            TEST_ASSERT(token_no_root.tag().select_application());
+            TEST_ASSERT(token_no_root.authenticate(gid, auth_ticket));
+        }
+
         TEST_ASSERT(token.unlock_root());
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), gate::id_to_app_id(gid)));
 
