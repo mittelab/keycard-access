@@ -21,6 +21,20 @@ namespace ka {
     template <class... Tn>
     using r = desfire::tag::result<Tn...>;
 
+    struct derived_key {};
+
+    struct app_master_key : public key_type {
+        using key_type::key_type;
+    };
+
+    struct gate_app_master_key : public app_master_key, public derived_key {
+        using app_master_key::app_master_key;
+    };
+
+    struct token_root_key : public key_type, public derived_key {
+        using key_type::key_type;
+    };
+
     namespace util {
         [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
         /**

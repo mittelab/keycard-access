@@ -9,24 +9,6 @@
 
 namespace ka {
 
-    struct derived_key {};
-
-    struct app_master_key : public key_type {
-        using key_type::key_type;
-    };
-
-    struct gate_app_shared_key : public app_master_key, public derived_key {
-        using app_master_key::app_master_key;
-    };
-
-    struct gate_app_private_key : public app_master_key, public derived_key {
-        using app_master_key::app_master_key;
-    };
-
-    struct token_root_key : public key_type, public derived_key {
-        using key_type::key_type;
-    };
-
     class one_key_to_bind_them {
     public:
         static constexpr std::size_t size = 32;
@@ -47,7 +29,7 @@ namespace ka {
          * @return A key_type which gives root access to the card.
          */
         [[nodiscard]] token_root_key derive_token_root_key(token_id const &id) const;
-        [[nodiscard]] gate_app_shared_key derive_gate_app_master_key(token_id const &id, gate_id gid) const;
+        [[nodiscard]] gate_app_master_key derive_gate_app_master_key(token_id const &id, gate_id gid) const;
     private:
         std::array<std::uint8_t, size> _raw = {};
     };
