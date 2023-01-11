@@ -46,6 +46,15 @@ namespace ka {
 
         [[nodiscard]] raw_sec_key const &raw_sk() const;
 
+        /**
+         * @brief A differentiated root key to be used as the root key of a token.
+         * The user is free to know this and to tamper with the token, in the worst case it will delete the application.
+         * @param token_id Id of the token
+         * @return A key_type which gives root access to the card.
+         */
+        [[nodiscard]] token_root_key derive_token_root_key(token_id const &id) const;
+
+        [[nodiscard]] gate_app_master_key derive_gate_app_master_key(token_id const &id, gate_id gid) const;
     protected:
         raw_sec_key _sk{};
     };

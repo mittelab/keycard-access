@@ -8,11 +8,15 @@
 #include <sodium/crypto_scalarmult_curve25519.h>
 #include <sodium/randombytes.h>
 #include <sodium/crypto_box.h>
+#include <sodium/crypto_kdf_blake2b.h>
 
 namespace ka {
-
+    namespace {
+        constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};
+    }
     static_assert(raw_pub_key::key_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::key_size == crypto_box_SECRETKEYBYTES);
+    static_assert(raw_sec_key::key_size == crypto_kdf_blake2b_KEYBYTES);
 
     pub_key::pub_key(raw_pub_key pub_key_raw) : _pk{pub_key_raw} {
     }
@@ -42,6 +46,37 @@ namespace ka {
 
     raw_sec_key const &sec_key::raw_sk() const {
         return _sk;
+    }
+
+    token_root_key sec_key::derive_token_root_key(token_id const &id) const {
+        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        if (0 != crypto_kdf_blake2b_derive_from_key(
+                         derived_key_data.data(), derived_key_data.size(),
+                         pack_token_id(id),
+                         root_key_context.data(),
+                         raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to derive root key.");
+        }
+        return token_root_key{0, derived_key_data};
+    }
+
+    gate_app_master_key sec_key::derive_gate_app_master_key(token_id const &id, gate_id gid) const {
+        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        const std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> gate_key_context{
+                'g', 'a', 't', 'e',
+                char(gid & 0xff),
+                char((gid >> 8) & 0xff),
+                char((gid >> 16) & 0xff),
+                char((gid >> 24) & 0xff)};
+
+        if (0 != crypto_kdf_blake2b_derive_from_key(
+                         derived_key_data.data(), derived_key_data.size(),
+                         pack_token_id(id),
+                         gate_key_context.data(),
+                         raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to derive gate key.");
+        }
+        return gate_app_master_key{0, derived_key_data};
     }
 
     key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {
