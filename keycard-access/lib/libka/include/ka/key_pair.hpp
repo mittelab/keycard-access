@@ -59,11 +59,15 @@ namespace ka {
         raw_sec_key _sk{};
     };
 
+    struct randomize_t {};
+    static constexpr randomize_t randomize{};
+
     class key_pair : public sec_key, public pub_key {
         void overwrite_pub_key();
 
     public:
         key_pair() = default;
+        explicit key_pair(randomize_t);
         explicit key_pair(sec_key sk);
         explicit key_pair(raw_sec_key sec_key_raw);
         explicit key_pair(mlab::range<std::uint8_t const *> sec_key_raw);
@@ -75,8 +79,8 @@ namespace ka {
 
         [[nodiscard]] bool is_valid() const;
 
-        void generate();
-        void generate_from_pwhash(std::string const &password);
+        void generate_random();
+        [[deprecated("Crashes: https://github.com/espressif/idf-extra-components/issues/125")]] void generate_from_pwhash(std::string const &password);
     };
 
 }// namespace ka

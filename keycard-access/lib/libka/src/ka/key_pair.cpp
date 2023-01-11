@@ -92,6 +92,10 @@ namespace ka {
         overwrite_pub_key();
     }
 
+    key_pair::key_pair(randomize_t) : key_pair{} {
+        generate_random();
+    }
+
     key_pair::key_pair(sec_key sk) : sec_key{sk}, pub_key{} {
         overwrite_pub_key();
     }
@@ -128,9 +132,9 @@ namespace ka {
         return false;
     }
 
-    void key_pair::generate() {
+    void key_pair::generate_random() {
         if (0 != crypto_box_keypair(_pk.data(), _sk.data())) {
-            ESP_LOGE("KA", "Unable to generate a new keypair.");
+            ESP_LOGE("KA", "Unable to generate_random a new keypair.");
             _pk = {};
             _sk = {};
         }

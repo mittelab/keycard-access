@@ -24,8 +24,8 @@ namespace ut {
         mlab::bin_data buffer = message;
 
         key_pair k1, k2;
-        k1.generate();
-        k2.generate();
+        k1.generate_random();
+        k2.generate_random();
 
         TEST_ASSERT(k1.is_valid());
         TEST_ASSERT(k2.is_valid());
@@ -41,7 +41,7 @@ namespace ut {
         key_pair k;
         TEST_ASSERT(not k.is_valid());
 
-        k.generate();
+        k.generate_random();
         TEST_ASSERT(k.is_valid());
 
         key_pair const k2{k.raw_sk()};
@@ -68,7 +68,10 @@ namespace ut {
         constexpr auto test_holder = "user";
         constexpr auto test_publisher = "Mittelab";
 
-        constexpr auto the_one_key = one_key_to_bind_them{};
+        [[nodiscard]] key_pair &test_key_pair() {
+            static key_pair _kp{randomize};
+            return _kp;
+        }
 
         using namespace ::desfire::esp32;
     }// namespace
@@ -120,7 +123,7 @@ namespace ut {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::array<desfire::any_key, 9> keys_to_test{
                 default_k,
-                the_one_key.derive_token_root_key(instance.nfc_id),
+                test_key_pair().derive_token_root_key(instance.nfc_id),
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},
@@ -159,7 +162,7 @@ namespace ut {
         }
 
         member_token token{*instance.tag};
-        TEST_ASSERT(token.setup_root(the_one_key.derive_token_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.setup_root(test_key_pair().derive_token_root_key(instance.nfc_id)));
         TEST_ASSERT(token.setup_mad({ut::test_holder, ut::test_publisher}));
 
         // Mad must be readable without auth
@@ -203,7 +206,7 @@ namespace ut {
         constexpr gate_id gid = 0x00;
 
         auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
         TEST_ASSERT(token.get_identity());
@@ -264,7 +267,7 @@ namespace ut {
         member_token token{*instance.tag};
 
         auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(the_one_key.derive_token_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(instance.nfc_id)));
         suppress.restore();
 
         TEST_ASSERT(token.unlock_root());
