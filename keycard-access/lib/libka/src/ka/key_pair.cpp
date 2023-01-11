@@ -7,13 +7,12 @@
 #include <ka/key_pair.hpp>
 #include <sodium/crypto_scalarmult_curve25519.h>
 #include <sodium/randombytes.h>
+#include <sodium/crypto_box.h>
 
 namespace ka {
 
-    namespace serialize {
-        static constexpr std::uint8_t pub_key_tag = 0x00;
-        static constexpr std::uint8_t sec_key_tag = 0x01;
-    }// namespace serialize
+    static_assert(raw_pub_key::key_size == crypto_box_PUBLICKEYBYTES);
+    static_assert(raw_sec_key::key_size == crypto_box_SECRETKEYBYTES);
 
     pub_key::pub_key(raw_pub_key pub_key_raw) : _pk{pub_key_raw} {
     }
@@ -101,16 +100,18 @@ namespace ka {
         // Use the same buffer for everything. Store the message length
         const auto message_length = message.size();
         // Accommodate nonce and mac code
-        message.resize(message.size() + crypto_box_curve25519xsalsa20poly1305_MACBYTES + crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
+        message.resize(message.size() + crypto_box_MACBYTES + crypto_box_NONCEBYTES);
         auto message_view = message.data_view(0, message_length);
-        auto ciphertext_view = message.data_view(0, message_length + crypto_box_curve25519xsalsa20poly1305_MACBYTES);
+        auto ciphertext_view = message.data_view(0, message_length + crypto_box_MACBYTES);
         auto nonce_view = message.data_view(ciphertext_view.size());
         // Generate nonce bytes
         randombytes_buf(nonce_view.data(), nonce_view.size());
         assert(nonce_view.size() == crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
         // Pipe into crypto_box_easy, overlap is allowed
-        if (0 != crypto_box_easy(ciphertext_view.data(), message_view.data(), message_view.size(), nonce_view.data(),
-                                 recipient.raw_pk().data(), raw_sk().data())) {
+        if (0 != crypto_box_easy(
+                         ciphertext_view.data(), message_view.data(),
+                         message_view.size(), nonce_view.data(),
+                         recipient.raw_pk().data(), raw_sk().data())) {
             ESP_LOGE("KA", "Unable to encrypt.");
             message.clear();
             return false;
@@ -119,17 +120,19 @@ namespace ka {
     }
 
     bool key_pair::decrypt_from(pub_key const &sender, mlab::bin_data &ciphertext) const {
-        if (ciphertext.size() < crypto_box_curve25519xsalsa20poly1305_MACBYTES + crypto_box_curve25519xsalsa20poly1305_NONCEBYTES) {
+        if (ciphertext.size() < crypto_box_MACBYTES + crypto_box_NONCEBYTES) {
             ESP_LOGE("KA", "Invalid ciphertext, too short.");
             return false;
         }
-        const auto message_length = ciphertext.size() - crypto_box_curve25519xsalsa20poly1305_MACBYTES - crypto_box_curve25519xsalsa20poly1305_NONCEBYTES;
-        auto ciphertext_view = ciphertext.data_view(0, message_length + crypto_box_curve25519xsalsa20poly1305_MACBYTES);
+        const auto message_length = ciphertext.size() - crypto_box_MACBYTES - crypto_box_NONCEBYTES;
+        auto ciphertext_view = ciphertext.data_view(0, message_length + crypto_box_MACBYTES);
         auto nonce_view = ciphertext.data_view(ciphertext_view.size());
         auto message_view = ciphertext.data_view(0, message_length);
-        assert(nonce_view.size() == crypto_box_curve25519xsalsa20poly1305_NONCEBYTES);
-        if (0 != crypto_box_open_easy(message_view.data(), ciphertext_view.data(), ciphertext_view.size(), nonce_view.data(),
-                                      sender.raw_pk().data(), raw_sk().data())) {
+        assert(nonce_view.size() == crypto_box_NONCEBYTES);
+        if (0 != crypto_box_open_easy(
+                         message_view.data(), ciphertext_view.data(),
+                         ciphertext_view.size(), nonce_view.data(),
+                         sender.raw_pk().data(), raw_sk().data())) {
             ESP_LOGE("KA", "Unable to decrypt.");
             ciphertext.clear();
             return false;

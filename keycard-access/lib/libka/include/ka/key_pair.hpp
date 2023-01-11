@@ -5,10 +5,7 @@
 #ifndef KEYCARDACCESS_KEY_PAIR_HPP
 #define KEYCARDACCESS_KEY_PAIR_HPP
 
-#include <array>
-#include <mlab/bin_data.hpp>
-#include <sodium/crypto_box.h>
-#include <sodium/crypto_sign.h>
+#include <ka/data.hpp>
 
 namespace ka {
     template <class T, std::size_t Size>
@@ -23,8 +20,8 @@ namespace ka {
     struct pub_key_tag {};
     struct sec_key_tag {};
 
-    using raw_pub_key = tagged_array<pub_key_tag, crypto_sign_ed25519_PUBLICKEYBYTES>;
-    using raw_sec_key = tagged_array<sec_key_tag, crypto_sign_ed25519_SECRETKEYBYTES>;
+    using raw_pub_key = tagged_array<pub_key_tag, 32>;
+    using raw_sec_key = tagged_array<sec_key_tag, 32>;
 
 
     class pub_key {
