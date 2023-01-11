@@ -76,6 +76,7 @@ namespace ka {
         [[nodiscard]] bool is_valid() const;
 
         void generate();
+        void generate_from_pwhash(std::string const &password);
     };
 
 }// namespace ka

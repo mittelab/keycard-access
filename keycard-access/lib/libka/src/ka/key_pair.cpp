@@ -5,18 +5,27 @@
 #include <cstring>
 #include <esp_log.h>
 #include <ka/key_pair.hpp>
-#include <sodium/crypto_scalarmult_curve25519.h>
-#include <sodium/randombytes.h>
 #include <sodium/crypto_box.h>
 #include <sodium/crypto_kdf_blake2b.h>
+#include <sodium/crypto_pwhash_argon2id.h>
+#include <sodium/crypto_scalarmult_curve25519.h>
+#include <sodium/randombytes.h>
 
 namespace ka {
     namespace {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};
+        constexpr unsigned long long pwhash_memlimit = 0x10000;
+        constexpr unsigned long long pwhash_opslimit = 4;
+        constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
     }
+
     static_assert(raw_pub_key::key_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::key_size == crypto_box_SECRETKEYBYTES);
     static_assert(raw_sec_key::key_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(pwhash_salt.size() == crypto_pwhash_argon2id_SALTBYTES);
+    static_assert(pwhash_memlimit >= crypto_pwhash_argon2id_MEMLIMIT_MIN and pwhash_memlimit <= crypto_pwhash_argon2id_MEMLIMIT_MAX);
+    static_assert(pwhash_opslimit >= crypto_pwhash_argon2id_OPSLIMIT_MIN and pwhash_opslimit <= crypto_pwhash_argon2id_OPSLIMIT_MAX);
+
 
     pub_key::pub_key(raw_pub_key pub_key_raw) : _pk{pub_key_raw} {
     }
@@ -124,6 +133,37 @@ namespace ka {
             ESP_LOGE("KA", "Unable to generate a new keypair.");
             _pk = {};
             _sk = {};
+        }
+    }
+
+    void key_pair::generate_from_pwhash(std::string const &password) {
+        if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
+            password.length() > crypto_pwhash_argon2id_PASSWD_MAX)
+        {
+            ESP_LOGE("KA", "Password must be between %u and %u characters long.",
+                     crypto_pwhash_argon2id_PASSWD_MIN,
+                     crypto_pwhash_argon2id_PASSWD_MAX);
+            return;
+        }
+        if (0 != crypto_pwhash_argon2id(
+                         _sk.data(), _sk.size(),
+                         password.data(), password.length(),
+                         pwhash_salt.data(),
+                         pwhash_opslimit, pwhash_memlimit,
+                         crypto_pwhash_argon2id_ALG_ARGON2ID13))
+        {
+            ESP_LOGE("KA", "Unable to derive key from password, out of memory.");
+            _pk = {};
+            _sk = {};
+        } else {
+            // Derive public key
+            if (const auto [pub_key_raw, success] = derive_pub_key(); success) {
+                _pk = pub_key_raw;
+            } else {
+                ESP_LOGE("KA", "Unable to derive a public key from the secret key.");
+                _pk = {};
+                _sk = {};
+            }
         }
     }
 
