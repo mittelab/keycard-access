@@ -1,17 +1,18 @@
-#include "pinout.hpp"
 #include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/esp32/utils.hpp>
 #include <desfire/tag.hpp>
+#include <ka/config.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/key_pair.hpp>
-#include <ka/nvs.hpp>
 #include <ka/member_token.hpp>
+#include <ka/nvs.hpp>
 #include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/desfire_pcd.hpp>
 #include <pn532/esp32/hsu.hpp>
 #include <thread>
 #include <unity.h>
+
 
 using namespace ka;
 using namespace std::chrono_literals;
@@ -370,10 +371,10 @@ extern "C" void app_main() {
     RUN_TEST(ut::test_nvs);
     RUN_TEST(ut::test_encrypt_decrypt);
 
-    ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", ut::pinout::pn532_hsu_rx, ut::pinout::pn532_hsu_tx);
+    ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);
 
     ut::instance.channel = std::make_unique<pn532::esp32::hsu_channel>(
-            ut::pinout::uart_port, ut::pinout::uart_config, ut::pinout::pn532_hsu_tx, ut::pinout::pn532_hsu_rx);
+            pinout::uart_port, pinout::uart_config, pinout::pn532_hsu_tx, pinout::pn532_hsu_rx);
     ut::instance.controller = std::make_unique<pn532::controller>(*ut::instance.channel);
 
     RUN_TEST(ut::test_wake_channel);
