@@ -1,10 +1,14 @@
-#include <pn532/controller.hpp>
+#include <ka/member_token.hpp>
+#include <desfire/esp32/cipher_provider.hpp>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <ka/config.hpp>
 #include <ka/nvs.hpp>
+#include <pn532/controller.hpp>
+#include <pn532/desfire_pcd.hpp>
 #include <pn532/esp32/hsu.hpp>
+
 
 using namespace std::chrono_literals;
 
@@ -25,8 +29,24 @@ void wait() {
     return ka::gate_config::load_from_nvs(*partition);
 }
 
-void gate_loop(ka::gate_config const &cfg, pn532::controller &controller) {
-    ESP_LOGW("KA", "Not implemented yet.");
+void interact_with_token(ka::gate_config const &cfg, ka::member_token &token) {
+    ESP_LOGW("KA", "Not implemented yet");
+}
+
+[[noreturn]] void gate_loop(ka::gate_config const &cfg, pn532::controller &controller) {
+    using cipher_provider = desfire::esp32::default_cipher_provider;
+    while (true) {
+        const auto r = controller.initiator_list_passive_kbps106_typea(1);
+        if (not r or r->empty()) {
+            continue;
+        }
+        // A card was scanned!
+        ESP_LOGI("KA", "Found passive target with NFC ID:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", r->front().info.nfcid.data(), r->front().info.nfcid.size(), ESP_LOG_INFO);
+        auto tag = desfire::tag::make<cipher_provider>(pn532::desfire_pcd{controller, r->front().logical_index});
+        ka::member_token token{tag};
+        interact_with_token(cfg, token);
+    }
 }
 
 extern "C" void app_main() {
@@ -56,7 +76,9 @@ extern "C" void app_main() {
             ESP_LOGE("KA", "Failed antenna diagnostics.");
         } else {
             ESP_LOGI("KA", "PN532 passed all tests.");
-            gate_loop(cfg, controller);
+            if (cfg.is_configured()) {
+                gate_loop(cfg, controller);
+            }
         }
     }
 
