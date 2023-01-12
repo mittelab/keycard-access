@@ -6,7 +6,6 @@
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
 #include <ka/config.hpp>
-#include <ka/key_manager.hpp>
 #include <ka/gate.hpp>
 
 namespace ka {

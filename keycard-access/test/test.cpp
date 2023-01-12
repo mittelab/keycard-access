@@ -4,6 +4,7 @@
 #include <desfire/tag.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/key_pair.hpp>
+#include <ka/nvs.hpp>
 #include <ka/member_token.hpp>
 #include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
@@ -330,12 +331,43 @@ namespace ut {
         TEST_ASSERT(token.unlock_root());
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
     }
+
+    void test_nvs() {
+        nvs::nvs root{};
+        auto part = root.open_partition(NVS_DEFAULT_PART_NAME, false);
+        TEST_ASSERT(part != nullptr);
+        auto ns = part->open_namespc("ka");
+        TEST_ASSERT(ns != nullptr);
+        ns->erase("foo");
+        TEST_ASSERT(ns->commit());
+        auto r_num = ns->get<std::uint32_t>("foo");
+        TEST_ASSERT_FALSE(r_num);
+        TEST_ASSERT(ns->set<std::uint32_t>("foo", 0x42));
+        TEST_ASSERT(ns->commit());
+        r_num = ns->get<std::uint32_t>("foo");
+        TEST_ASSERT(r_num);
+        if (r_num) {
+            TEST_ASSERT_EQUAL(*r_num, 0x42);
+        }
+        const auto stats = part->get_stats();
+        ESP_LOGI("TEST", "nvs     free entries: %d", stats.free_entries);
+        ESP_LOGI("TEST", "nvs  namespace count: %d", stats.namespace_count);
+        ESP_LOGI("TEST", "nvs     used entries: %d", stats.used_entries);
+        ESP_LOGI("TEST", "nvs    total entries: %d", stats.total_entries);
+        ESP_LOGI("TEST", "nvs::ka used entries: %d", ns->used_entries());
+        TEST_ASSERT(ns->erase("foo"));
+        TEST_ASSERT(ns->commit());
+        r_num = ns->get<std::uint32_t>("foo");
+        TEST_ASSERT_FALSE(r_num);
+
+    }
 }// namespace ut
 
 extern "C" void app_main() {
     UNITY_BEGIN();
 
     RUN_TEST(ut::test_keys);
+    RUN_TEST(ut::test_nvs);
     RUN_TEST(ut::test_encrypt_decrypt);
 
     ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", ut::pinout::pn532_hsu_rx, ut::pinout::pn532_hsu_tx);
