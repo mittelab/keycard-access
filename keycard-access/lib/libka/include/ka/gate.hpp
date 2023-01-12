@@ -8,8 +8,18 @@
 #include <ka/data.hpp>
 #include <cstdint>
 #include <desfire/data.hpp>
+#include <ka/key_pair.hpp>
+
+namespace pn532 {
+    class controller;
+}
 
 namespace ka {
+    namespace nvs {
+        class partition;
+    }
+
+    class member_token;
 
     class gate {
     public:
@@ -28,33 +38,57 @@ namespace ka {
          */
         static constexpr std::uint32_t max_gate_id = gate_aid_range_end - gate_aid_range_begin;
 
-        [[nodiscard]] inline gate_id id() const;
-        [[nodiscard]] inline desfire::app_id app_id() const;
-
         [[nodiscard]] inline static constexpr desfire::app_id id_to_app_id(gate_id id);
         [[nodiscard]] inline static constexpr gate_id app_id_to_id(desfire::app_id id);
         [[nodiscard]] inline static constexpr bool is_gate_app(desfire::app_id id);
 
-        inline explicit gate(gate_id id);
+        gate() = default;
         gate(gate const &) = delete;
         gate(gate &&) = default;
         gate &operator=(gate const &) = delete;
         gate &operator=(gate &&) = default;
 
+        [[nodiscard]] inline bool is_configured() const;
+        [[nodiscard]] inline key_pair keys() const;
+        [[nodiscard]] inline pub_key programmer_pub_key() const;
+        [[nodiscard]] inline std::string description() const;
+        [[nodiscard]] inline gate_id id() const;
+
+        void configure(gate_id id, std::string desc, pub_key prog_pub_key);
+
+        void store(nvs::partition &partition) const;
+        void generate();
+        [[nodiscard]] bool load(nvs::partition &partition);
+        static void clear(nvs::partition &partition);
+        [[nodiscard]] static gate load_or_generate(nvs::partition &partition);
+        [[nodiscard]] static gate load_or_generate();
+
+        [[noreturn]] void loop(pn532::controller &controller);
+        void interact_with_token(member_token &token);
+
     private:
-        gate_id _id;
+        gate_id _id = std::numeric_limits<gate_id>::max();
+        std::string _desc;
+        key_pair _kp;
+        pub_key _prog_pk;
     };
 }// namespace ka
 
 namespace ka {
-    gate::gate(gate_id id) : _id{id} {}
-
+    bool gate::is_configured() const {
+        return _id != std::numeric_limits<gate_id>::max();
+    }
+    key_pair gate::keys() const {
+        return _kp;
+    }
+    pub_key gate::programmer_pub_key() const {
+        return _prog_pk;
+    }
+    std::string gate::description() const {
+        return _desc;
+    }
     gate_id gate::id() const {
         return _id;
-    }
-
-    desfire::app_id gate::app_id() const {
-        return id_to_app_id(id());
     }
 
     constexpr desfire::app_id gate::id_to_app_id(gate_id id) {
