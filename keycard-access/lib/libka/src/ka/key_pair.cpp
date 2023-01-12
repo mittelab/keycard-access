@@ -21,8 +21,17 @@ namespace ka {
         constexpr unsigned long long pwhash_memlimit = 0x10000;
         constexpr unsigned long long pwhash_opslimit = 4;
         constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
+
+        template <class> struct size_of_array {};
+        template <std::size_t N> struct  size_of_array<std::array<char, N>> {
+            static constexpr std::size_t size = N;
+        };
+        template <std::size_t N> struct  size_of_array<std::array<std::uint8_t, N>> {
+            static constexpr std::size_t size = N;
+        };
     }
 
+    static_assert(size_of_array<gate_context_data>::size == crypto_kdf_blake2b_CONTEXTBYTES);
     static_assert(raw_pub_key::key_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::key_size == crypto_box_SECRETKEYBYTES);
     static_assert(raw_sec_key::key_size == crypto_kdf_blake2b_KEYBYTES);
@@ -73,23 +82,20 @@ namespace ka {
         return token_root_key{0, derived_key_data};
     }
 
-    gate_app_master_key sec_key::derive_gate_app_master_key(token_id const &id, gate_id gid) const {
-        std::array<std::uint8_t, key_type::size> derived_key_data{};
-        const std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> gate_key_context{
-                'g', 'a', 't', 'e',
-                char(gid & 0xff),
-                char((gid >> 8) & 0xff),
-                char((gid >> 16) & 0xff),
-                char((gid >> 24) & 0xff)};
-
+    std::pair<key_type, ticket_salt> sec_key::derive_auth_ticket(token_id const &id, gate_context_data const &ctx) const {
+        std::array<std::uint8_t, key_type::size + size_of_array<ticket_salt>::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
                          pack_token_id(id),
-                         gate_key_context.data(),
+                         ctx.data(),
                          raw_sk().data())) {
-            ESP_LOGE("KA", "Unable to derive gate key.");
+            ESP_LOGE("KA", "Unable to derive auth ticket.");
         }
-        return gate_app_master_key{0, derived_key_data};
+        key_type::key_data kd{};
+        ticket_salt salt{};
+        std::copy_n(std::begin(derived_key_data), kd.size(), std::begin(kd));
+        std::copy_n(std::begin(derived_key_data) + kd.size(), salt.size(), std::begin(salt));
+        return {key_type{0, kd}, salt};
     }
 
     key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {

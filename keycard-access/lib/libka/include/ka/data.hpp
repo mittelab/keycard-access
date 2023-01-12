@@ -34,6 +34,9 @@ namespace ka {
         using key_type::key_type;
     };
 
+    using ticket_salt = std::array<std::uint8_t, 32>;
+    using gate_context_data = std::array<char, 8>;
+
     namespace util {
         [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
         /**

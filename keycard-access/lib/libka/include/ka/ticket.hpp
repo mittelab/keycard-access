@@ -18,11 +18,12 @@ namespace ka {
         /**
          * @brief Salt used to generate the file content hash.
          */
-        std::array<std::uint8_t, 32> _salt{};
+        ticket_salt _salt{};
 
     public:
         ticket() = default;
         explicit ticket(std::uint8_t key_no);
+        inline ticket(key_type key, ticket_salt salt);
 
         [[nodiscard]] bool verify_file_content(mlab::bin_data const &content, std::string const &text_to_verify) const;
         [[nodiscard]] mlab::bin_data get_file_content(std::string const &original_text) const;
@@ -34,7 +35,7 @@ namespace ka {
         [[nodiscard]] static ticket generate(std::uint8_t key_no);
 
         [[nodiscard]] inline key_type const &key() const;
-        [[nodiscard]] inline std::array<std::uint8_t, 32> const &salt() const;
+        [[nodiscard]] inline ticket_salt const &salt() const;
 
         /**
          * @note The caller is responsible for selecting the appropriate app and authenticating with the master key.
@@ -78,11 +79,13 @@ namespace ka {
 
 namespace ka {
 
+    ticket::ticket(key_type key, ticket_salt salt) : _key{key}, _salt{salt} {}
+
     key_type const &ticket::key() const {
         return _key;
     }
 
-    std::array<std::uint8_t, 32> const &ticket::salt() const {
+    ticket_salt const &ticket::salt() const {
         return _salt;
     }
 

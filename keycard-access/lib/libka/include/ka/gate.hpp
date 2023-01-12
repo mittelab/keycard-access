@@ -53,6 +53,7 @@ namespace ka {
         [[nodiscard]] inline pub_key programmer_pub_key() const;
         [[nodiscard]] inline std::string description() const;
         [[nodiscard]] inline gate_id id() const;
+        [[nodiscard]] inline gate_context_data context_data() const;
 
         void configure(gate_id id, std::string desc, pub_key prog_pub_key);
 
@@ -64,13 +65,14 @@ namespace ka {
         [[nodiscard]] static gate load_or_generate();
 
         [[noreturn]] void loop(pn532::controller &controller);
-        void interact_with_token(member_token &token);
+        void interact_with_token(member_token &token, token_id  const &nfc_id);
 
     private:
         gate_id _id = std::numeric_limits<gate_id>::max();
         std::string _desc;
         key_pair _kp;
         pub_key _prog_pk;
+        gate_context_data _ctx{};
     };
 }// namespace ka
 
@@ -89,6 +91,10 @@ namespace ka {
     }
     gate_id gate::id() const {
         return _id;
+    }
+
+    gate_context_data gate::context_data() const {
+        return _ctx;
     }
 
     constexpr desfire::app_id gate::id_to_app_id(gate_id id) {
