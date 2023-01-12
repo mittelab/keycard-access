@@ -11,6 +11,10 @@
 #include <sodium/crypto_scalarmult_curve25519.h>
 #include <sodium/randombytes.h>
 
+#ifndef KEYCARD_ACCESS_SALT
+#define KEYCARD_ACCESS_SALT "Mlab Super Hash"
+#endif
+
 namespace ka {
     namespace {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};

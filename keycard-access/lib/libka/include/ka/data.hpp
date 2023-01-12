@@ -8,7 +8,6 @@
 #include <desfire/data.hpp>
 #include <desfire/keys.hpp>
 #include <desfire/tag.hpp>
-#include <ka/config.hpp>
 
 namespace ka {
 
