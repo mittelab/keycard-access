@@ -9,6 +9,27 @@
 
 using namespace std::chrono_literals;
 
+struct log_responder final : public ka::gate_responder {
+    void on_approach(ka::token_id const &id) override {
+        ESP_LOGI("RESP", "on_approach");
+    }
+    void on_authentication_begin(ka::token_id const &id) override {
+        ESP_LOGI("RESP", "on_authentication_begin");
+    }
+    void on_authentication_success(ka::identity const &id) override {
+        ESP_LOGI("RESP", "on_authentication_success");
+    }
+    void on_authentication_fail(ka::token_id const &id, desfire::error auth_error, ka::r<ka::identity> const &unverified_id, bool might_be_tampering) override {
+        ESP_LOGI("RESP", "on_authentication_fail");
+    }
+    void on_interaction_complete(ka::token_id const &id) override {
+        ESP_LOGI("RESP", "on_interaction_complete");
+    }
+    void on_removal(ka::token_id const &id) override {
+        ESP_LOGI("RESP", "on_removal");
+    }
+};
+
 extern "C" void app_main() {
     ESP_LOGI("KA", "Loading configuration.");
     auto g = ka::gate::load_or_generate();
@@ -24,6 +45,7 @@ extern "C" void app_main() {
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
+    log_responder responder{};
 
     if (not hsu_chn.wake() or not controller.sam_configuration(pn532::sam_mode::normal, 1s)) {
         ESP_LOGE("KA", "Unable to connect to PN532.");
@@ -36,7 +58,7 @@ extern "C" void app_main() {
         } else {
             ESP_LOGI("KA", "PN532 passed all tests.");
             if (g.is_configured()) {
-                g.loop(controller);
+                g.loop(controller, responder);
             }
         }
     }

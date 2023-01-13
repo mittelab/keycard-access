@@ -133,7 +133,7 @@ namespace ut {
         const std::array<desfire::any_key, 10> keys_to_test{
                 default_k,
                 test_key_pair().derive_token_root_key(instance.nfc_id),
-                r_info ? test_key_pair().derive_token_root_key(r_info->serial_no) : default_k,
+                r_info ? test_key_pair().derive_token_root_key(token_id{r_info->serial_no}) : default_k,
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},

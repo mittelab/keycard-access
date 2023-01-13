@@ -15,7 +15,7 @@ namespace ka {
     r<token_id> member_token::get_id() const {
         TRY(tag().select_application())
         TRY_RESULT(tag().get_info()) {
-            return r->serial_no;
+            return token_id{r->serial_no};
         }
     }
 
@@ -154,7 +154,7 @@ namespace ka {
         TRY(tag().select_application(mad_aid))
         identity id{};
         TRY_RESULT(tag().get_info()) {
-            id.id = r->serial_no;
+            id.id = token_id{r->serial_no};
         }
         TRY_RESULT(tag().read_data(mad_file_card_holder, desfire::cipher_mode::plain)) {
             id.holder = mlab::data_to_string(*r);

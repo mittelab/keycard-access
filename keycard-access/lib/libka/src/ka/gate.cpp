@@ -42,6 +42,15 @@ namespace ka {
                     return false;
             }
         }
+
+        [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d) {
+            if (d.size() != token_id::array_size) {
+                ESP_LOGE("KA", "NFC ID should be %d bytes long, not %d.", token_id::array_size, d.size());
+            }
+            token_id id{};
+            std::copy_n(std::begin(d), std::min(token_id::array_size, d.size()), std::begin(id));
+            return id;
+        }
     }// namespace
 
     static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
@@ -73,48 +82,59 @@ namespace ka {
     }
 
 
-    r<> gate::interact_with_token(member_token &token) {
-        TRY_RESULT(token.is_gate_enrolled(id())) {
-            if (not *r) {
-                // Not enrolled, nothing to do.
-                ESP_LOGI("KA", "Not enrolled.");
-                return mlab::result_success;
+    void gate::try_authenticate(member_token &token, gate_responder &responder) const {
+        if (const auto r = token.is_gate_enrolled(id()); r and *r) {
+            // We should be able to get the id
+            if (const auto r_id = token.get_id(); r_id) {
+                responder.on_authentication_begin(*r_id);
+                if (const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id)); r_auth) {
+                    ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
+                    responder.on_authentication_success(*r_auth);
+                } else {
+                    const bool tampering = might_be_tampering(r_auth.error());
+                    if (tampering) {
+                        ESP_LOGW("KA", "Authentication error might indicate tampering: %s", desfire::to_string(r_auth.error()));
+                    }
+                    responder.on_authentication_fail(*r_id, r_auth.error(), token.get_identity(), tampering);
+                }
+            } else {
+                ESP_LOGW("KA", "Enrolled but invalid MAD, error: %s", desfire::to_string(r_id.error()));
             }
-        }
-        // Should be authenticable
-        TRY_RESULT_AS(token.get_id(), r_id) {
-            const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id));
-            if (r_auth) {
-                ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
-                // TODO Callback;
-                return mlab::result_success;
-            } else if (might_be_tampering(r_auth.error())) {
-                ESP_LOGW("KA", "Authentication error might indicate tampering: %s", desfire::to_string(r_auth.error()));
-                // TODO Callback;
-            }
-            return r_auth.error();
+        } else if (r and not *r) {
+            ESP_LOGI("KA", "Not enrolled.");
         }
     }
 
-    void gate::loop(pn532::controller &controller) {
+    void gate::loop(pn532::controller &controller, gate_responder &responder) const {
         using cipher_provider = desfire::esp32::default_cipher_provider;
+        bool wait_for_removal = false;
+        token_id last_target{};
         while (true) {
-            const auto r = controller.initiator_list_passive_kbps106_typea(1, 10s);
+            // If we are waiting for removal, be fast.
+            const auto r = controller.initiator_list_passive_kbps106_typea(1, wait_for_removal ? 500ms : 10s);
             if (not r or r->empty()) {
+                if (wait_for_removal) {
+                    // Card was removed
+                    wait_for_removal = false;
+                    responder.on_removal(last_target);
+                    last_target = {};
+                }
                 continue;
             }
-            // A card was scanned!
-            token_id id_from_nfc{};
-            if (id_from_nfc.size() != r->front().info.nfcid.size()) {
-                ESP_LOGE("KA", "NFC ID should be %d bytes long?!", id_from_nfc.size());
-                continue;
+            const token_id current_target = id_from_nfc_id(r->front().info.nfcid);
+            if (not wait_for_removal or last_target != current_target) {
+                ESP_LOGI("KA", "Found passive target with NFC ID:");
+                ESP_LOG_BUFFER_HEX_LEVEL("KA", current_target.data(), current_target.size(), ESP_LOG_INFO);
+                responder.on_approach(current_target);
+                auto tag = desfire::tag::make<cipher_provider>(pn532::desfire_pcd{controller, r->front().logical_index});
+                member_token token{tag};
+                try_authenticate(token, responder);
+                responder.on_interaction_complete(current_target);
             }
-            std::copy_n(std::begin(r->front().info.nfcid), id_from_nfc.size(), std::begin(id_from_nfc));
-            ESP_LOGI("KA", "Found passive target with NFC ID:");
-            ESP_LOG_BUFFER_HEX_LEVEL("KA", id_from_nfc.data(), id_from_nfc.size(), ESP_LOG_INFO);
-            auto tag = desfire::tag::make<cipher_provider>(pn532::desfire_pcd{controller, r->front().logical_index});
-            member_token token{tag};
-            interact_with_token(token);
+            // Now we will poll every 500ms to see when the release this card
+            wait_for_removal = true;
+            last_target = current_target;
+            controller.initiator_release(r->front().logical_index);
         }
     }
 

@@ -33,6 +33,17 @@ namespace ka {
         gate_app_base_key app_base_key{};
     };
 
+    struct gate_responder {
+        virtual void on_approach(token_id const &id) {}
+        virtual void on_authentication_begin(token_id const &id) {}
+        virtual void on_authentication_success(identity const &id) {}
+        virtual void on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {}
+        virtual void on_interaction_complete(token_id const &id) {}
+        virtual void on_removal(token_id const &id) {}
+
+        ~gate_responder() = default;
+    };
+
     class gate {
     public:
         /**
@@ -76,8 +87,8 @@ namespace ka {
         [[nodiscard]] static gate load_or_generate(nvs::partition &partition);
         [[nodiscard]] static gate load_or_generate();
 
-        [[noreturn]] void loop(pn532::controller &controller);
-        r<> interact_with_token(member_token &token);
+        [[noreturn]] void loop(pn532::controller &controller, gate_responder &responder) const;
+        void try_authenticate(member_token &token, gate_responder &responder) const;
 
     private:
         gate_id _id = std::numeric_limits<gate_id>::max();

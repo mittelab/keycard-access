@@ -13,7 +13,6 @@ namespace ka {
 
     using key_type = desfire::key<desfire::cipher_type::aes128>;
 
-    using token_id = std::array<std::uint8_t, 7>;
     using gate_id = std::uint32_t;
 
     template <class, std::size_t Size>
@@ -38,8 +37,10 @@ namespace ka {
     };
 
     struct hash_tag;
+    struct token_id_tag;
 
     using hash_type = tagged_array<hash_tag, 64>;
+    using token_id = tagged_array<token_id_tag, 7>;
 
     struct identity {
         token_id id;
