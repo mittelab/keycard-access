@@ -125,6 +125,44 @@ namespace ka {
         }
     }
 
+    r<> member_token::enroll_gate(gate_id gid, const gate_app_master_key &mkey, const identity &id) {
+        TRY_RESULT(get_identity()) {
+            if (*r != id) {
+                ESP_LOGE("KA", "Token identity differs from expected identity!");
+                return desfire::error::authentication_error;
+            }
+        }
+        static constexpr desfire::key_rights key_rights{desfire::same_key, false, false, false, false};
+        const auto aid = gate::id_to_app_id(gid);
+        const auto hash_data = mlab::bin_data::chain(id.hash());
+        TRY(unlock_root());
+        TRY(desfire::fs::delete_app_if_exists(tag(), aid));
+        TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights));
+        TRY(desfire::fs::login_app(tag(), aid, mkey));
+        TRY(desfire::fs::create_ro_free_plain_data_file(tag(), gate_authentication_file, hash_data));
+        TRY(desfire::fs::logout_app(tag()));
+        return mlab::result_success;
+    }
+
+    r<identity> member_token::authenticate(gate_id gid, const gate_app_master_key &mkey) const {
+        desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX, DESFIRE_FS_LOG_PREFIX};
+        TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), mkey))
+        TRY_RESULT_AS(tag().read_data(gate_authentication_file, desfire::cipher_mode::ciphered), r_hash) {
+            if (r_hash->size() != hash_type::array_size) {
+                ESP_LOGE("KA", "Invalid authentication file length %d, should be %d.", r_hash->size(), hash_type::array_size);
+                return desfire::error::length_error;
+            }
+            TRY_RESULT_AS(get_identity(), r_id) {
+                const auto hash = r_id->hash();
+                if (std::equal(std::begin(hash), std::end(hash), std::begin(*r_hash))) {
+                    return r_id;
+                }
+                ESP_LOGE("KA", "Mismatch declared identity.");
+                return desfire::error::file_integrity_error;
+            }
+        }
+    }
+
     r<ticket> member_token::install_enroll_ticket(gate_id gid) {
         const ticket t = ticket::generate(0);
         const auto aid = gate::id_to_app_id(gid);

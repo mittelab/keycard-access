@@ -97,6 +97,9 @@ namespace ka {
          * @{
          */
 
+        r<> enroll_gate(gate_id gid, gate_app_master_key const &mkey, identity const &id);
+        r<identity> authenticate(gate_id gid, gate_app_master_key const &mkey) const;
+
         /**
          * To be run by the programmer. Creates a new app for the gate and installs a ticket on @ref gate_enroll_file,
          * which certifies for the current @ref identity. The ticket is then returned and should be transmitted securely
