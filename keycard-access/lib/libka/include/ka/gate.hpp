@@ -21,6 +21,12 @@ namespace ka {
 
     class member_token;
 
+    struct gate_config {
+        gate_id id{};
+        pub_key pk;
+        gate_app_base_key bk;
+    };
+
     class gate {
     public:
         /**
@@ -53,9 +59,10 @@ namespace ka {
         [[nodiscard]] inline pub_key programmer_pub_key() const;
         [[nodiscard]] inline std::string description() const;
         [[nodiscard]] inline gate_id id() const;
+        [[nodiscard]] inline gate_app_base_key app_base_key() const;
         [[nodiscard]] inline gate_context_data context_data() const;
 
-        void configure(gate_id id, std::string desc, pub_key prog_pub_key);
+        [[nodiscard]] gate_config configure(gate_id id, std::string desc, pub_key prog_pub_key);
 
         void store(nvs::partition &partition) const;
         void generate();
@@ -76,6 +83,7 @@ namespace ka {
         std::string _desc;
         key_pair _kp;
         pub_key _prog_pk;
+        gate_app_base_key _base_key;
         gate_context_data _ctx{};
     };
 }// namespace ka
@@ -95,6 +103,10 @@ namespace ka {
     }
     gate_id gate::id() const {
         return _id;
+    }
+
+    gate_app_base_key gate::app_base_key() const {
+        return _base_key;
     }
 
     gate_context_data gate::context_data() const {

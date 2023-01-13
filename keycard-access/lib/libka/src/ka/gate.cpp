@@ -33,12 +33,21 @@ namespace ka {
         constexpr auto ka_gid = "gate-id";
         constexpr auto ka_prog_pk = "programmer-key";
         constexpr auto ka_ctx = "context-data";
+        constexpr auto ka_base_key = "gate-base-key";
     }// namespace
 
-    void gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
+    gate_config gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
+        ESP_LOGI("KA", "Configuring gate.");
+        generate();
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
+        ESP_LOGI("KA", "Configured as gate %d: %s", this->id(), description().c_str());
+        ESP_LOGI("KA", "Gate public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI("KA", "Programmer public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
+        return {this->id(), pub_key{keys().raw_pk()}, app_base_key()};
     }
 
     r<identity> gate::try_authenticate(member_token &token) const {
@@ -131,7 +140,8 @@ namespace ka {
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
         const auto r_ctx = ns->set<mlab::bin_data>(ka_ctx, mlab::bin_data::chain(context_data()));
-        if (not(r_id and r_desc and r_prog_pk and r_sk and r_ctx)) {
+        const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key().data()));
+        if (not(r_id and r_desc and r_prog_pk and r_sk and r_ctx and r_base_key)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");
         }
     }
@@ -161,6 +171,7 @@ namespace ka {
         ESP_LOGW("KA", "Generating new gate configuration.");
         *this = gate{};
         _kp.generate_random();
+        _base_key = gate_app_base_key{0, desfire::random_oracle{randombytes_buf}};
         randombytes_buf(_ctx.data(), _ctx.size());
     }
 
@@ -195,6 +206,16 @@ namespace ka {
             ESP_LOGE("KA", "Invalid context data size.");
             return false;
         };
+        auto try_load_base_key = [&](const mlab::bin_data &data) -> bool {
+            if (data.size() == gate_app_base_key::size) {
+                key_type::key_data kd{};
+                std::copy(std::begin(data), std::end(data), std::begin(kd));
+                _base_key = gate_app_base_key{0, kd};
+                return true;
+            }
+            ESP_LOGE("KA", "Invalid gate app base key size.");
+            return false;
+        };
         auto ns = partition.open_namespc(ka_namespc);
         if (ns == nullptr) {
             return false;
@@ -205,8 +226,13 @@ namespace ka {
         const auto r_prog_pk = ns->get<mlab::bin_data>(ka_prog_pk);
         const auto r_sk = ns->get<mlab::bin_data>(ka_sk);
         const auto r_ctx = ns->get<mlab::bin_data>(ka_ctx);
-        if (r_id and r_desc and r_prog_pk and r_sk and r_ctx) {
-            if (try_load_key_pair(*r_sk) and try_load_programmer_key(*r_prog_pk) and try_load_context_data(*r_ctx)) {
+        const auto r_base_key = ns->get<mlab::bin_data>(ka_base_key);
+        if (r_id and r_desc and r_prog_pk and r_sk and r_ctx and r_base_key) {
+            if (
+                    try_load_key_pair(*r_sk) and
+                    try_load_programmer_key(*r_prog_pk) and
+                    try_load_context_data(*r_ctx) and
+                    try_load_base_key(*r_base_key)) {
                 // Load also all the rest
                 _id = *r_id;
                 _desc = *r_desc;
@@ -214,7 +240,7 @@ namespace ka {
             } else {
                 ESP_LOGE("KA", "Invalid secret key or programmer key, rejecting stored configuration.");
             }
-        } else if (r_id or r_desc or r_prog_pk or r_sk or r_ctx) {
+        } else if (r_id or r_desc or r_prog_pk or r_sk or r_ctx or r_base_key) {
             ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
         }
         return false;
