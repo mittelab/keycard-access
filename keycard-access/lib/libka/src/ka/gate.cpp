@@ -2,8 +2,9 @@
 // Created by spak on 10/1/22.
 //
 
-#include <ka/desfire_fs.hpp>
 #include <desfire/esp32/cipher_provider.hpp>
+#include <desfire/esp32/utils.hpp>
+#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
@@ -111,7 +112,9 @@ namespace ka {
         token_id last_target{};
         while (true) {
             // If we are waiting for removal, be fast.
+            auto suppress = desfire::esp32::suppress_log{ESP_LOG_ERROR, {PN532_TAG}};
             const auto r = controller.initiator_list_passive_kbps106_typea(1, wait_for_removal ? 500ms : 10s);
+            suppress.restore();
             if (not r or r->empty()) {
                 if (wait_for_removal) {
                     // Card was removed
