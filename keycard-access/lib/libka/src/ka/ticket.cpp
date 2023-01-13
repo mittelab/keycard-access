@@ -90,6 +90,10 @@ namespace ka {
     }
 
     r<> ticket::check_app_for_prerequisites(desfire::tag &tag) const {
+        if (tag.active_app() == desfire::root_app) {
+            ESP_LOGE("KA", "Installing ticket on root app!");
+            return desfire::error::permission_denied;
+        }
         // Assert that the app settings allows keys to change themselves, otherwise security is broken
         TRY_RESULT(tag.get_app_settings()) {
             if (r->rights.allowed_to_change_keys != desfire::same_key) {
