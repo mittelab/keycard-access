@@ -39,7 +39,7 @@ namespace ka {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
     }// namespace
 
-    static_assert(gate_app_base_key::key_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
     gate_app_master_key gate_app_base_key::derive_app_master_key(const token_id &token_id) const {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
@@ -194,7 +194,7 @@ namespace ka {
 
     bool gate::load(nvs::partition &partition) {
         auto try_load_key_pair = [&](mlab::bin_data const &data) -> bool {
-            if (data.size() == raw_sec_key::key_size) {
+            if (data.size() == raw_sec_key::array_size) {
                 // Attempt at reading
                 ka::key_pair kp{data.data_view()};
                 if (kp.is_valid()) {
@@ -208,7 +208,7 @@ namespace ka {
             return false;
         };
         auto try_load_programmer_key = [&](const mlab::bin_data &data) -> bool {
-            if (data.size() == raw_pub_key::key_size) {
+            if (data.size() == raw_pub_key::array_size) {
                 _prog_pk = pub_key{data.data_view()};
                 return true;
             }

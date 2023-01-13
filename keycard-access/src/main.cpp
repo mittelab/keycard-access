@@ -15,13 +15,13 @@ extern "C" void app_main() {
     ESP_LOGI("KA", "Loading configuration.");
     auto g = ka::gate::load_or_generate();
     ESP_LOGI("KA", "Device public key:");
-    ESP_LOG_BUFFER_HEX_LEVEL("KA", g.keys().raw_pk().data(), ka::raw_pub_key::key_size, ESP_LOG_INFO);
+    ESP_LOG_BUFFER_HEX_LEVEL("KA", g.keys().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
     if (not g.is_configured()) {
         ESP_LOGW("KA", "Device is not configured.");
     } else {
         ESP_LOGI("KA", "Gate %d \"%s\".", g.id(), g.description().c_str());
         ESP_LOGI("KA", "Registered to programmer's public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", g.programmer_pub_key().raw_pk().data(), ka::raw_pub_key::key_size, ESP_LOG_INFO);
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", g.programmer_pub_key().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
     }
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};

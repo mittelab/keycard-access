@@ -32,9 +32,9 @@ namespace ka {
     }
 
     static_assert(size_of_array<gate_context_data>::size == crypto_kdf_blake2b_CONTEXTBYTES);
-    static_assert(raw_pub_key::key_size == crypto_box_PUBLICKEYBYTES);
-    static_assert(raw_sec_key::key_size == crypto_box_SECRETKEYBYTES);
-    static_assert(raw_sec_key::key_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(raw_pub_key::array_size == crypto_box_PUBLICKEYBYTES);
+    static_assert(raw_sec_key::array_size == crypto_box_SECRETKEYBYTES);
+    static_assert(raw_sec_key::array_size == crypto_kdf_blake2b_KEYBYTES);
     static_assert(pwhash_salt.size() == crypto_pwhash_argon2id_SALTBYTES);
     static_assert(pwhash_memlimit >= crypto_pwhash_argon2id_MEMLIMIT_MIN and pwhash_memlimit <= crypto_pwhash_argon2id_MEMLIMIT_MAX);
     static_assert(pwhash_opslimit >= crypto_pwhash_argon2id_OPSLIMIT_MIN and pwhash_opslimit <= crypto_pwhash_argon2id_OPSLIMIT_MAX);
@@ -44,8 +44,8 @@ namespace ka {
     }
 
     pub_key::pub_key(mlab::range<std::uint8_t const *> pub_key_raw) : pub_key{} {
-        if (pub_key_raw.size() != raw_pub_key::key_size) {
-            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_pub_key::key_size);
+        if (pub_key_raw.size() != raw_pub_key::array_size) {
+            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_pub_key::array_size);
         } else {
             std::copy(std::begin(pub_key_raw), std::end(pub_key_raw), std::begin(_pk));
         }
@@ -55,8 +55,8 @@ namespace ka {
     }
 
     sec_key::sec_key(mlab::range<std::uint8_t const *> sec_key_raw) : sec_key{} {
-        if (sec_key_raw.size() != raw_sec_key::key_size) {
-            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_sec_key::key_size);
+        if (sec_key_raw.size() != raw_sec_key::array_size) {
+            ESP_LOGE("KA", "A raw public key has exactly a length of %d bytes.", raw_sec_key::array_size);
         } else {
             std::copy(std::begin(sec_key_raw), std::end(sec_key_raw), std::begin(_sk));
         }
@@ -111,7 +111,7 @@ namespace ka {
     }
 
     key_pair::key_pair(mlab::range<std::uint8_t const *> sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {
-        if (sec_key_raw.size() == raw_sec_key::key_size) {
+        if (sec_key_raw.size() == raw_sec_key::array_size) {
             overwrite_pub_key();
         }
     }
