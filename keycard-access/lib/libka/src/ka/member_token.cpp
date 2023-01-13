@@ -144,6 +144,17 @@ namespace ka {
         return mlab::result_success;
     }
 
+    r<bool> member_token::is_gate_enrolled(gate_id gid) const {
+        desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
+        if (const auto r = tag().select_application(gate::id_to_app_id(gid)); r) {
+            return true;
+        } else if (r.error() == desfire::error::app_not_found) {
+            return false;
+        } else {
+            return r.error();
+        }
+    }
+
     r<identity> member_token::authenticate(gate_id gid, const gate_app_master_key &mkey) const {
         desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX, DESFIRE_FS_LOG_PREFIX};
         TRY(desfire::fs::login_app(tag(), gate::id_to_app_id(gid), mkey))
