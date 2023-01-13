@@ -121,7 +121,7 @@ namespace ka {
     r<identity, bool> member_token::verify_ticket(desfire::app_id aid, desfire::file_id fid, ticket const &t) const {
         TRY_RESULT(get_identity()) {
             TRY(desfire::fs::login_app(tag(), aid, t.key()))
-            return std::pair<identity, bool>{std::move(*r), t.verify(tag(), fid, r->concat())};
+            return std::pair<identity, bool>{std::move(*r), t.verify(tag(), fid, r->string_representation())};
         }
     }
 
@@ -138,7 +138,7 @@ namespace ka {
             TRY(desfire::fs::delete_app_if_exists(tag(), aid))
             TRY(desfire::fs::create_app(tag(), aid, t.key(), key_rights, 1))
             // Install the ticket
-            TRY(t.install(tag(), gate_enroll_file, r->concat()))
+            TRY(t.install(tag(), gate_enroll_file, r->string_representation()))
         }
         return t;
     }
@@ -159,7 +159,7 @@ namespace ka {
             TRY(desfire::fs::login_app(tag(), aid, verified_enroll_ticket.key()))
             TRY(verified_enroll_ticket.clear(tag(), gate_enroll_file, temp_master_key))
             TRY(desfire::fs::login_app(tag(), aid, temp_master_key))
-            TRY(auth_ticket.install(tag(), gate_authentication_file, r->concat(), temp_master_key))
+            TRY(auth_ticket.install(tag(), gate_authentication_file, r->string_representation(), temp_master_key))
             TRY(desfire::fs::logout_app(tag()))
         }
         return mlab::result_success;

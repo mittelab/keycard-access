@@ -3,6 +3,7 @@
 //
 
 #include <ka/data.hpp>
+#include <sodium/crypto_hash_sha512.h>
 
 namespace ka {
     namespace util {
@@ -48,8 +49,21 @@ namespace ka {
         }
     }
 
-    std::string identity::concat() const {
+    std::string identity::string_representation() const {
         return util::hex_string(id) + "\n" + util::escape(holder) + "\n" + util::escape(publisher);
+    }
+
+    hash_type identity::hash() const {
+        const std::string repr = string_representation();
+        const mlab::bin_data data = mlab::bin_data::chain(
+                mlab::prealloc(repr.size()),
+                mlab::view_from_string(repr));
+        hash_type h{};
+        if (0 != crypto_hash_sha512(h.data(), data.data(), data.size())) {
+            ESP_LOGE("KA", "Could not hash text and salt.");
+            h = {};
+        }
+        return h;
     }
 
 }

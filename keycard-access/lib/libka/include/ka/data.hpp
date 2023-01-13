@@ -45,12 +45,17 @@ namespace ka {
     using ticket_salt = std::array<std::uint8_t, 32>;
     using gate_context_data = std::array<char, 8>;
 
+    struct hash_tag;
+
+    using hash_type = tagged_array<hash_tag, 64>;
+
     struct identity {
         token_id id;
         std::string holder;
         std::string publisher;
 
-        [[nodiscard]] std::string concat() const;
+        [[nodiscard]] std::string string_representation() const;
+        [[nodiscard]] hash_type hash() const;
     };
 
     enum struct gate_status : std::uint8_t {
