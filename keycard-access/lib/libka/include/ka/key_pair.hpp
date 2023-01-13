@@ -8,13 +8,6 @@
 #include <ka/data.hpp>
 
 namespace ka {
-    template <class T, std::size_t Size>
-    struct tagged_array : public std::array<std::uint8_t, Size> {
-        static constexpr std::size_t key_size = Size;
-
-        [[nodiscard]] bool operator==(tagged_array const &other) const;
-        [[nodiscard]] bool operator!=(tagged_array const &other) const;
-    };
 
     struct pub_key_tag {};
     struct sec_key_tag {};
@@ -54,6 +47,7 @@ namespace ka {
         [[nodiscard]] token_root_key derive_token_root_key(token_id const &id) const;
 
         [[nodiscard]] std::pair<key_type, ticket_salt> derive_auth_ticket(token_id const &id, gate_context_data const &ctx) const;
+
     protected:
         raw_sec_key _sk{};
     };
@@ -84,17 +78,4 @@ namespace ka {
 
 }// namespace ka
 
-namespace ka {
-
-    template <class T, std::size_t Size>
-    bool tagged_array<T, Size>::operator==(tagged_array const &other) const {
-        return std::equal(std::begin(*this), std::end(*this), std::begin(other));
-    }
-
-    template <class T, std::size_t Size>
-    bool tagged_array<T, Size>::operator!=(tagged_array const &other) const {
-        return not operator==(other);
-    }
-
-}//namespace ka
 #endif//KEYCARDACCESS_KEY_PAIR_HPP

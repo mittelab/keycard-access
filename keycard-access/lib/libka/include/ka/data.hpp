@@ -17,6 +17,14 @@ namespace ka {
     using token_id = std::array<std::uint8_t, 7>;
     using gate_id = std::uint32_t;
 
+    template <class, std::size_t Size>
+    struct tagged_array : public std::array<std::uint8_t, Size> {
+        static constexpr std::size_t key_size = Size;
+
+        [[nodiscard]] bool operator==(tagged_array const &other) const;
+        [[nodiscard]] bool operator!=(tagged_array const &other) const;
+    };
+
     template <class... Tn>
     using r = desfire::tag::result<Tn...>;
 
@@ -92,6 +100,16 @@ namespace ka {
     gate_status operator|(gate_status gs1, gate_status gs2) {
         using numeric_t = std::underlying_type_t<gate_status>;
         return static_cast<gate_status>(static_cast<numeric_t>(gs1) | static_cast<numeric_t>(gs2));
+    }
+
+    template <class T, std::size_t Size>
+    bool tagged_array<T, Size>::operator==(tagged_array const &other) const {
+        return std::equal(std::begin(*this), std::end(*this), std::begin(other));
+    }
+
+    template <class T, std::size_t Size>
+    bool tagged_array<T, Size>::operator!=(tagged_array const &other) const {
+        return not operator==(other);
     }
 
     constexpr std::uint64_t pack_token_id(token_id id) {
