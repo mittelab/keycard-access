@@ -9,6 +9,7 @@
 #include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/desfire_pcd.hpp>
+#include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
 
 using namespace std::chrono_literals;
@@ -34,7 +35,23 @@ namespace ka {
         constexpr auto ka_prog_pk = "programmer-key";
         constexpr auto ka_ctx = "context-data";
         constexpr auto ka_base_key = "gate-base-key";
+
+        constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
     }// namespace
+
+    static_assert(gate_app_base_key::key_size == crypto_kdf_blake2b_KEYBYTES);
+
+    gate_app_master_key gate_app_base_key::derive_app_master_key(const token_id &token_id) const {
+        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        if (0 != crypto_kdf_blake2b_derive_from_key(
+                         derived_key_data.data(), derived_key_data.size(),
+                         pack_token_id(token_id),
+                         app_master_key_context.data(),
+                         data())) {
+            ESP_LOGE("KA", "Unable to derive root key.");
+        }
+        return gate_app_master_key{0, derived_key_data};
+    }
 
     gate_config gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
         ESP_LOGI("KA", "Configuring gate.");

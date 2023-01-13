@@ -21,10 +21,16 @@ namespace ka {
 
     class member_token;
 
+    struct gate_app_base_key_tag {};
+
+    struct gate_app_base_key : public tagged_array<gate_app_base_key_tag, 32> {
+        [[nodiscard]] gate_app_master_key derive_app_master_key(token_id const &token_id) const;
+    };
+
     struct gate_config {
-        gate_id id{};
-        pub_key pk;
-        gate_app_base_key bk;
+        gate_id gate_id{};
+        pub_key gate_pub_key;
+        gate_app_base_key gate_app_base_key{};
     };
 
     class gate {
@@ -83,7 +89,7 @@ namespace ka {
         std::string _desc;
         key_pair _kp;
         pub_key _prog_pk;
-        gate_app_base_key _base_key;
+        gate_app_base_key _base_key{};
         gate_context_data _ctx{};
     };
 }// namespace ka

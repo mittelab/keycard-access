@@ -38,10 +38,6 @@ namespace ka {
         using app_master_key::app_master_key;
     };
 
-    struct gate_app_base_key : public key_type, public derived_key {
-        using key_type::key_type;
-    };
-
     struct token_root_key : public key_type, public derived_key {
         using key_type::key_type;
     };
