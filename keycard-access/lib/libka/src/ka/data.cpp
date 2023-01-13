@@ -66,6 +66,13 @@ namespace ka {
         return h;
     }
 
+    bool identity::operator==(identity const &other) const {
+        return id == other.id and holder == other.holder and publisher == other.publisher;
+    }
+
+    bool identity::operator!=(identity const &other) const {
+        return id != other.id or holder != other.holder or publisher != other.publisher;
+    }
 }
 
 namespace mlab {

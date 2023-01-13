@@ -56,6 +56,9 @@ namespace ka {
 
         [[nodiscard]] std::string string_representation() const;
         [[nodiscard]] hash_type hash() const;
+
+        [[nodiscard]] bool operator==(identity const &other) const;
+        [[nodiscard]] bool operator!=(identity const &other) const;
     };
 
     enum struct gate_status : std::uint8_t {
