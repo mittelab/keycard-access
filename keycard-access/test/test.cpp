@@ -122,10 +122,12 @@ namespace ut {
         if (instance.tag == nullptr) {
             return;
         }
+        const auto r_info = instance.tag->get_info();
         const desfire::any_key default_k{desfire::cipher_type::des};
-        const std::array<desfire::any_key, 9> keys_to_test{
+        const std::array<desfire::any_key, 10> keys_to_test{
                 default_k,
                 test_key_pair().derive_token_root_key(instance.nfc_id),
+                r_info ? test_key_pair().derive_token_root_key(r_info->serial_no) : default_k,
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},
@@ -164,20 +166,29 @@ namespace ut {
         }
 
         member_token token{*instance.tag};
-        TEST_ASSERT(token.setup_root(test_key_pair().derive_token_root_key(instance.nfc_id)));
-        TEST_ASSERT(token.setup_mad({ut::test_holder, ut::test_publisher}));
+        auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
+        if (not r_id) {
+            return;
+        }
+        TEST_ASSERT(token.setup_root(test_key_pair().derive_token_root_key(*r_id)));
+        TEST_ASSERT(token.setup_mad({*r_id, ut::test_holder, ut::test_publisher}));
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
         auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
+        // CardUID is not accessible without auth
         TEST_ASSERT_FALSE(instance.tag->get_card_uid());
         suppress.restore();
         TEST_ASSERT(instance.tag->select_application());
 
+        // But the id from get_version must be
+        r_id = token.get_id();
         const auto r_mad_version = token.get_mad_version();
         const auto r_holder = token.get_holder();
         const auto r_publisher = token.get_publisher();
 
+        TEST_ASSERT(r_id);
         TEST_ASSERT(r_mad_version);
         TEST_ASSERT(r_holder);
         TEST_ASSERT(r_publisher);
@@ -190,6 +201,10 @@ namespace ut {
         }
         if (r_publisher) {
             TEST_ASSERT(*r_publisher == test_publisher);
+        }
+        if (r_id) {
+            // Should be sensible enough
+            TEST_ASSERT(*r_id == instance.nfc_id);
         }
 
         // Check that the mad application is not trivially writable
@@ -207,8 +222,14 @@ namespace ut {
         member_token token{*instance.tag};
         constexpr gate_id gid = 0x00;
 
+        const auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
+        if (not r_id) {
+            return;
+        }
+
         auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
         suppress.restore();
 
         TEST_ASSERT(token.get_identity());
@@ -268,8 +289,14 @@ namespace ut {
 
         member_token token{*instance.tag};
 
+        const auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
+        if (not r_id) {
+            return;
+        }
+
         auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(instance.nfc_id)));
+        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
         suppress.restore();
 
         TEST_ASSERT(token.unlock_root());

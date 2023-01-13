@@ -36,10 +36,20 @@ namespace ka {
         std::string escape(std::string const &text) {
             return replace_all(replace_all(text, "\\", "\\\\"), "\n", "\\\n");
         }
+        std::string hex_string(mlab::range<std::uint8_t const *> rg) {
+            std::string retval;
+            retval.resize(2 * rg.size() + 1 /* final null separator */);
+            auto bit = std::begin(rg);
+            auto cit = std::begin(retval);
+            for (; bit != std::end(rg); ++bit, cit += 2) {
+                std::snprintf(&*cit, 3, "%02x", *bit);
+            }
+            return retval;
+        }
     }
 
     std::string identity::concat() const {
-        return util::escape(holder) + "\n" + util::escape(publisher);
+        return util::hex_string(id) + "\n" + util::escape(holder) + "\n" + util::escape(publisher);
     }
 
 }

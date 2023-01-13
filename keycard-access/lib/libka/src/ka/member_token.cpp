@@ -23,9 +23,11 @@ namespace ka {
 
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
 
-    r<token_id> member_token::id() const {
-        TRY(unlock_root())
-        return tag().get_card_uid();
+    r<token_id> member_token::get_id() const {
+        TRY(tag().select_application())
+        TRY_RESULT(tag().get_info()) {
+            return r->serial_no;
+        }
     }
 
     r<> member_token::unlock_root() const {

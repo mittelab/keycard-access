@@ -160,9 +160,9 @@ namespace ka {
           */
 
         /**
-         * @brief The ID of the token, as in @ref desfire::tag::get_card_uid().
+         * @brief The ID of the token, as in @ref desfire::tag::get_version().
          */
-        [[nodiscard]] r<token_id> id() const;
+        [[nodiscard]] r<token_id> get_id() const;
     };
 
 }// namespace ka
