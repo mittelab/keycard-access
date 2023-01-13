@@ -146,7 +146,7 @@ namespace ut {
         ESP_LOGI("TEST", "Attempt to recover the root key.");
         TEST_ASSERT(instance.tag->select_application());
         for (auto const &key : keys_to_test) {
-            auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
+            auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
             if (instance.tag->authenticate(key)) {
                 suppress.restore();
                 ESP_LOGI("TEST", "Found the right key, changing to default.");
@@ -183,7 +183,7 @@ namespace ut {
 
         // Mad must be readable without auth
         TEST_ASSERT(instance.tag->select_application());
-        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
         // CardUID is not accessible without auth
         TEST_ASSERT_FALSE(instance.tag->get_card_uid());
         suppress.restore();
@@ -235,7 +235,7 @@ namespace ut {
             return;
         }
 
-        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
         TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
         suppress.restore();
 
@@ -254,7 +254,7 @@ namespace ut {
 
         const auto auth_ticket = ticket::generate(0);
 
-        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
+        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(token.verify_auth_ticket(gid, auth_ticket));
         suppress.restore();
         TEST_ASSERT(token.switch_enroll_to_auth_ticket(gid, *r_enroll_ticket, auth_ticket));
@@ -284,7 +284,7 @@ namespace ut {
         TEST_ASSERT(r_status);
         TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
 
-        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
+        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(token.authenticate_legacy(gid, auth_ticket));
     }
 
@@ -302,7 +302,7 @@ namespace ut {
             return;
         }
 
-        auto suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX};
+        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
         TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
         suppress.restore();
 
@@ -344,7 +344,7 @@ namespace ut {
         // Should not work outside the app
         TEST_ASSERT(token.unlock_root());
         suppress.restore();
-        suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, "KA"};
+        suppress = suppress_log{DESFIRE_LOG_PREFIX, "KA"};
         TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
         suppress.restore();
 
