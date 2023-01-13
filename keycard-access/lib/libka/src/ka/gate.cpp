@@ -41,15 +41,60 @@ namespace ka {
         _prog_pk = prog_pub_key;
     }
 
-    void gate::interact_with_token(member_token &token, token_id const &nfc_id) {
-        // Derive an authentication ticket to test
-        auto [key, salt] = keys().derive_auth_ticket(nfc_id, context_data());
-        if (const auto r_id = token.authenticate(id(), ticket{key, salt}); r_id) {
-            ESP_LOGI("KA", "Authenticated as %s.", r_id->holder.c_str());
+    r<identity> gate::try_authenticate(member_token &token) const {
+        r<token_id> r_id = token.get_id();
+        if (not r_id) {
+            ESP_LOGE("KA", "Unable to obtain token id, %s", desfire::to_string(r_id.error()));
+            return desfire::error::authentication_error;
+        }
+        ESP_LOGI("KA", "Tag declares token id:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", r_id->data(), r_id->size(), ESP_LOG_INFO);
+        // Attempt first to authenticate the identity, and, at least, this id
+        const ticket auth_ticket{keys().derive_auth_ticket(*r_id, context_data())};
+        auto r_identity = token.authenticate(id(), auth_ticket);
+        if (r_identity) {
+            ESP_LOGI("KA", "Authenticated as %s.", r_identity->holder.c_str());
+        }
+        return r_identity;
+    }
+
+    r<identity> gate::try_complete_enrollment(member_token &token) const {
+        ESP_LOGW("KA", "Not implemented yet");
+        return desfire::error::command_aborted;
+    }
+
+    bool gate::try_process_service_messages(member_token &token) {
+        ESP_LOGW("KA", "Not implemented yet");
+        return true;
+    }
+
+    void gate::interact_with_token(member_token &token) {
+        auto r_identity = try_authenticate(token);
+        auto r_status = token.get_gate_status(id());
+        if (not r_status) {
+            ESP_LOGE("KA", "Unable to get gate status, %s", desfire::to_string(r_status.error()));
             return;
         }
-        // TODO: assert gate status and check for enrollment
-        ESP_LOGW("KA", "Not implemented yet.");
+        // Do not accept anything from auth ready tags which do not pass authentication or are broken
+        if (*r_status == gate_status::auth_ready and not r_identity) {
+            ESP_LOGE("KA", "Incorrect claimed identity.");
+            return;
+        } else if (*r_status == gate_status::broken) {
+            ESP_LOGE("KA", "Broken gate status.");
+            return;
+        }
+        // Import service messages if there are any
+        if (not try_process_service_messages(token)) {
+            return;
+        }
+        // Check if the gate has to be enrolled, and we can
+        if (*r_status == gate_status::enrolled) {
+            r_identity = try_complete_enrollment(token);
+        }
+        if (r_identity) {
+            ESP_LOGI("KA", "Authenticated as %s (%s)", r_identity->holder.c_str(), r_identity->publisher.c_str());
+            // TODO Callback.
+        }
     }
 
     void gate::loop(pn532::controller &controller) {
@@ -70,7 +115,7 @@ namespace ka {
             ESP_LOG_BUFFER_HEX_LEVEL("KA", id_from_nfc.data(), id_from_nfc.size(), ESP_LOG_INFO);
             auto tag = desfire::tag::make<cipher_provider>(pn532::desfire_pcd{controller, r->front().logical_index});
             member_token token{tag};
-            interact_with_token(token, id_from_nfc);
+            interact_with_token(token);
         }
     }
 
