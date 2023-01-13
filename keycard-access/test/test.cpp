@@ -227,144 +227,48 @@ namespace ut {
         }
 
         member_token token{*instance.tag};
-        constexpr gate_id gid = 0x00;
 
-        const auto r_id = token.get_id();
+        constexpr gate_id gid = 0x00;
+        constexpr gate_app_base_key gkey{
+                0x1d, 0x00, 0x05, 0x07, 0x09, 0x0a, 0x16, 0x02, 0x08, 0x06, 0x11, 0x0c, 0x1f, 0x12, 0x10, 0x18,
+                0x01, 0x19, 0x04, 0x0b, 0x0d, 0x15, 0x0e, 0x17, 0x1a, 0x1b, 0x14, 0x1e, 0x03, 0x13, 0x0f, 0x1c
+        };
+
+        const auto r_id = token.get_identity();
         TEST_ASSERT(r_id);
         if (not r_id) {
             return;
         }
 
         auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
+        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(r_id->id)));
         suppress.restore();
 
         TEST_ASSERT(token.get_identity());
-        auto r_status = token.get_gate_status(gid);
-        TEST_ASSERT(r_status);
-        TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
+        auto r_enrolled = token.is_gate_enrolled(gid);
+        TEST_ASSERT(ok_and<false>(r_enrolled));
 
-        const auto r_enroll_ticket = token.install_enroll_ticket(gid);
-        TEST_ASSERT(r_enroll_ticket);
+        TEST_ASSERT(token.enroll_gate(gid, gkey.derive_app_master_key(r_id->id), *r_id));
 
-        r_status = token.get_gate_status(gid);
-        TEST_ASSERT(r_status);
-        TEST_ASSERT_EQUAL(*r_status, gate_status::enrolled);
-        TEST_ASSERT(ok_and<true>(token.verify_enroll_ticket(gid, *r_enroll_ticket)));
+        r_enrolled = token.is_gate_enrolled(gid);
+        TEST_ASSERT(ok_and<true>(r_enrolled));
 
-        const auto auth_ticket = ticket::generate(0);
-
-        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(token.verify_auth_ticket(gid, auth_ticket));
-        suppress.restore();
-        TEST_ASSERT(token.switch_enroll_to_auth_ticket(gid, *r_enroll_ticket, auth_ticket));
-        suppress.suppress();
-        TEST_ASSERT_FALSE(token.verify_enroll_ticket(gid, *r_enroll_ticket));
-        suppress.restore();
-
-        r_status = token.get_gate_status(gid);
-        TEST_ASSERT(r_status);
-        TEST_ASSERT_EQUAL(*r_status, gate_status::auth_ready);
-
-        TEST_ASSERT(ok_and<true>(token.verify_auth_ticket(gid, auth_ticket)));
-
-        TEST_ASSERT(token.authenticate_legacy(gid, auth_ticket));
+        TEST_ASSERT(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
 
         // Check that it can be authenticated also with a member token with an unknown password
         {
             member_token token_no_root{*instance.tag};
-            TEST_ASSERT(token_no_root.tag().select_application());
-            TEST_ASSERT(token_no_root.authenticate_legacy(gid, auth_ticket));
+            TEST_ASSERT(token_no_root.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
         }
 
         TEST_ASSERT(token.unlock_root());
         TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), gate::id_to_app_id(gid)));
 
-        r_status = token.get_gate_status(gid);
-        TEST_ASSERT(r_status);
-        TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
+        r_enrolled = token.is_gate_enrolled(gid);
+        TEST_ASSERT(ok_and<false>(r_enrolled));
 
         suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(token.authenticate_legacy(gid, auth_ticket));
-    }
-
-    void test_ticket() {
-        TEST_ASSERT(instance.tag != nullptr);
-        if (instance.tag == nullptr) {
-            return;
-        }
-
-        member_token token{*instance.tag};
-
-        const auto r_id = token.get_id();
-        TEST_ASSERT(r_id);
-        if (not r_id) {
-            return;
-        }
-
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(*r_id)));
-        suppress.restore();
-
-        TEST_ASSERT(token.unlock_root());
-
-        const auto aid = desfire::app_id{0x11, 0x12, 0x13};
-        const auto fid = desfire::file_id{0x00};
-        const auto app_master_key = key_type{0x00, desfire::random_oracle{esp_fill_random}};
-
-        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
-        TEST_ASSERT(desfire::fs::create_app(token.tag(), aid, app_master_key, desfire::key_rights{}, 1));
-
-        const auto t = ticket{0x01 /* use key no 1 */};
-
-        TEST_ASSERT(t.install(token.tag(), fid, "foo bar"));
-
-        suppress.suppress();
-        // This should not be readable at this point
-        TEST_ASSERT_FALSE(token.tag().read_data(fid, desfire::trust_card));
-        suppress.restore();
-
-        // Neither with the app master key
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        suppress.suppress();
-        TEST_ASSERT_FALSE(token.tag().read_data(fid, desfire::trust_card));
-        suppress.restore();
-
-        // Nor changeable with the app master key
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        suppress.suppress();
-        TEST_ASSERT_FALSE(token.tag().change_file_settings(fid, {desfire::file_security::none, desfire::access_rights{}}, desfire::trust_card));
-        suppress.restore();
-
-        // Need the to be on the app to be able to verify it
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(ok_and<true>(t.verify(token.tag(), fid, "foo bar")));
-
-        suppress.suppress();
-        // Should not work outside the app
-        TEST_ASSERT(token.unlock_root());
-        suppress.restore();
-        suppress = suppress_log{DESFIRE_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
-        suppress.restore();
-
-        // Should be repeatable if not deleted
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(ok_and<false>(t.verify(token.tag(), fid, "foo bar baz")));
-
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT(t.clear(token.tag(), fid));
-
-        suppress.suppress();
-        TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, app_master_key));
-        TEST_ASSERT_FALSE(t.verify(token.tag(), fid, "foo bar"));
-        suppress.restore();
-
-        TEST_ASSERT(ok_and<false>(desfire::fs::does_file_exist(token.tag(), fid)));
-
-        // Ok delete app
-        TEST_ASSERT(token.unlock_root());
-        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), aid));
+        TEST_ASSERT_FALSE(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
     }
 
     void test_nvs() {
@@ -437,7 +341,6 @@ extern "C" void app_main() {
 
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
         RUN_TEST(ut::test_mad);
-        RUN_TEST(ut::test_ticket);
         RUN_TEST(ut::test_enroll_and_auth);
 
         // Always conclude with a format test so that it leaves the test suite clean
