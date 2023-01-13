@@ -49,7 +49,7 @@ namespace ka::nvs {
 #ifndef CONFIG_NVS_ENCRYPTION
             ESP_LOGE("NVS", "CONFIG_NVS_ENCRYPTION is not enable, cannot use secure features.");
 #else
-            abort();
+            std::abort();
             nvs_sec_cfg_t cfg{};
             esp_err_t err = nvs_flash_read_security_cfg(_part, &cfg);
             if (err == ESP_ERR_NVS_KEYS_NOT_INITIALIZED) {

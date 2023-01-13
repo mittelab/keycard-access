@@ -11,7 +11,6 @@ namespace ka {
     template <class T, std::size_t Size>
     struct tagged_array : public std::array<std::uint8_t, Size> {
         static constexpr std::size_t key_size = Size;
-        using std::array<std::uint8_t, Size>::array;
 
         [[nodiscard]] bool operator==(tagged_array const &other) const;
         [[nodiscard]] bool operator!=(tagged_array const &other) const;
