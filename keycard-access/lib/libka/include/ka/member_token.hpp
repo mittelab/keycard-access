@@ -147,7 +147,7 @@ namespace ka {
          * @param auth_ticket
          * @return
          */
-        [[nodiscard]] r<identity> authenticate(gate_id gid, ticket const &auth_ticket) const;
+        [[nodiscard]] r<identity> authenticate_legacy(gate_id gid, ticket const &auth_ticket) const;
 
         /**
          * @note This does not require a valid root password.

@@ -77,7 +77,7 @@ namespace ka {
         ESP_LOG_BUFFER_HEX_LEVEL("KA", r_id->data(), r_id->size(), ESP_LOG_INFO);
         // Attempt first to authenticate the identity, and, at least, this id
         const ticket auth_ticket{keys().derive_auth_ticket(*r_id, context_data())};
-        auto r_identity = token.authenticate(id(), auth_ticket);
+        auto r_identity = token.authenticate_legacy(id(), auth_ticket);
         if (r_identity) {
             ESP_LOGI("KA", "Authenticated as %s.", r_identity->holder.c_str());
         }

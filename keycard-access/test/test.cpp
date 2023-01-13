@@ -268,13 +268,13 @@ namespace ut {
 
         TEST_ASSERT(ok_and<true>(token.verify_auth_ticket(gid, auth_ticket)));
 
-        TEST_ASSERT(token.authenticate(gid, auth_ticket));
+        TEST_ASSERT(token.authenticate_legacy(gid, auth_ticket));
 
         // Check that it can be authenticated also with a member token with an unknown password
         {
             member_token token_no_root{*instance.tag};
             TEST_ASSERT(token_no_root.tag().select_application());
-            TEST_ASSERT(token_no_root.authenticate(gid, auth_ticket));
+            TEST_ASSERT(token_no_root.authenticate_legacy(gid, auth_ticket));
         }
 
         TEST_ASSERT(token.unlock_root());
@@ -285,7 +285,7 @@ namespace ut {
         TEST_ASSERT_EQUAL(*r_status, gate_status::unknown);
 
         suppress = suppress_log{DESFIRE_DEFAULT_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(token.authenticate(gid, auth_ticket));
+        TEST_ASSERT_FALSE(token.authenticate_legacy(gid, auth_ticket));
     }
 
     void test_ticket() {

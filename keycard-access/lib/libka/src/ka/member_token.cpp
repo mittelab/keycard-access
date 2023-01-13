@@ -172,7 +172,7 @@ namespace ka {
         }
     }
 
-    r<identity> member_token::authenticate(gate_id gid, ticket const &auth_ticket) const {
+    r<identity> member_token::authenticate_legacy(gate_id gid, ticket const &auth_ticket) const {
         TRY(assert_key_number(auth_ticket, 0, "auth"))
         TRY_RESULT(verify_ticket(gate::id_to_app_id(gid), gate_authentication_file, auth_ticket)) {
             if (r->second) {
