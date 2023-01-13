@@ -219,6 +219,9 @@ namespace ka {
     r<identity> member_token::get_identity() const {
         TRY(tag().select_application(mad_aid))
         identity id{};
+        TRY_RESULT(tag().get_info()) {
+            id.id = r->serial_no;
+        }
         TRY_RESULT(tag().read_data(mad_file_card_holder, desfire::cipher_mode::plain)) {
             id.holder = mlab::data_to_string(*r);
         }

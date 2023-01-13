@@ -24,6 +24,7 @@ namespace ka {
         ticket() = default;
         explicit ticket(std::uint8_t key_no);
         inline ticket(key_type key, ticket_salt salt);
+        explicit inline ticket(std::pair<key_type, ticket_salt> key_and_salt);
 
         [[nodiscard]] bool verify_file_content(mlab::bin_data const &content, std::string const &text_to_verify) const;
         [[nodiscard]] mlab::bin_data get_file_content(std::string const &original_text) const;
@@ -80,6 +81,8 @@ namespace ka {
 namespace ka {
 
     ticket::ticket(key_type key, ticket_salt salt) : _key{key}, _salt{salt} {}
+
+    ticket::ticket(std::pair<key_type, ticket_salt> key_and_salt) : _key{key_and_salt.first}, _salt{key_and_salt.second} {}
 
     key_type const &ticket::key() const {
         return _key;
