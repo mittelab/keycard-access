@@ -2,6 +2,7 @@
 // Created by spak on 10/1/22.
 //
 
+#include <ka/desfire_fs.hpp>
 #include <desfire/esp32/cipher_provider.hpp>
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
@@ -37,6 +38,23 @@ namespace ka {
         constexpr auto ka_base_key = "gate-base-key";
 
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
+
+        [[nodiscard]] bool might_be_tampering(desfire::error e) {
+            switch (e) {
+                case desfire::error::authentication_error:
+                    [[fallthrough]];
+                case desfire::error::file_integrity_error:
+                    // Wrong hash
+                    [[fallthrough]];
+                case desfire::error::length_error:
+                    // Wrong hash length
+                    [[fallthrough]];
+                case desfire::error::permission_denied:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }// namespace
 
     static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
@@ -67,59 +85,27 @@ namespace ka {
         return {this->id(), pub_key{keys().raw_pk()}, app_base_key()};
     }
 
-    r<identity> gate::try_authenticate(member_token &token) const {
-        r<token_id> r_id = token.get_id();
-        if (not r_id) {
-            ESP_LOGE("KA", "Unable to obtain token id, %s", desfire::to_string(r_id.error()));
-            return desfire::error::authentication_error;
-        }
-        ESP_LOGI("KA", "Tag declares token id:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", r_id->data(), r_id->size(), ESP_LOG_INFO);
-        // Attempt first to authenticate the identity, and, at least, this id
-        const ticket auth_ticket{keys().derive_auth_ticket(*r_id, context_data())};
-        auto r_identity = token.authenticate_legacy(id(), auth_ticket);
-        if (r_identity) {
-            ESP_LOGI("KA", "Authenticated as %s.", r_identity->holder.c_str());
-        }
-        return r_identity;
-    }
 
-    r<identity> gate::try_complete_enrollment(member_token &token) const {
-        ESP_LOGW("KA", "Not implemented yet");
-        return desfire::error::command_aborted;
-    }
-
-    bool gate::try_process_service_messages(member_token &token) {
-        ESP_LOGW("KA", "Not implemented yet");
-        return true;
-    }
-
-    void gate::interact_with_token(member_token &token) {
-        auto r_identity = try_authenticate(token);
-        auto r_status = token.get_gate_status(id());
-        if (not r_status) {
-            ESP_LOGE("KA", "Unable to get gate status, %s", desfire::to_string(r_status.error()));
-            return;
+    r<> gate::interact_with_token(member_token &token) {
+        TRY_RESULT(token.is_gate_enrolled(id())) {
+            if (not *r) {
+                // Not enrolled, nothing to do.
+                ESP_LOGI("KA", "Not enrolled.");
+                return mlab::result_success;
+            }
         }
-        // Do not accept anything from auth ready tags which do not pass authentication or are broken
-        if (*r_status == gate_status::auth_ready and not r_identity) {
-            ESP_LOGE("KA", "Incorrect claimed identity.");
-            return;
-        } else if (*r_status == gate_status::broken) {
-            ESP_LOGE("KA", "Broken gate status.");
-            return;
-        }
-        // Import service messages if there are any
-        if (not try_process_service_messages(token)) {
-            return;
-        }
-        // Check if the gate has to be enrolled, and we can
-        if (*r_status == gate_status::enrolled) {
-            r_identity = try_complete_enrollment(token);
-        }
-        if (r_identity) {
-            ESP_LOGI("KA", "Authenticated as %s (%s)", r_identity->holder.c_str(), r_identity->publisher.c_str());
-            // TODO Callback.
+        // Should be authenticable
+        TRY_RESULT_AS(token.get_id(), r_id) {
+            const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id));
+            if (r_auth) {
+                ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
+                // TODO Callback;
+                return mlab::result_success;
+            } else if (might_be_tampering(r_auth.error())) {
+                ESP_LOGW("KA", "Authentication error might indicate tampering: %s", desfire::to_string(r_auth.error()));
+                // TODO Callback;
+            }
+            return r_auth.error();
         }
     }
 

@@ -78,13 +78,9 @@ namespace ka {
         [[nodiscard]] static gate load_or_generate();
 
         [[noreturn]] void loop(pn532::controller &controller);
-        void interact_with_token(member_token &token);
+        r<> interact_with_token(member_token &token);
 
     private:
-        [[nodiscard]] r<identity> try_authenticate(member_token &token) const;
-        [[nodiscard]] bool try_process_service_messages(member_token &token);
-        [[nodiscard]] r<identity> try_complete_enrollment(member_token &token) const;
-
         gate_id _id = std::numeric_limits<gate_id>::max();
         std::string _desc;
         key_pair _kp;
