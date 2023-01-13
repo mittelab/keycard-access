@@ -31,7 +31,6 @@ namespace ka {
         };
     }
 
-    static_assert(size_of_array<gate_context_data>::size == crypto_kdf_blake2b_CONTEXTBYTES);
     static_assert(raw_pub_key::array_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_box_SECRETKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_kdf_blake2b_KEYBYTES);
@@ -80,22 +79,6 @@ namespace ka {
             ESP_LOGE("KA", "Unable to derive root key.");
         }
         return token_root_key{0, derived_key_data};
-    }
-
-    std::pair<key_type, ticket_salt> sec_key::derive_auth_ticket(token_id const &id, gate_context_data const &ctx) const {
-        std::array<std::uint8_t, key_type::size + size_of_array<ticket_salt>::size> derived_key_data{};
-        if (0 != crypto_kdf_blake2b_derive_from_key(
-                         derived_key_data.data(), derived_key_data.size(),
-                         pack_token_id(id),
-                         ctx.data(),
-                         raw_sk().data())) {
-            ESP_LOGE("KA", "Unable to derive auth ticket.");
-        }
-        key_type::key_data kd{};
-        ticket_salt salt{};
-        std::copy_n(std::begin(derived_key_data), kd.size(), std::begin(kd));
-        std::copy_n(std::begin(derived_key_data) + kd.size(), salt.size(), std::begin(salt));
-        return {key_type{0, kd}, salt};
     }
 
     key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {

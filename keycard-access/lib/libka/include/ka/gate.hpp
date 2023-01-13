@@ -28,9 +28,9 @@ namespace ka {
     };
 
     struct gate_config {
-        gate_id gate_id{};
+        gate_id id{};
         pub_key gate_pub_key;
-        gate_app_base_key gate_app_base_key{};
+        gate_app_base_key app_base_key{};
     };
 
     class gate {
@@ -66,7 +66,6 @@ namespace ka {
         [[nodiscard]] inline std::string description() const;
         [[nodiscard]] inline gate_id id() const;
         [[nodiscard]] inline gate_app_base_key app_base_key() const;
-        [[nodiscard]] inline gate_context_data context_data() const;
 
         [[nodiscard]] gate_config configure(gate_id id, std::string desc, pub_key prog_pub_key);
 
@@ -86,7 +85,6 @@ namespace ka {
         key_pair _kp;
         pub_key _prog_pk;
         gate_app_base_key _base_key{};
-        gate_context_data _ctx{};
     };
 }// namespace ka
 
@@ -109,10 +107,6 @@ namespace ka {
 
     gate_app_base_key gate::app_base_key() const {
         return _base_key;
-    }
-
-    gate_context_data gate::context_data() const {
-        return _ctx;
     }
 
     constexpr desfire::app_id gate::id_to_app_id(gate_id id) {

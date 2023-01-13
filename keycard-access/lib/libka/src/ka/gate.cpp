@@ -7,24 +7,12 @@
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
-#include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/desfire_pcd.hpp>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
 
 using namespace std::chrono_literals;
-
-namespace mlab {
-    template <std::size_t N>
-    bin_data &operator<<(bin_data &bd, std::array<char, N> const &a) {
-        const auto view = mlab::range(
-                reinterpret_cast<std::uint8_t const *>(a.data()),
-                reinterpret_cast<std::uint8_t const *>(a.data() + a.size())
-        );
-        return bd << view;
-    }
-}
 
 namespace ka {
 
@@ -34,7 +22,6 @@ namespace ka {
         constexpr auto ka_desc = "description";
         constexpr auto ka_gid = "gate-id";
         constexpr auto ka_prog_pk = "programmer-key";
-        constexpr auto ka_ctx = "context-data";
         constexpr auto ka_base_key = "gate-base-key";
 
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
@@ -142,9 +129,8 @@ namespace ka {
         const auto r_desc = ns->set<std::string>(ka_desc, description());
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
-        const auto r_ctx = ns->set<mlab::bin_data>(ka_ctx, mlab::bin_data::chain(context_data()));
         const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key().data()));
-        if (not(r_id and r_desc and r_prog_pk and r_sk and r_ctx and r_base_key)) {
+        if (not(r_id and r_desc and r_prog_pk and r_sk and r_base_key)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");
         }
     }
@@ -175,7 +161,6 @@ namespace ka {
         *this = gate{};
         _kp.generate_random();
         randombytes_buf(_base_key.data(), _base_key.size());
-        randombytes_buf(_ctx.data(), _ctx.size());
     }
 
     bool gate::load(nvs::partition &partition) {
@@ -201,14 +186,6 @@ namespace ka {
             ESP_LOGE("KA", "Invalid programmer key size.");
             return false;
         };
-        auto try_load_context_data = [&](const mlab::bin_data &data) -> bool {
-            if (data.size() == _ctx.size()) {
-                std::copy(std::begin(data), std::end(data), std::begin(_ctx));
-                return true;
-            }
-            ESP_LOGE("KA", "Invalid context data size.");
-            return false;
-        };
         auto try_load_base_key = [&](const mlab::bin_data &data) -> bool {
             if (data.size() == gate_app_base_key::array_size) {
                 std::copy(std::begin(data), std::end(data), std::begin(_base_key));
@@ -226,13 +203,11 @@ namespace ka {
         const auto r_desc = ns->get<std::string>(ka_desc);
         const auto r_prog_pk = ns->get<mlab::bin_data>(ka_prog_pk);
         const auto r_sk = ns->get<mlab::bin_data>(ka_sk);
-        const auto r_ctx = ns->get<mlab::bin_data>(ka_ctx);
         const auto r_base_key = ns->get<mlab::bin_data>(ka_base_key);
-        if (r_id and r_desc and r_prog_pk and r_sk and r_ctx and r_base_key) {
+        if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
             if (
                     try_load_key_pair(*r_sk) and
                     try_load_programmer_key(*r_prog_pk) and
-                    try_load_context_data(*r_ctx) and
                     try_load_base_key(*r_base_key)) {
                 // Load also all the rest
                 _id = *r_id;
@@ -241,7 +216,7 @@ namespace ka {
             } else {
                 ESP_LOGE("KA", "Invalid secret key or programmer key, rejecting stored configuration.");
             }
-        } else if (r_id or r_desc or r_prog_pk or r_sk or r_ctx or r_base_key) {
+        } else if (r_id or r_desc or r_prog_pk or r_sk or r_base_key) {
             ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
         }
         return false;

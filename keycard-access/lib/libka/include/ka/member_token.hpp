@@ -9,8 +9,6 @@
 
 namespace ka {
 
-    class ticket;
-
     /**
      * @note Conventions: methods do perform authentication with the root key_type.
      */
@@ -21,7 +19,6 @@ namespace ka {
         mutable desfire::tag *_tag;
         desfire::any_key _root_key;
 
-        [[nodiscard]] r<identity, bool> verify_ticket(desfire::app_id aid, desfire::file_id fid, ticket const &t) const;
     public:
         /**
          * @brief Application directory app id as required by AN10787 §3.10.
@@ -31,8 +28,7 @@ namespace ka {
         static constexpr desfire::file_id mad_file_card_holder{0x1};
         static constexpr desfire::file_id mad_file_card_publisher{0x2};
 
-        static constexpr desfire::file_id gate_enroll_file{0x00};
-        static constexpr desfire::file_id gate_authentication_file{0x01};
+        static constexpr desfire::file_id gate_authentication_file{0x00};
 
         explicit member_token(desfire::tag &tag);
         member_token(member_token const &) = delete;
@@ -61,6 +57,7 @@ namespace ka {
         [[nodiscard]] r<std::string> get_publisher() const;
         [[nodiscard]] r<identity> get_identity() const;
         [[nodiscard]] r<unsigned> get_mad_version() const;
+        [[nodiscard]] r<token_id> get_id() const;
         /**
          * @}
          */
@@ -105,74 +102,13 @@ namespace ka {
          * @return @ref desfire::error::file_integrity_error for mismatch identity, @ref desfire::error::length_error for tampering with the hash.
          */
         [[nodiscard]] r<identity> authenticate(gate_id gid, gate_app_master_key const &mkey) const;
+
         [[nodiscard]] r<bool> is_gate_enrolled(gate_id gid) const;
 
-        /**
-         * To be run by the programmer. Creates a new app for the gate and installs a ticket on @ref gate_enroll_file,
-         * which certifies for the current @ref identity. The ticket is then returned and should be transmitted securely
-         * to the gate, which can then use it to certify the authenticity of the card and the identity of the holder.
-         * @note This method will wipe the gate app, and requires a valid root password.
-         * @param gid
-         * @param gkey
-         * @return
-         */
-        [[nodiscard]] r<ticket> install_enroll_ticket(gate_id gid);
-
-        /**
-         * To be run by the programmer. Verifies the ticket @p t, which should be the output of  @ref install_enroll_ticket,
-         * and certifies the authenticity of the card and the identity of the holder.
-         * @note This does not require the root password.
-         * @param gid
-         * @param ticket
-         * @return
-         */
-        [[nodiscard]] r<bool> verify_enroll_ticket(gate_id gid, ticket const &enroll_ticket) const;
-
-        /**
-         * To be run by the gate.
-         * @note This method does not require the root password.
-         * @param gid
-         * @param verified_enroll_ticket
-         * @param auth_ticket
-         * @return
-         */
-        r<> switch_enroll_to_auth_ticket(gate_id gid, ticket const &verified_enroll_ticket, ticket const &auth_ticket);
-
-        /**
-         * To be run by the gate. Verifies the ticket @p t, which was previously installed via @ref install_auth_ticket,
-         * and certifies the authenticity of the card and the identity of the holder.
-         * @note This does not require the root password.
-         * @param gid
-         * @param auth_ticket
-         * @return
-         */
-        [[nodiscard]] r<bool> verify_auth_ticket(gate_id gid, ticket const &auth_ticket) const;
-
-        /**
-         * @brief Fast-lane authentication method.
-         * This method is analogous to @ref verify_auth_ticket but will return the identity that was certified.
-         * If the identity cannot be certified, @ref desfire::error::authentication_error will be returned.
-         * @note This does not require the root password.
-         * @param gid
-         * @param auth_ticket
-         * @return
-         */
-        [[nodiscard]] r<identity> authenticate_legacy(gate_id gid, ticket const &auth_ticket) const;
-
-        /**
-         * @note This does not require a valid root password.
-         * @param gid
-         * @return
-         */
-        [[nodiscard]] r<gate_status> get_gate_status(gate_id gid) const;
         /**
           * @}
           */
 
-        /**
-         * @brief The ID of the token, as in @ref desfire::tag::get_version().
-         */
-        [[nodiscard]] r<token_id> get_id() const;
     };
 
 }// namespace ka

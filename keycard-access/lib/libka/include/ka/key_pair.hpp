@@ -46,8 +46,6 @@ namespace ka {
          */
         [[nodiscard]] token_root_key derive_token_root_key(token_id const &id) const;
 
-        [[nodiscard]] std::pair<key_type, ticket_salt> derive_auth_ticket(token_id const &id, gate_context_data const &ctx) const;
-
     protected:
         raw_sec_key _sk{};
     };

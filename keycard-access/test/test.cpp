@@ -6,7 +6,6 @@
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
-#include <ka/ticket.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/desfire_pcd.hpp>
 #include <pn532/esp32/hsu.hpp>
