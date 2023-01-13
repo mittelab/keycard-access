@@ -188,7 +188,7 @@ namespace ka {
         ESP_LOGW("KA", "Generating new gate configuration.");
         *this = gate{};
         _kp.generate_random();
-        _base_key = gate_app_base_key{0, desfire::random_oracle{randombytes_buf}};
+        randombytes_buf(_base_key.data(), _base_key.size());
         randombytes_buf(_ctx.data(), _ctx.size());
     }
 
@@ -224,10 +224,8 @@ namespace ka {
             return false;
         };
         auto try_load_base_key = [&](const mlab::bin_data &data) -> bool {
-            if (data.size() == gate_app_base_key::size) {
-                key_type::key_data kd{};
-                std::copy(std::begin(data), std::end(data), std::begin(kd));
-                _base_key = gate_app_base_key{0, kd};
+            if (data.size() == gate_app_base_key::array_size) {
+                std::copy(std::begin(data), std::end(data), std::begin(_base_key));
                 return true;
             }
             ESP_LOGE("KA", "Invalid gate app base key size.");
