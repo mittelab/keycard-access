@@ -81,7 +81,7 @@ namespace ka {
         TRY(desfire::fs::delete_app_if_exists(tag(), aid));
         TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights));
         TRY(desfire::fs::login_app(tag(), aid, mkey));
-        TRY(desfire::fs::create_ro_free_plain_data_file(tag(), gate_authentication_file, hash_data));
+        TRY(desfire::fs::create_ro_data_file(tag(), gate_authentication_file, hash_data, mkey.key_number()));
         TRY(desfire::fs::logout_app(tag()));
         return mlab::result_success;
     }
@@ -126,10 +126,10 @@ namespace ka {
         // Prepare an app with a random key_type
         TRY_RESULT(desfire::fs::create_app_for_ro(tag(), key_type::cipher, mad_aid, desfire::random_oracle{randombytes_buf})) {
             // Create file for MAD version 3
-            TRY(desfire::fs::create_ro_free_plain_value_file(tag(), mad_file_version, 0x3))
+            TRY(desfire::fs::create_ro_free_value_file(tag(), mad_file_version, 0x3))
             // Create files with holder and publisher
-            TRY(desfire::fs::create_ro_free_plain_data_file(tag(), mad_file_card_holder, bin_holder))
-            TRY(desfire::fs::create_ro_free_plain_data_file(tag(), mad_file_card_publisher, bin_publisher))
+            TRY(desfire::fs::create_ro_free_data_file(tag(), mad_file_card_holder, bin_holder))
+            TRY(desfire::fs::create_ro_free_data_file(tag(), mad_file_card_publisher, bin_publisher))
             // Turn the app into read-only, discard the temporary key_type
             TRY(desfire::fs::make_app_ro(tag(), false))
         }
