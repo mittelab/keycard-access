@@ -81,7 +81,7 @@ namespace ka {
         TRY(desfire::fs::delete_app_if_exists(tag(), aid));
         TRY(desfire::fs::create_app(tag(), aid, mkey, key_rights));
         TRY(desfire::fs::login_app(tag(), aid, mkey));
-        TRY(desfire::fs::create_ro_data_file(tag(), gate_authentication_file, hash_data, mkey.key_number()));
+        TRY(desfire::fs::create_ro_data_file(tag(), gate_authentication_file, hash_data, mkey.key_number(), desfire::file_security::encrypted));
         TRY(desfire::fs::logout_app(tag()));
         return mlab::result_success;
     }
