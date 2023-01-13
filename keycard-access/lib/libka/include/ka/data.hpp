@@ -45,21 +45,6 @@ namespace ka {
     using ticket_salt = std::array<std::uint8_t, 32>;
     using gate_context_data = std::array<char, 8>;
 
-    namespace util {
-        [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
-        /**
-         * Escapes backslashes and newlines (with a backslash in front).
-         */
-        [[nodiscard]] std::string escape(std::string const &text);
-
-        [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
-
-        [[nodiscard]] std::string hex_string(mlab::range<std::uint8_t const *> rg);
-
-        template <std::size_t N>
-        [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
-    }
-
     struct identity {
         token_id id;
         std::string holder;
@@ -77,6 +62,21 @@ namespace ka {
 
     [[nodiscard]] inline bool operator&(gate_status gs1, gate_status gs2);
     [[nodiscard]] inline gate_status operator|(gate_status gs1, gate_status gs2);
+
+    namespace util {
+        [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
+        /**
+         * Escapes backslashes and newlines (with a backslash in front).
+         */
+        [[nodiscard]] std::string escape(std::string const &text);
+
+        [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
+
+        [[nodiscard]] std::string hex_string(mlab::range<std::uint8_t const *> rg);
+
+        template <std::size_t N>
+        [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
+    }
 
 }// namespace ka
 
