@@ -51,9 +51,10 @@ extern "C" void app_main() {
         ESP_LOGE("KA", "Unable to connect to PN532.");
     } else {
         ESP_LOGI("KA", "Performing self-test of the PN532.");
-        if (not controller.diagnose_comm_line()) {
+        if (const auto r_comm = controller.diagnose_comm_line(); not r_comm or not *r_comm) {
             ESP_LOGE("KA", "Failed comm line diagnostics.");
-        } else if (not controller.diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150)) {
+        } else if (const auto r_antenna = controller.diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
+                   not r_antenna or not *r_antenna) {
             ESP_LOGE("KA", "Failed antenna diagnostics.");
         } else {
             ESP_LOGI("KA", "PN532 passed all tests.");
