@@ -51,23 +51,21 @@ namespace ka::nfc {
     pn532_target::pn532_target(std::shared_ptr<pn532::controller> controller)
         : _controller{std::move(controller)} {}
 
-    pn532_target::pn532_target(std::shared_ptr<pn532::controller> controller, std::array<std::uint8_t, 10> nfcid_3t)
-        : _controller{std::move(controller)} {
-        if (_controller != nullptr) {
-            const pn532::mifare_params mp{
-                    .sens_res = {0x04, 0x00},
-                    .nfcid_1t = {nfcid_3t[0], nfcid_3t[1], nfcid_3t[2]},
-                    .sel_res = pn532::bits::sel_res_dep_mask
-            };
-            const pn532::felica_params fp {
-                    .nfcid_2t = {nfcid_3t[3], nfcid_3t[4], nfcid_3t[5], nfcid_3t[6], nfcid_3t[7], nfcid_3t[8]},
-                    .pad = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7},
-                    .syst_code = {0xff, 0xff}
-            };
-            if (const auto r = this->controller().target_init_as_target(false, true, false, mp, fp, nfcid_3t); not r) {
-                ESP_LOGE("PN532", "Failed to initialize as target.");
-            }
+    result<pn532::init_as_target_res> pn532_target::init_as_target(ms timeout, std::array<std::uint8_t, 10> nfcid_3t) {
+        if (_controller == nullptr) {
+            return pn532::channel::error::failure;
         }
+        const pn532::mifare_params mp{
+                .sens_res = {0x04, 0x00},
+                .nfcid_1t = {nfcid_3t[0], nfcid_3t[1], nfcid_3t[2]},
+                .sel_res = pn532::bits::sel_res_dep_mask
+        };
+        const pn532::felica_params fp {
+                .nfcid_2t = {nfcid_3t[3], nfcid_3t[4], nfcid_3t[5], nfcid_3t[6], nfcid_3t[7], nfcid_3t[8]},
+                .pad = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7},
+                .syst_code = {0xff, 0xff}
+        };
+        return controller().target_init_as_target(false, true, false, mp, fp, nfcid_3t, {}, {}, timeout);
     }
 
 }

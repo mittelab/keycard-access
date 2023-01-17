@@ -9,20 +9,23 @@
 namespace ka::nfc {
 
     using ms = std::chrono::milliseconds;
+    namespace {
+        using namespace std::chrono_literals;
+    }
 
     template <class ...Args>
     using result = pn532::controller::result<Args...>;
 
     struct p2p_initiator {
         [[nodiscard]] virtual result<mlab::bin_data> communicate(mlab::bin_data const &data, ms timeout) = 0;
-        [[nodiscard]] virtual result<> goodbye() = 0;
+        virtual result<> goodbye() = 0;
 
         virtual ~p2p_initiator() = default;
     };
 
     struct p2p_target {
         [[nodiscard]] virtual result<mlab::bin_data> receive(ms timeout) = 0;
-        [[nodiscard]] virtual result<> send(mlab::bin_data const &data, ms timeout) = 0;
+        virtual result<> send(mlab::bin_data const &data, ms timeout) = 0;
         virtual ~p2p_target() = default;
     };
 
@@ -41,7 +44,7 @@ namespace ka::nfc {
         [[nodiscard]] inline pn532::controller &controller();
 
         [[nodiscard]] result<mlab::bin_data> communicate(mlab::bin_data const &data, ms timeout) override;
-        [[nodiscard]] result<> goodbye() override;
+        result<> goodbye() override;
     };
 
     class pn532_target : p2p_target {
@@ -51,20 +54,16 @@ namespace ka::nfc {
 
         pn532_target() = default;
         explicit pn532_target(std::shared_ptr<pn532::controller> controller);
-        /**
-         * This will call @ref pn532::controller::target_init_as_target
-         * @param controller
-         * @param nfcid_3t
-         */
-        pn532_target(std::shared_ptr<pn532::controller> controller, std::array<std::uint8_t, 10> nfcid_3t);
         pn532_target(pn532_target const &) = delete;
         pn532_target &operator=(pn532_target const &) = delete;
         pn532_target(pn532_target &&) noexcept = default;
         pn532_target &operator=(pn532_target &&) noexcept = default;
 
+        [[nodiscard]] result<pn532::init_as_target_res> init_as_target(ms timeout = 5s, std::array<std::uint8_t, 10> nfcid_3t = default_nfcid3);
+
         [[nodiscard]] inline pn532::controller &controller();
         [[nodiscard]] result<mlab::bin_data> receive(ms timeout) override;
-        [[nodiscard]] result<> send(mlab::bin_data const &data, ms timeout) override;
+        result<> send(mlab::bin_data const &data, ms timeout) override;
     };
 }
 

@@ -4,8 +4,10 @@
 #include <esp_log.h>
 #include <ka/config.hpp>
 #include <ka/nvs.hpp>
+#include <ka/nfc_p2p.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>
+#include <thread>
 
 using namespace std::chrono_literals;
 
@@ -30,6 +32,42 @@ struct log_responder final : public ka::gate_responder {
     }
 };
 
+void target_loop(std::shared_ptr<pn532::controller> const &pctrl) {
+    ka::nfc::pn532_target comm{pctrl};
+    ESP_LOGI("TARGET", "Activating...");
+    if (const auto r = comm.init_as_target(); r) {
+        ESP_LOGI("TARGET", "Activated. PICC: %d, DEP: %d, %s", r->mode.iso_iec_14443_4_picc, r->mode.dep, pn532::to_string(r->mode.speed));
+    } else {
+        ESP_LOGW("TARGET", "Failed activation.");
+        return;
+    }
+    for (auto r = comm.receive(1s); r; r = comm.receive(1s)) {
+        const std::string cmd = mlab::data_to_string(*r);
+        ESP_LOGI("TARGET", "Received: %s", cmd.c_str());
+        if (cmd == "quit") {
+            comm.send({}, 1s);
+            break;
+        }
+        std::string response = "You typed: \"";
+        response.append(cmd);
+        response.append("\"");
+        comm.send(mlab::data_from_string(response), 1s);
+    }
+    ESP_LOGI("TARGET", "Released.");
+}
+
+void initiator_loop(std::shared_ptr<pn532::controller> const &pctrl) {
+    if (auto r = pctrl->initiator_auto_poll(); r) {
+        for (std::size_t i = 0; i < r->size(); ++i) {
+            ESP_LOGI("PN532", "%u. %s", i + 1, pn532::to_string(r->at(i).type()));
+
+            pctrl->initiator_release(i);
+        }
+    } else {
+        ESP_LOGW("PN532", "Polling failed.");
+    }
+}
+
 extern "C" void app_main() {
     ESP_LOGI("KA", "Loading configuration.");
     auto g = ka::gate::load_or_generate();
@@ -44,25 +82,37 @@ extern "C" void app_main() {
     }
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
-    pn532::controller controller{hsu_chn};
+    auto controller = std::make_shared<pn532::controller>(hsu_chn);
     log_responder responder{};
 
-    if (not hsu_chn.wake() or not controller.sam_configuration(pn532::sam_mode::normal, 1s)) {
+    if (not hsu_chn.wake() or not controller->sam_configuration(pn532::sam_mode::normal, 1s)) {
         ESP_LOGE("KA", "Unable to connect to PN532.");
     } else {
         ESP_LOGI("KA", "Performing self-test of the PN532.");
-        if (const auto r_comm = controller.diagnose_comm_line(); not r_comm or not *r_comm) {
+        if (const auto r_comm = controller->diagnose_comm_line(); not r_comm or not *r_comm) {
             ESP_LOGE("KA", "Failed comm line diagnostics.");
         } else {
-            if (const auto r_antenna = controller.diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
+            if (const auto r_antenna = controller->diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
                 not r_antenna or not *r_antenna) {
                 ESP_LOGW("KA", "Failed antenna diagnostics.");
             } else {
                 ESP_LOGI("KA", "PN532 passed all tests.");
             }
+#if defined(KEYCARD_ACCESS_GATE)
             if (g.is_configured()) {
                 g.loop(controller, responder);
             }
+#elif defined(KEYCARD_ACCESS_TARGET)
+            while (true) {
+                target_loop(controller);
+                std::this_thread::sleep_for(2s);
+            }
+#elif defined(KEYCARD_ACCESS_INITIATOR)
+            while (true) {
+                initiator_loop(controller);
+                std::this_thread::sleep_for(2s);
+            }
+#endif
         }
     }
 
