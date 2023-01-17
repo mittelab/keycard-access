@@ -18,7 +18,7 @@
 namespace ka {
     namespace {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};
-        constexpr unsigned long long pwhash_memlimit = 0x10000;
+        constexpr unsigned long long pwhash_memlimit = 0x2000;
         constexpr unsigned long long pwhash_opslimit = 4;
         constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
 
@@ -134,6 +134,7 @@ namespace ka {
     }
 
     void key_pair::generate_from_pwhash(std::string const &password) {
+        static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
         if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
             password.length() > crypto_pwhash_argon2id_PASSWD_MAX)
         {

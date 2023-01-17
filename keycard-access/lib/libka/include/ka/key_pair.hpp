@@ -71,7 +71,7 @@ namespace ka {
         [[nodiscard]] bool is_valid() const;
 
         void generate_random();
-        [[deprecated("Crashes: https://github.com/espressif/idf-extra-components/issues/125")]] void generate_from_pwhash(std::string const &password);
+        void generate_from_pwhash(std::string const &password);
     };
 
 }// namespace ka
