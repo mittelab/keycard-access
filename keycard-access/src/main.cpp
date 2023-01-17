@@ -99,15 +99,18 @@ extern "C" void app_main() {
                 ESP_LOGI("KA", "PN532 passed all tests.");
             }
 #if defined(KEYCARD_ACCESS_GATE)
+            ESP_LOGI("KA", "Running as GATE.");
             if (g.is_configured()) {
                 g.loop(controller, responder);
             }
 #elif defined(KEYCARD_ACCESS_TARGET)
+            ESP_LOGI("KA", "Running as TARGET.");
             while (true) {
                 target_loop(controller);
                 std::this_thread::sleep_for(2s);
             }
 #elif defined(KEYCARD_ACCESS_INITIATOR)
+            ESP_LOGI("KA", "Running as INITIATOR.");
             while (true) {
                 initiator_loop(controller);
                 std::this_thread::sleep_for(2s);
