@@ -59,8 +59,24 @@ void target_loop(std::shared_ptr<pn532::controller> const &pctrl) {
 void initiator_loop(std::shared_ptr<pn532::controller> const &pctrl) {
     if (auto r = pctrl->initiator_auto_poll(); r) {
         for (std::size_t i = 0; i < r->size(); ++i) {
-            ESP_LOGI("PN532", "%u. %s", i + 1, pn532::to_string(r->at(i).type()));
-
+            if (r->at(i).type() == pn532::target_type::dep_passive_106kbps) {
+                ESP_LOGI("PN532", "Detected DEP passive target, comm is on.");
+                ka::nfc::pn532_initiator comm{pctrl, r->at(i).get<pn532::target_type::dep_passive_106kbps>().logical_index};
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("test"), 1s); r) {
+                    const auto s = mlab::data_to_string(*r_comm);
+                    ESP_LOGI(">>", "%s", s.c_str());
+                }
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("toast"), 1s); r) {
+                    const auto s = mlab::data_to_string(*r_comm);
+                    ESP_LOGI(">>", "%s", s.c_str());
+                }
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("quit"), 1s); r) {
+                    const auto s = mlab::data_to_string(*r_comm);
+                    ESP_LOGI(">>", "%s", s.c_str());
+                }
+                pctrl->initiator_release(i);
+                break;
+            }
             pctrl->initiator_release(i);
         }
     } else {
