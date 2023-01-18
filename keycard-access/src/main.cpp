@@ -117,7 +117,7 @@ extern "C" void app_main() {
 #if defined(KEYCARD_ACCESS_GATE)
             ESP_LOGI("KA", "Running as GATE.");
             if (g.is_configured()) {
-                g.loop(controller, responder);
+                g.loop(*controller, responder);
             }
 #elif defined(KEYCARD_ACCESS_TARGET)
             ESP_LOGI("KA", "Running as TARGET.");
