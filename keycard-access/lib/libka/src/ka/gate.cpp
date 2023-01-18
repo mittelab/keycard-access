@@ -49,15 +49,6 @@ namespace ka {
                     return false;
             }
         }
-
-        [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d) {
-            if (d.size() != token_id::array_size) {
-                ESP_LOGE("KA", "NFC ID should be %d bytes long, not %d.", token_id::array_size, d.size());
-            }
-            token_id id{};
-            std::copy_n(std::begin(d), std::min(token_id::array_size, d.size()), std::begin(id));
-            return id;
-        }
     }// namespace
 
     static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);

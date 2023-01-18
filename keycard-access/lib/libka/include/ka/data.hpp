@@ -67,6 +67,8 @@ namespace ka {
 
         template <std::size_t N>
         [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
+
+        [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);
     }// namespace util
 
 };// namespace ka
