@@ -15,7 +15,9 @@ namespace ka::nfc {
         if (_controller == nullptr) {
             return pn532::channel::error::failure;
         }
+        ESP_LOG_BUFFER_HEX_LEVEL(">>>", data.data(), data.size(), ESP_LOG_DEBUG);
         if (auto r = _controller->initiator_data_exchange(_idx, data, timeout); r) {
+            ESP_LOG_BUFFER_HEX_LEVEL("<<<", r->second.data(), r->second.size(), ESP_LOG_DEBUG);
             return std::move(r->second);
         } else {
             return r.error();
@@ -27,6 +29,7 @@ namespace ka::nfc {
             return pn532::channel::error::failure;
         }
         if (auto r = _controller->target_get_data(timeout); r) {
+            ESP_LOG_BUFFER_HEX_LEVEL("<<<", r->second.data(), r->second.size(), ESP_LOG_DEBUG);
             return std::move(r->second);
         } else {
             return r.error();
@@ -37,6 +40,7 @@ namespace ka::nfc {
         if (_controller == nullptr) {
             return pn532::channel::error::failure;
         }
+        ESP_LOG_BUFFER_HEX_LEVEL(">>>", data.data(), data.size(), ESP_LOG_DEBUG);
         if (const auto r = _controller->target_set_data(data, timeout); not r) {
             return r.error();
         }
@@ -115,6 +119,8 @@ namespace ka::nfc {
         crypto_secretstream_xchacha20poly1305_init_pull(&_rx, initiator_header.data(), rx.data());
         // Send our header
         if (const auto r = _raw_layer->send(mlab::bin_data::chain(_hdr), rt.remaining()); r) {
+            ESP_LOG_BUFFER_HEX_LEVEL("RX KEY", rx.data(), 32, ESP_LOG_DEBUG);
+            ESP_LOG_BUFFER_HEX_LEVEL("TX KEY", tx.data(), 32, ESP_LOG_DEBUG);
             _did_handshake = true;
             return mlab::result_success;
         } else {
@@ -143,7 +149,7 @@ namespace ka::nfc {
             std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(target_pub_key));
         }
         // Derive the keys
-        if (0 != crypto_kx_client_session_keys(
+        if (0 != crypto_kx_server_session_keys(
                          rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), target_pub_key.data()))
         {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
@@ -161,6 +167,8 @@ namespace ka::nfc {
         // Can now set up rx
         crypto_secretstream_xchacha20poly1305_init_pull(&_rx, target_header.data(), rx.data());
         _did_handshake = true;
+        ESP_LOG_BUFFER_HEX_LEVEL("RX KEY", rx.data(), 32, ESP_LOG_DEBUG);
+        ESP_LOG_BUFFER_HEX_LEVEL("TX KEY", tx.data(), 32, ESP_LOG_DEBUG);
         return mlab::result_success;
     }
 
