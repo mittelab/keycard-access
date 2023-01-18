@@ -32,15 +32,17 @@ struct log_responder final : public ka::gate_responder {
     }
 };
 
-void target_loop(std::shared_ptr<pn532::controller> const &pctrl) {
-    ka::nfc::pn532_target comm{pctrl};
+void target_loop(pn532::controller &controller) {
+    ka::key_pair kp{ka::randomize};
+    ka::nfc::pn532_target raw_comm{controller};
     ESP_LOGI("TARGET", "Activating...");
-    if (const auto r = comm.init_as_target(); r) {
+    if (const auto r = raw_comm.init_as_target(); r) {
         ESP_LOGI("TARGET", "Activated. PICC: %d, DEP: %d, %s", r->mode.iso_iec_14443_4_picc, r->mode.dep, pn532::to_string(r->mode.speed));
     } else {
         ESP_LOGW("TARGET", "Failed activation.");
         return;
     }
+    ka::nfc::secure_target comm{raw_comm, kp};
     for (auto r = comm.receive(1s); r; r = comm.receive(1s)) {
         const std::string cmd = mlab::data_to_string(*r);
         ESP_LOGI("TARGET", "Received: %s", cmd.c_str());
@@ -56,28 +58,31 @@ void target_loop(std::shared_ptr<pn532::controller> const &pctrl) {
     ESP_LOGI("TARGET", "Released.");
 }
 
-void initiator_loop(std::shared_ptr<pn532::controller> const &pctrl) {
-    if (auto r = pctrl->initiator_auto_poll(); r) {
+void initiator_loop(pn532::controller &controller) {
+    ka::key_pair kp{ka::randomize};
+    if (auto r = controller.initiator_auto_poll(); r) {
         for (std::size_t i = 0; i < r->size(); ++i) {
             if (r->at(i).type() == pn532::target_type::dep_passive_106kbps) {
                 ESP_LOGI("PN532", "Detected DEP passive target, comm is on.");
-                ka::nfc::pn532_initiator comm{pctrl, r->at(i).get<pn532::target_type::dep_passive_106kbps>().logical_index};
-                if (const auto r_comm = comm.communicate(mlab::data_from_string("test"), 1s); r) {
+                const auto log_idx = r->at(i).get<pn532::target_type::dep_passive_106kbps>().logical_index;
+                ka::nfc::pn532_initiator raw_comm{controller, log_idx};
+                ka::nfc::secure_initiator comm{raw_comm, kp};
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("test"), 1s); r_comm) {
                     const auto s = mlab::data_to_string(*r_comm);
                     ESP_LOGI(">>", "%s", s.c_str());
                 }
-                if (const auto r_comm = comm.communicate(mlab::data_from_string("toast"), 1s); r) {
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("toast"), 1s); r_comm) {
                     const auto s = mlab::data_to_string(*r_comm);
                     ESP_LOGI(">>", "%s", s.c_str());
                 }
-                if (const auto r_comm = comm.communicate(mlab::data_from_string("quit"), 1s); r) {
+                if (const auto r_comm = comm.communicate(mlab::data_from_string("quit"), 1s); r_comm) {
                     const auto s = mlab::data_to_string(*r_comm);
                     ESP_LOGI(">>", "%s", s.c_str());
                 }
-                pctrl->initiator_release(i);
+                controller.initiator_release(i);
                 break;
             }
-            pctrl->initiator_release(i);
+            controller.initiator_release(i);
         }
     } else {
         ESP_LOGW("PN532", "Polling failed.");
@@ -98,17 +103,17 @@ extern "C" void app_main() {
     }
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
-    auto controller = std::make_shared<pn532::controller>(hsu_chn);
+    pn532::controller controller{hsu_chn};
     log_responder responder{};
 
-    if (not hsu_chn.wake() or not controller->sam_configuration(pn532::sam_mode::normal, 1s)) {
+    if (not hsu_chn.wake() or not controller.sam_configuration(pn532::sam_mode::normal, 1s)) {
         ESP_LOGE("KA", "Unable to connect to PN532.");
     } else {
         ESP_LOGI("KA", "Performing self-test of the PN532.");
-        if (const auto r_comm = controller->diagnose_comm_line(); not r_comm or not *r_comm) {
+        if (const auto r_comm = controller.diagnose_comm_line(); not r_comm or not *r_comm) {
             ESP_LOGE("KA", "Failed comm line diagnostics.");
         } else {
-            if (const auto r_antenna = controller->diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
+            if (const auto r_antenna = controller.diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
                 not r_antenna or not *r_antenna) {
                 ESP_LOGW("KA", "Failed antenna diagnostics.");
             } else {
@@ -117,7 +122,7 @@ extern "C" void app_main() {
 #if defined(KEYCARD_ACCESS_GATE)
             ESP_LOGI("KA", "Running as GATE.");
             if (g.is_configured()) {
-                g.loop(*controller, responder);
+                g.loop(controller, responder);
             }
 #elif defined(KEYCARD_ACCESS_TARGET)
             ESP_LOGI("KA", "Running as TARGET.");
