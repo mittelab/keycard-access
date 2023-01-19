@@ -129,7 +129,7 @@ namespace ka {
                 ESP_LOGI("KA", "Found passive target with NFC ID:");
                 ESP_LOG_BUFFER_HEX_LEVEL("KA", current_target.data(), current_target.size(), ESP_LOG_INFO);
                 responder.on_approach(current_target);
-                auto tag = desfire::tag::make<cipher_provider>(pn532::desfire_pcd{controller, r->front().logical_index});
+                auto tag = desfire::tag::make<cipher_provider>(controller, r->front().logical_index);
                 member_token token{tag};
                 try_authenticate(token, responder);
                 responder.on_interaction_complete(current_target);

@@ -327,8 +327,7 @@ extern "C" void app_main() {
                 ESP_LOG_BUFFER_HEX_LEVEL("TEST", target.info.nfcid.data(), target.info.nfcid.size(), ESP_LOG_INFO);
                 std::copy_n(std::begin(target.info.nfcid), ut::instance.nfc_id.size(), std::begin(ut::instance.nfc_id));
                 ut::instance.tag = std::make_unique<desfire::tag>(
-                        desfire::tag::make<desfire::esp32::default_cipher_provider>(
-                                pn532::desfire_pcd{*ut::instance.controller, target.logical_index}));
+                        desfire::tag::make<desfire::esp32::default_cipher_provider>(*ut::instance.controller, target.logical_index));
                 // We only need one
                 break;
             }
