@@ -11,69 +11,10 @@ namespace ka::nfc {
     static_assert(raw_pub_key::array_size == crypto_kx_PUBLICKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_kx_SECRETKEYBYTES);
 
-    result<mlab::bin_data> pn532_initiator::communicate(mlab::bin_data const &data, ms timeout) {
-        if (_controller == nullptr) {
-            return pn532::channel::error::failure;
-        }
-        ESP_LOG_BUFFER_HEX_LEVEL(">>>", data.data(), data.size(), ESP_LOG_DEBUG);
-        if (auto r = _controller->initiator_data_exchange(_idx, data, timeout); r) {
-            ESP_LOG_BUFFER_HEX_LEVEL("<<<", r->second.data(), r->second.size(), ESP_LOG_DEBUG);
-            return std::move(r->second);
-        } else {
-            return r.error();
-        }
-    }
-
-    [[nodiscard]] result<mlab::bin_data> pn532_target::receive(ms timeout) {
-        if (_controller == nullptr) {
-            return pn532::channel::error::failure;
-        }
-        if (auto r = _controller->target_get_data(timeout); r) {
-            ESP_LOG_BUFFER_HEX_LEVEL("<<<", r->second.data(), r->second.size(), ESP_LOG_DEBUG);
-            return std::move(r->second);
-        } else {
-            return r.error();
-        }
-    }
-
-    [[nodiscard]] result<> pn532_target::send(mlab::bin_data const &data, ms timeout) {
-        if (_controller == nullptr) {
-            return pn532::channel::error::failure;
-        }
-        ESP_LOG_BUFFER_HEX_LEVEL(">>>", data.data(), data.size(), ESP_LOG_DEBUG);
-        if (const auto r = _controller->target_set_data(data, timeout); not r) {
-            return r.error();
-        }
-        return mlab::result_success;
-    }
-
-    pn532_initiator::pn532_initiator(pn532::controller &controller, std::uint8_t log_idx)
-        : _controller{&controller}, _idx{log_idx} {}
-
-    pn532_target::pn532_target(pn532::controller &controller)
-        : _controller{&controller} {}
-
-    result<pn532::init_as_target_res> pn532_target::init_as_target(ms timeout, std::array<std::uint8_t, 10> nfcid_3t) {
-        if (_controller == nullptr) {
-            return pn532::channel::error::failure;
-        }
-        const pn532::mifare_params mp{
-                .sens_res = {0x04, 0x00},
-                .nfcid_1t = {nfcid_3t[0], nfcid_3t[1], nfcid_3t[2]},
-                .sel_res = pn532::bits::sel_res_dep_mask
-        };
-        const pn532::felica_params fp {
-                .nfcid_2t = {nfcid_3t[3], nfcid_3t[4], nfcid_3t[5], nfcid_3t[6], nfcid_3t[7], nfcid_3t[8]},
-                .pad = {0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7},
-                .syst_code = {0xff, 0xff}
-        };
-        return _controller->target_init_as_target(false, true, false, mp, fp, nfcid_3t, {}, {}, timeout);
-    }
-
-    secure_initiator::secure_initiator(p2p_initiator &raw_layer, key_pair kp)
+    secure_initiator::secure_initiator(initiator &raw_layer, key_pair kp)
         : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
-    secure_target::secure_target(p2p_target &raw_layer, key_pair kp)
+    secure_target::secure_target(target &raw_layer, key_pair kp)
         : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
     result<> secure_target::ensure_handshake(ms timeout) {
