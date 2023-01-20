@@ -71,7 +71,7 @@ void initiator_loop(pn532::controller &controller) {
 
 extern "C" void app_main() {
     ESP_LOGI("KA", "Loading configuration.");
-    auto g = ka::gate::load_or_generate();
+    auto g = ka::gate::config_load_or_generate();
     ESP_LOGI("KA", "Device public key:");
     ESP_LOG_BUFFER_HEX_LEVEL("KA", g.keys().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
     if (not g.is_configured()) {

@@ -70,7 +70,7 @@ namespace ka {
 
     gate_config gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
         ESP_LOGI("KA", "Configuring gate.");
-        generate();
+        regenerate_keys();
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
@@ -143,7 +143,7 @@ namespace ka {
         ESP_LOGV("GATE", "Scan failed with error: %s", pn532::to_string(err));
     }
 
-    void gate::store(nvs::partition &partition) const {
+    void gate::config_store(nvs::partition &partition) const {
         ESP_LOGW("KA", "Saving gate configuration.");
         auto ns = partition.open_namespc(ka_namespc);
         if (ns == nullptr) {
@@ -155,70 +155,53 @@ namespace ka {
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
         const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key().data()));
-        if (not(r_id and r_desc and r_prog_pk and r_sk and r_base_key)) {
+        const auto r_commit = ns->commit();
+        if (not (r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");
         }
     }
 
-    gate gate::load_or_generate(nvs::partition &partition) {
+    gate gate::config_load_or_generate(nvs::partition &partition) {
         gate g{};
-        if (not g.load(partition)) {
-            g.generate();
-            g.store(partition);
+        if (not g.config_load(partition)) {
+            g.regenerate_keys();
+            g.config_store(partition);
         }
         return g;
     }
 
-    gate gate::load_or_generate() {
+    gate gate::config_load_or_generate() {
         nvs::nvs nvs{};
         auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, false);
         if (partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
             gate g{};
-            g.generate();
+            g.regenerate_keys();
             return g;
         }
-        return load_or_generate(*partition);
+        return config_load_or_generate(*partition);
     }
 
-    void gate::generate() {
+    void gate::regenerate_keys() {
         ESP_LOGW("KA", "Generating new gate configuration.");
         *this = gate{};
         _kp.generate_random();
         randombytes_buf(_base_key.data(), _base_key.size());
     }
 
-    bool gate::load(nvs::partition &partition) {
-        auto try_load_key_pair = [&](mlab::bin_data const &data) -> bool {
-            if (data.size() == raw_sec_key::array_size) {
-                // Attempt at reading
-                ka::key_pair kp{data.data_view()};
-                if (kp.is_valid()) {
-                    _kp = kp;
-                    return true;
-                }
-                ESP_LOGE("KA", "Invalid secret key.");
-            } else {
-                ESP_LOGE("KA", "Invalid secret key size.");
+
+    namespace {
+        [[nodiscard]] nvs::r<mlab::bin_data> assert_size(nvs::r<mlab::bin_data> r_data, std::size_t size, const char *item) {
+            if (r_data and r_data->size() != size) {
+                ESP_LOGE("KA", "Invalid %s size %d, should be %d.", item, r_data->size(), size);
+                // Reject the result
+                r_data = nvs::error::invalid_length;
             }
-            return false;
-        };
-        auto try_load_programmer_key = [&](const mlab::bin_data &data) -> bool {
-            if (data.size() == raw_pub_key::array_size) {
-                _prog_pk = pub_key{data.data_view()};
-                return true;
-            }
-            ESP_LOGE("KA", "Invalid programmer key size.");
-            return false;
-        };
-        auto try_load_base_key = [&](const mlab::bin_data &data) -> bool {
-            if (data.size() == gate_app_base_key::array_size) {
-                std::copy(std::begin(data), std::end(data), std::begin(_base_key));
-                return true;
-            }
-            ESP_LOGE("KA", "Invalid gate app base key size.");
-            return false;
-        };
+            return r_data;
+        }
+    }
+
+    bool gate::config_load(nvs::partition &partition) {
         auto ns = partition.open_namespc(ka_namespc);
         if (ns == nullptr) {
             return false;
@@ -226,20 +209,19 @@ namespace ka {
         ESP_LOGW("KA", "Loading gate configuration.");
         const auto r_id = ns->get<gate_id>(ka_gid);
         const auto r_desc = ns->get<std::string>(ka_desc);
-        const auto r_prog_pk = ns->get<mlab::bin_data>(ka_prog_pk);
-        const auto r_sk = ns->get<mlab::bin_data>(ka_sk);
-        const auto r_base_key = ns->get<mlab::bin_data>(ka_base_key);
+        const auto r_prog_pk = assert_size(ns->get<mlab::bin_data>(ka_prog_pk), raw_pub_key::array_size, "programmer key");
+        const auto r_sk = assert_size(ns->get<mlab::bin_data>(ka_sk), raw_sec_key::array_size, "secret key");
+        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_app_base_key::array_size, "gate app base key");
         if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
-            if (
-                    try_load_key_pair(*r_sk) and
-                    try_load_programmer_key(*r_prog_pk) and
-                    try_load_base_key(*r_base_key)) {
-                // Load also all the rest
-                _id = *r_id;
-                _desc = *r_desc;
-                return true;
+            _id = *r_id;
+            _desc = *r_desc;
+            _kp = key_pair{r_sk->data_view()};
+            _prog_pk = pub_key{r_prog_pk->data_view()};
+            std::copy(std::begin(*r_base_key), std::end(*r_base_key), std::begin(_base_key));
+            if (not _kp.is_valid()) {
+                ESP_LOGE("KA", "Invalid secret key, rejecting stored configuration.");
             } else {
-                ESP_LOGE("KA", "Invalid secret key or programmer key, rejecting stored configuration.");
+                return true;
             }
         } else if (r_id or r_desc or r_prog_pk or r_sk or r_base_key) {
             ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
@@ -247,14 +229,14 @@ namespace ka {
         return false;
     }
 
-    void gate::clear(nvs::partition &partition) {
+    void gate::config_clear(nvs::partition &partition) {
         auto ns = partition.open_namespc(ka_namespc);
         if (ns == nullptr) {
             ESP_LOGE("KA", "Unable to create or access NVS namespace.");
             return;
         }
-        if (not ns->clear()) {
-            ESP_LOGE("KA", "Unable to clear configuration.");
+        if (not ns->clear() or not ns->commit()) {
+            ESP_LOGE("KA", "Unable to config_clear configuration.");
         } else {
             ESP_LOGW("KA", "Cleared configuration.");
         }
