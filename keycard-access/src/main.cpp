@@ -1,9 +1,9 @@
-#include "desfire/tag_responder.hpp"
+#include <desfire/tag_responder.hpp>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <ka/config.hpp>
-#include <ka/member_token.hpp>
+#include <ka/gate.hpp>
 #include <ka/nfc_p2p.hpp>
 #include <ka/nvs.hpp>
 #include <pn532/controller.hpp>
@@ -11,27 +11,6 @@
 #include <thread>
 
 using namespace std::chrono_literals;
-
-struct log_responder final : public ka::gate_responder {
-    void on_approach(ka::token_id const &id) override {
-        ESP_LOGI("RESP", "on_approach");
-    }
-    void on_authentication_begin(ka::token_id const &id) override {
-        ESP_LOGI("RESP", "on_authentication_begin");
-    }
-    void on_authentication_success(ka::identity const &id) override {
-        ESP_LOGI("RESP", "on_authentication_success");
-    }
-    void on_authentication_fail(ka::token_id const &id, desfire::error auth_error, ka::r<ka::identity> const &unverified_id, bool might_be_tampering) override {
-        ESP_LOGI("RESP", "on_authentication_fail");
-    }
-    void on_interaction_complete(ka::token_id const &id) override {
-        ESP_LOGI("RESP", "on_interaction_complete");
-    }
-    void on_removal(ka::token_id const &id) override {
-        ESP_LOGI("RESP", "on_removal");
-    }
-};
 
 void target_loop(pn532::controller &controller) {
     ka::key_pair kp{ka::randomize};
@@ -105,41 +84,21 @@ extern "C" void app_main() {
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
-    log_responder responder{};
-
-    if (not hsu_chn.wake() or not controller.sam_configuration(pn532::sam_mode::normal, 1s)) {
-        ESP_LOGE("KA", "Unable to connect to PN532.");
-    } else {
-        ESP_LOGI("KA", "Performing self-test of the PN532.");
-        if (const auto r_comm = controller.diagnose_comm_line(); not r_comm or not *r_comm) {
-            ESP_LOGE("KA", "Failed comm line diagnostics.");
-        } else {
-            if (const auto r_antenna = controller.diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150);
-                not r_antenna or not *r_antenna) {
-                ESP_LOGW("KA", "Failed antenna diagnostics.");
-            } else {
-                ESP_LOGI("KA", "PN532 passed all tests.");
-            }
+    pn532::scanner scanner{controller};
 #if defined(KEYCARD_ACCESS_GATE)
-            ESP_LOGI("KA", "Running as GATE.");
-            if (g.is_configured()) {
-                g.loop(controller, responder);
-            }
-#elif defined(KEYCARD_ACCESS_TARGET)
-            ESP_LOGI("KA", "Running as TARGET.");
-            while (true) {
-                target_loop(controller);
-                std::this_thread::sleep_for(2s);
-            }
+    ka::gate_responder responder{g};
+    scanner.loop(responder);
+#else
+    if (scanner.init_and_test_controller()) {
+        while (true) {
+#if defined(KEYCARD_ACCESS_TARGET)
+            target_loop(controller);
 #elif defined(KEYCARD_ACCESS_INITIATOR)
-            ESP_LOGI("KA", "Running as INITIATOR.");
-            while (true) {
-                initiator_loop(controller);
-                std::this_thread::sleep_for(2s);
-            }
+            initiator_loop(controller);
 #endif
+            std::this_thread::sleep_for(2s);
         }
     }
-
+#endif
     vTaskSuspend(nullptr);
 }

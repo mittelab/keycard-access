@@ -4,6 +4,7 @@
 
 #include <desfire/esp32/utils.hpp>
 #include <desfire/kdf.hpp>
+#include <ka/gate.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/member_token.hpp>
 #include <sodium/randombytes.h>
@@ -11,6 +12,11 @@
 namespace ka {
 
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
+
+    pn532::post_interaction member_token_responder::interact(desfire::tag &tag) {
+        member_token token{tag};
+        return interact_token(token);
+    }
 
     r<token_id> member_token::get_id() const {
         TRY(tag().select_application())

@@ -83,11 +83,10 @@ namespace ka {
     }
 
 
-    void gate::try_authenticate(member_token &token, gate_responder &responder) const {
+    void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
         if (const auto r = token.is_gate_enrolled(id()); r and *r) {
             // We should be able to get the id
             if (const auto r_id = token.get_id(); r_id) {
-                responder.on_authentication_begin(*r_id);
                 if (const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id)); r_auth) {
                     ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
                     responder.on_authentication_success(*r_auth);
@@ -106,39 +105,42 @@ namespace ka {
         }
     }
 
-    void gate::loop(pn532::controller &controller, gate_responder &responder) const {
-        using cipher_provider = desfire::esp32::default_cipher_provider;
-        bool wait_for_removal = false;
-        token_id last_target{};
-        while (true) {
-            // If we are waiting for removal, be fast.
-            auto suppress = desfire::esp32::suppress_log{ESP_LOG_ERROR, {PN532_TAG}};
-            const auto r = controller.initiator_list_passive_kbps106_typea(1, wait_for_removal ? 500ms : 10s);
-            suppress.restore();
-            if (not r or r->empty()) {
-                if (wait_for_removal) {
-                    // Card was removed
-                    wait_for_removal = false;
-                    responder.on_removal(last_target);
-                    last_target = {};
-                }
-                continue;
-            }
-            const token_id current_target = id_from_nfc_id(r->front().info.nfcid);
-            if (not wait_for_removal or last_target != current_target) {
-                ESP_LOGI("KA", "Found passive target with NFC ID:");
-                ESP_LOG_BUFFER_HEX_LEVEL("KA", current_target.data(), current_target.size(), ESP_LOG_INFO);
-                responder.on_approach(current_target);
-                auto tag = desfire::tag::make<cipher_provider>(controller, r->front().logical_index);
-                member_token token{tag};
-                try_authenticate(token, responder);
-                responder.on_interaction_complete(current_target);
-            }
-            // Now we will poll every 500ms to see when the release this card
-            wait_for_removal = true;
-            last_target = current_target;
-            controller.initiator_release(r->front().logical_index);
+    pn532::post_interaction gate_responder::interact_token(member_token &token) {
+        if (_g.is_configured()) {
+            _g.try_authenticate(token, *this);
         }
+        return pn532::post_interaction::reject;
+    }
+
+    void gate_responder::on_authentication_success(identity const &id) {
+        const auto s_id = util::hex_string(id.id);
+        ESP_LOGI("GATE", "Authenticated as %s via %s.", id.holder.c_str(), s_id.c_str());
+    }
+    void gate_responder::on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {
+        const auto s_id = util::hex_string(id);
+        if (unverified_id) {
+            ESP_LOGE("GATE", "Authentication failed (%s): token %s claims to be %s%s.",
+                     desfire::to_string(auth_error), s_id.c_str(), unverified_id->holder.c_str(),
+                     (might_be_tampering ? " (might be tampering)." : "."));
+        } else {
+            ESP_LOGE("GATE", "Authentication failed (%s) on token %s%s.",
+                     desfire::to_string(auth_error), s_id.c_str(), (might_be_tampering ? " (might be tampering)." : "."));
+        }
+    }
+    void gate_responder::on_activation(pn532::scanner &, pn532::scanned_target const &target) {
+        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        ESP_LOGI("GATE", "Activated NFC target %s", s_id.c_str());
+    }
+    void gate_responder::on_release(pn532::scanner &, pn532::scanned_target const &target) {
+        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        ESP_LOGI("GATE", "Released NFC target %s", s_id.c_str());
+    }
+    void gate_responder::on_leaving_rf(pn532::scanner &, pn532::scanned_target const &target) {
+        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        ESP_LOGI("GATE", "NFC target %s has left the RF field.", s_id.c_str());
+    }
+    void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel::error err) {
+        ESP_LOGV("GATE", "Scan failed with error: %s", pn532::to_string(err));
     }
 
     void gate::store(nvs::partition &partition) const {

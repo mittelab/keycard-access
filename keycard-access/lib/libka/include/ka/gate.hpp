@@ -5,6 +5,7 @@
 #ifndef KEYCARDACCESS_GATE_HPP
 #define KEYCARDACCESS_GATE_HPP
 
+#include <ka/member_token.hpp>
 #include <ka/data.hpp>
 #include <cstdint>
 #include <desfire/data.hpp>
@@ -19,7 +20,7 @@ namespace ka {
         class partition;
     }
 
-    class member_token;
+    class gate;
 
     struct gate_app_base_key_tag {};
 
@@ -33,15 +34,42 @@ namespace ka {
         gate_app_base_key app_base_key{};
     };
 
-    struct gate_responder {
-        virtual void on_approach(token_id const &id) {}
-        virtual void on_authentication_begin(token_id const &id) {}
+    /**
+     * @brief Class that reacts to authentication attempts.
+     */
+    struct gate_auth_responder {
         virtual void on_authentication_success(identity const &id) {}
         virtual void on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {}
-        virtual void on_interaction_complete(token_id const &id) {}
-        virtual void on_removal(token_id const &id) {}
 
-        ~gate_responder() = default;
+        virtual ~gate_auth_responder() = default;
+    };
+
+    /**
+     * @brief Specialization of @ref member_token_responder and @ref gate_auth_responder which simply calls @ref gate::try_authenticate.
+     * @note Remember to mark any subclass as `final`.
+     */
+    class gate_responder : public virtual member_token_responder, public virtual gate_auth_responder {
+        gate &_g;
+    public:
+        explicit gate_responder(gate &g) : _g{g} {}
+
+        /**
+         * @addtogroup Default responder method implementations
+         * These methods are implemented only so that who sees this header can glance over all available events.
+         * The default implementation simply logs with the prefix "GATE".
+         * @{
+         */
+        void on_authentication_success(identity const &id) override;
+        void on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) override;
+        void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override;
+        void on_release(pn532::scanner &scanner, pn532::scanned_target const &target) override;
+        void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override;
+        void on_failed_scan(pn532::scanner &scanner, pn532::channel::error err) override;
+        /**
+         * @}
+         */
+
+        pn532::post_interaction interact_token(member_token &token) override;
     };
 
     class gate {
@@ -87,8 +115,7 @@ namespace ka {
         [[nodiscard]] static gate load_or_generate(nvs::partition &partition);
         [[nodiscard]] static gate load_or_generate();
 
-        [[noreturn]] void loop(pn532::controller &controller, gate_responder &responder) const;
-        void try_authenticate(member_token &token, gate_responder &responder) const;
+        void try_authenticate(member_token &token, gate_auth_responder &responder) const;
 
     private:
         gate_id _id = std::numeric_limits<gate_id>::max();

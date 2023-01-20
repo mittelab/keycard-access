@@ -5,9 +5,22 @@
 #ifndef KEYCARDACCESS_MEMBER_TOKEN_HPP
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
-#include <ka/gate.hpp>
+#include <ka/data.hpp>
+#include <desfire/tag_responder.hpp>
+#include <desfire/esp32/cipher_provider.hpp>
 
 namespace ka {
+
+    class member_token;
+
+    /**
+     * @brief Specialization of a token responder which casts a @ref desfire::tag into a @ref member_token
+     */
+    struct member_token_responder : public virtual desfire::tag_responder<desfire::esp32::default_cipher_provider> {
+        pn532::post_interaction interact(desfire::tag &tag) override;
+
+        virtual pn532::post_interaction interact_token(member_token &token) = 0;
+    };
 
     /**
      * @note Conventions: methods do perform authentication with the root key_type.
