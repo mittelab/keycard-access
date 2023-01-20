@@ -2,16 +2,16 @@
 // Created by spak on 10/1/22.
 //
 
-#include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/esp32/utils.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
 #include <pn532/controller.hpp>
-#include <pn532/desfire_pcd.hpp>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
+#include <sdkconfig.h>
+
 
 using namespace std::chrono_literals;
 
@@ -25,6 +25,12 @@ namespace ka {
         constexpr auto ka_prog_pk = "programmer-key";
         constexpr auto ka_base_key = "gate-base-key";
 
+
+#ifdef CONFIG_NVS_ENCRYPTION
+        constexpr bool nvs_encrypted = true;
+#else
+        constexpr bool nvs_encrypted = false;
+#endif
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
 
         [[nodiscard]] bool might_be_tampering(desfire::error e) {
@@ -68,9 +74,12 @@ namespace ka {
         return gate_app_master_key{0, derived_key_data};
     }
 
-    gate_config gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
+    void gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
+        if (app_base_key() == gate_app_base_key{} or keys().raw_pk() == raw_pub_key{}) {
+            ESP_LOGE("KA", "Keys have not been generated for this gate! You must re-query the public key.");
+            regenerate_keys();
+        }
         ESP_LOGI("KA", "Configuring gate.");
-        regenerate_keys();
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
@@ -79,7 +88,6 @@ namespace ka {
         ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
         ESP_LOGI("KA", "Programmer public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
-        return {this->id(), pub_key{keys().raw_pk()}, app_base_key()};
     }
 
 
@@ -161,25 +169,58 @@ namespace ka {
         }
     }
 
-    gate gate::config_load_or_generate(nvs::partition &partition) {
-        gate g{};
-        if (not g.config_load(partition)) {
-            g.regenerate_keys();
-            g.config_store(partition);
+    void gate::config_store() const {
+#ifndef CONFIG_NVS_ENCRYPTION
+        ESP_LOGW("KA", "Encryption is disabled!");
+#endif
+        nvs::nvs nvs{};
+        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
+            ESP_LOGE("KA", "NVS partition is not available.");
+        } else {
+            config_store(*partition);
         }
-        return g;
+    }
+    bool gate::config_load() {
+#ifndef CONFIG_NVS_ENCRYPTION
+        ESP_LOGW("KA", "Encryption is disabled!");
+#endif
+        nvs::nvs nvs{};
+        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
+            ESP_LOGE("KA", "NVS partition is not available.");
+            return false;
+        } else {
+            return config_load(*partition);
+        }
+    }
+    void gate::config_clear() {
+#ifndef CONFIG_NVS_ENCRYPTION
+        ESP_LOGW("KA", "Encryption is disabled!");
+#endif
+        nvs::nvs nvs{};
+        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
+            ESP_LOGE("KA", "NVS partition is not available.");
+        } else {
+            config_clear(*partition);
+        }
     }
 
-    gate gate::config_load_or_generate() {
+    gate gate::load_from_config() {
+#ifndef CONFIG_NVS_ENCRYPTION
+        ESP_LOGW("KA", "Encryption is disabled!");
+#endif
         nvs::nvs nvs{};
-        auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, false);
-        if (partition == nullptr) {
+        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
-            gate g{};
-            g.regenerate_keys();
-            return g;
+            return gate{};
+        } else {
+            load_from_config(*partition);
         }
-        return config_load_or_generate(*partition);
+    }
+
+    gate gate::load_from_config(nvs::partition &partition) {
+        gate g{};
+        g.config_load(partition);
+        return g;
     }
 
     void gate::regenerate_keys() {

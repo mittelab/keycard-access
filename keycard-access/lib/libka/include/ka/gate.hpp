@@ -106,14 +106,19 @@ namespace ka {
         [[nodiscard]] inline gate_id id() const;
         [[nodiscard]] inline gate_app_base_key app_base_key() const;
 
-        [[nodiscard]] gate_config configure(gate_id id, std::string desc, pub_key prog_pub_key);
+        void regenerate_keys();
+        void configure(gate_id id, std::string desc, pub_key prog_pub_key);
 
         void config_store(nvs::partition &partition) const;
-        void regenerate_keys();
         [[nodiscard]] bool config_load(nvs::partition &partition);
         static void config_clear(nvs::partition &partition);
-        [[nodiscard]] static gate config_load_or_generate(nvs::partition &partition);
-        [[nodiscard]] static gate config_load_or_generate();
+
+        void config_store() const;
+        [[nodiscard]] bool config_load();
+        static void config_clear();
+
+        [[nodiscard]] static gate load_from_config(nvs::partition &partition);
+        [[nodiscard]] static gate load_from_config();
 
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
 
