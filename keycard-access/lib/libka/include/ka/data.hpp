@@ -75,6 +75,8 @@ namespace mlab {
     [[nodiscard]] mlab::range<std::uint8_t const *> view_from_string(std::string const &s);
     [[nodiscard]] bin_data data_from_string(std::string const &s);
     [[nodiscard]] std::string data_to_string(bin_data const &bd);
+    [[nodiscard]] std::string data_to_string(mlab::range<mlab::bin_data::const_iterator> rg);
+    [[nodiscard]] std::string data_to_string(mlab::range<std::uint8_t const *> rg);
 }// namespace mlab
 
 namespace ka {

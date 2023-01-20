@@ -86,6 +86,21 @@ namespace mlab {
         retval << prealloc(s.size()) << view_from_string(s);
         return retval;
     }
+
+    std::string data_to_string(mlab::range<mlab::bin_data::const_iterator> rg) {
+        const mlab::range<char const *> view{
+                reinterpret_cast<char const *>(rg.data()),
+                reinterpret_cast<char const *>(rg.data() + rg.size())};
+        return std::string{std::begin(view), std::end(view)};
+    }
+
+    std::string data_to_string(mlab::range<std::uint8_t const *> rg) {
+        const mlab::range<char const *> view{
+                reinterpret_cast<char const *>(rg.data()),
+                reinterpret_cast<char const *>(rg.data() + rg.size())};
+        return std::string{std::begin(view), std::end(view)};
+    }
+
     std::string data_to_string(bin_data const &bd) {
         const mlab::range<char const *> view{
                 reinterpret_cast<char const *>(bd.data()),
