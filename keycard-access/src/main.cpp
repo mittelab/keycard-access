@@ -4,8 +4,8 @@
 #include <freertos/task.h>
 #include <ka/config.hpp>
 #include <ka/gate.hpp>
-#include <ka/nfc_p2p.hpp>
 #include <ka/nvs.hpp>
+#include <ka/secure_p2p.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>
 #include <thread>
@@ -16,7 +16,7 @@ void target_loop(pn532::controller &controller) {
     ka::key_pair kp{ka::randomize};
     ka::nfc::pn532_target raw_comm{controller};
     ESP_LOGI("TARGET", "Activating...");
-    if (const auto r = raw_comm.init_as_target(); r) {
+    if (const auto r = raw_comm.init_as_dep_target({}); r) {
         ESP_LOGI("TARGET", "Activated. PICC: %d, DEP: %d, %s", r->mode.iso_iec_14443_4_picc, r->mode.dep, pn532::to_string(r->mode.speed));
     } else {
         ESP_LOGW("TARGET", "Failed activation.");

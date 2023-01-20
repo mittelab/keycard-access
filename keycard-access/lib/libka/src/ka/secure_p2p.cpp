@@ -2,7 +2,7 @@
 // Created by spak on 1/16/23.
 //
 
-#include <ka/nfc_p2p.hpp>
+#include <ka/secure_p2p.hpp>
 #include <sodium/crypto_kx.h>
 
 namespace ka::nfc {

@@ -2,8 +2,8 @@
 // Created by spak on 1/16/23.
 //
 
-#ifndef KEYCARD_ACCESS_NFC_P2P_HPP
-#define KEYCARD_ACCESS_NFC_P2P_HPP
+#ifndef KEYCARD_ACCESS_SECURE_P2P_HPP
+#define KEYCARD_ACCESS_SECURE_P2P_HPP
 
 #include <ka/data.hpp>
 #include <ka/key_pair.hpp>
@@ -70,4 +70,4 @@ namespace ka::nfc {
     };
 }
 
-#endif//KEYCARD_ACCESS_NFC_P2P_HPP
+#endif//KEYCARD_ACCESS_SECURE_P2P_HPP
