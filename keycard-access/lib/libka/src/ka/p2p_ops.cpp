@@ -14,6 +14,7 @@
 namespace ka::p2p {
     namespace bits {
         static constexpr std::uint8_t command_code_configure = 0xcf;
+        static constexpr auto command_ok = "ok";
     }
 
     namespace {
@@ -47,10 +48,58 @@ namespace ka::p2p {
 
                 // Finally:
                 g.configure(new_id, std::move(new_desc), pub_key{comm.peer_pub_key()});
-                TRY(comm.send(mlab::data_from_string("ok"), 1s))
+                TRY(comm.send(mlab::data_from_string(bits::command_ok), 1s))
             }
             return mlab::result_success;
         }
+
+        class configure_gate_responder final : public pn532::scanner_responder {
+            keymaker &_km;
+            std::string _desc;
+            bool _success;
+        public:
+            configure_gate_responder(keymaker &km, std::string desc) : _km{km}, _desc{std::move(desc)}, _success{false} {}
+
+            [[nodiscard]] inline bool success() const { return _success; }
+
+            void get_scan_target_types(pn532::scanner &, std::vector<pn532::target_type> &targets) const override {
+                targets = {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps};
+            }
+
+
+            pn532::p2p::result<> interact_internal(secure_initiator &comm) {
+                TRY(comm.handshake());
+                ESP_LOGI("KA", "Comm opened, peer's public key:");
+                ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
+
+                /**
+                 * @todo Return the ID if needed.
+                 */
+                const auto gid = _km.allocate_gate_id();
+                mlab::bin_data msg{mlab::prealloc(6 + _desc.size())};
+                msg << bits::command_code_configure << mlab::lsb32 << gid << mlab::view_from_string(_desc);
+                TRY_RESULT(comm.communicate(msg, 1s)) {
+                    const std::string response = mlab::data_to_string(*r);
+                    if (response != bits::command_ok) {
+                        ESP_LOGE("KA", "Invalid configure response received.");
+                        return pn532::channel::error::comm_malformed;
+                    }
+                }
+
+                _km.register_gate(gid, comm.peer_pub_key(), _desc);
+                return mlab::result_success;
+            }
+
+            pn532::post_interaction interact(pn532::scanner &scanner, const pn532::scanned_target &target) override {
+                pn532::p2p::pn532_initiator raw_comm{scanner.ctrl(), target.index};
+                secure_initiator comm{raw_comm, _km.keys()};
+                if (interact_internal(comm)) {
+                    _success = true;
+                }
+                return pn532::post_interaction::abort;
+            }
+        };
+
     }
 
     void configure_gate(pn532::controller &ctrl, gate &g) {
@@ -67,6 +116,13 @@ namespace ka::p2p {
                 }
             }
         }
+    }
+
+    bool configure_gate(pn532::controller &ctrl, keymaker &km, std::string gate_description) {
+        configure_gate_responder responder{km, std::move(gate_description)};
+        pn532::scanner scanner{ctrl};
+        scanner.loop(responder, false);
+        return responder.success();
     }
 
 }
