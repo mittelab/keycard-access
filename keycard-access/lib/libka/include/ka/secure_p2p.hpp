@@ -11,7 +11,7 @@
 #include <sodium/crypto_secretstream_xchacha20poly1305.h>
 
 
-namespace ka::nfc {
+namespace ka::p2p {
     namespace {
         using namespace pn532::p2p;
     }
@@ -32,8 +32,8 @@ namespace ka::nfc {
         bool _did_handshake = false;
         key_pair _kp{};
         mlab::bin_data _buffer{};
+        raw_pub_key _peer_pk{};
 
-        result<> ensure_handshake(ms timeout);
     public:
         secure_initiator() = default;
         secure_initiator(secure_initiator const &) = delete;
@@ -42,6 +42,11 @@ namespace ka::nfc {
         secure_initiator &operator=(secure_initiator &&) noexcept = default;
 
         secure_initiator(initiator &raw_layer, key_pair kp);
+
+        result<raw_pub_key> handshake(ms timeout = 1s);
+
+        [[nodiscard]] inline bool did_handshake() const;
+        [[nodiscard]] inline raw_pub_key const &peer_pub_key() const;
 
         [[nodiscard]] result<mlab::bin_data> communicate(mlab::bin_data const &data, ms timeout) override;
     };
@@ -54,8 +59,8 @@ namespace ka::nfc {
         bool _did_handshake = false;
         key_pair _kp{};
         mlab::bin_data _buffer{};
+        raw_pub_key _peer_pk{};
 
-        result<> ensure_handshake(ms timeout);
     public:
         secure_target() = default;
         secure_target(secure_target const &) = delete;
@@ -65,9 +70,31 @@ namespace ka::nfc {
 
         secure_target(target &raw_layer, key_pair kp);
 
+        result<raw_pub_key> handshake(ms timeout = 1s);
+
+        [[nodiscard]] inline bool did_handshake() const;
+        [[nodiscard]] inline raw_pub_key const &peer_pub_key() const;
+
         [[nodiscard]] result<mlab::bin_data> receive(ms timeout) override;
         result<> send(mlab::bin_data const &data, ms timeout) override;
     };
+}
+
+
+namespace ka::p2p {
+
+    bool secure_target::did_handshake() const {
+        return _did_handshake;
+    }
+    raw_pub_key const &secure_target::peer_pub_key() const {
+        return _peer_pk;
+    }
+    bool secure_initiator::did_handshake() const {
+        return _did_handshake;
+    }
+    raw_pub_key const &secure_initiator::peer_pub_key() const {
+        return _peer_pk;
+    }
 }
 
 #endif//KEYCARD_ACCESS_SECURE_P2P_HPP

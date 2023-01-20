@@ -5,7 +5,7 @@
 #include <ka/secure_p2p.hpp>
 #include <sodium/crypto_kx.h>
 
-namespace ka::nfc {
+namespace ka::p2p {
     static_assert(tx_key::array_size == crypto_kx_SESSIONKEYBYTES);
     static_assert(rx_key::array_size == crypto_kx_SESSIONKEYBYTES);
     static_assert(raw_pub_key::array_size == crypto_kx_PUBLICKEYBYTES);
@@ -17,14 +17,13 @@ namespace ka::nfc {
     secure_target::secure_target(target &raw_layer, key_pair kp)
         : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
-    result<> secure_target::ensure_handshake(ms timeout) {
+    result<raw_pub_key> secure_target::handshake(ms timeout) {
         if (_did_handshake) {
-            return mlab::result_success;
+            return peer_pub_key();
         } else if (_raw_layer == nullptr) {
             return pn532::channel::error::failure;
         }
         mlab::reduce_timeout rt{timeout};
-        raw_pub_key initiator_pub_key{};
         tx_key tx{};
         rx_key rx{};
         header initiator_header{};
@@ -35,7 +34,7 @@ namespace ka::nfc {
             ESP_LOGE("KA", "Invalid %s size %d.", "initiator pubkey", r->size());
             return pn532::channel::error::comm_malformed;
         } else {
-            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(initiator_pub_key));
+            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
         }
         // Send our public key
         if (const auto r = _raw_layer->send(mlab::bin_data::chain(_kp.raw_pk()), rt.remaining()); not r) {
@@ -51,7 +50,7 @@ namespace ka::nfc {
         }
         // Derive the keys
         if (0 != crypto_kx_client_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), initiator_pub_key.data()))
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data()))
         {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel::error::failure;
@@ -63,20 +62,19 @@ namespace ka::nfc {
             ESP_LOG_BUFFER_HEX_LEVEL("RX KEY", rx.data(), 32, ESP_LOG_DEBUG);
             ESP_LOG_BUFFER_HEX_LEVEL("TX KEY", tx.data(), 32, ESP_LOG_DEBUG);
             _did_handshake = true;
-            return mlab::result_success;
+            return peer_pub_key();
         } else {
             return r.error();
         }
     }
 
-    result<> secure_initiator::ensure_handshake(ms timeout) {
+    result<raw_pub_key> secure_initiator::handshake(ms timeout) {
         if (_did_handshake) {
-            return mlab::result_success;
+            return peer_pub_key();
         } else if (_raw_layer == nullptr) {
             return pn532::channel::error::failure;
         }
         mlab::reduce_timeout rt{timeout};
-        raw_pub_key target_pub_key{};
         tx_key tx{};
         rx_key rx{};
         header target_header{};
@@ -87,11 +85,11 @@ namespace ka::nfc {
             ESP_LOGE("KA", "Invalid %s size %d.", "target pubkey", r->size());
             return pn532::channel::error::comm_malformed;
         } else {
-            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(target_pub_key));
+            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
         }
         // Derive the keys
         if (0 != crypto_kx_server_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), target_pub_key.data()))
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data()))
         {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel::error::failure;
@@ -110,7 +108,7 @@ namespace ka::nfc {
         _did_handshake = true;
         ESP_LOG_BUFFER_HEX_LEVEL("RX KEY", rx.data(), 32, ESP_LOG_DEBUG);
         ESP_LOG_BUFFER_HEX_LEVEL("TX KEY", tx.data(), 32, ESP_LOG_DEBUG);
-        return mlab::result_success;
+        return peer_pub_key();
     }
 
     result<mlab::bin_data> secure_initiator::communicate(const mlab::bin_data &data, ms timeout) {
@@ -118,7 +116,7 @@ namespace ka::nfc {
             return pn532::channel::error::failure;
         }
         mlab::reduce_timeout rt{timeout};
-        if (const auto r = ensure_handshake(rt.remaining()); not r) {
+        if (const auto r = handshake(rt.remaining()); not r) {
             return r.error();
         }
         _buffer.resize(data.size() + crypto_secretstream_xchacha20poly1305_ABYTES);
@@ -144,7 +142,7 @@ namespace ka::nfc {
             return pn532::channel::error::failure;
         }
         mlab::reduce_timeout rt{timeout};
-        if (const auto r = ensure_handshake(rt.remaining()); not r) {
+        if (const auto r = handshake(rt.remaining()); not r) {
             return r.error();
         }
         if (const auto r = _raw_layer->receive(rt.remaining()); not r) {
@@ -168,7 +166,7 @@ namespace ka::nfc {
             return pn532::channel::error::failure;
         }
         mlab::reduce_timeout rt{timeout};
-        if (const auto r = ensure_handshake(rt.remaining()); not r) {
+        if (const auto r = handshake(rt.remaining()); not r) {
             return r.error();
         }
         _buffer.resize(data.size() + crypto_secretstream_xchacha20poly1305_ABYTES);
