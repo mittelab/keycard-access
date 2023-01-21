@@ -213,13 +213,13 @@ namespace ka {
             ESP_LOGE("KA", "NVS partition is not available.");
             return gate{};
         } else {
-            load_from_config(*partition);
+            return load_from_config(*partition);
         }
     }
 
     gate gate::load_from_config(nvs::partition &partition) {
         gate g{};
-        g.config_load(partition);
+        void(g.config_load(partition));
         return g;
     }
 
