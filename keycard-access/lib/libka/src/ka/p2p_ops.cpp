@@ -56,11 +56,13 @@ namespace ka::p2p {
         while (not g.is_configured()) {
             // Make sure you get fresh new keys
             g.regenerate_keys();
-            desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {PN532_TAG}};
-            while (not raw_comm.init_as_dep_target(fabricate_nfcid(g))) {
-                suppress.restore();
-                if (configure_gate_in_rf(ctrl, g)) {
-                    return;
+            while (not g.is_configured()) {
+                desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {PN532_TAG}};
+                if (raw_comm.init_as_dep_target(fabricate_nfcid(g))) {
+                    suppress.restore();
+                    if (configure_gate_in_rf(ctrl, g)) {
+                        return;
+                    }
                 }
             }
         }
