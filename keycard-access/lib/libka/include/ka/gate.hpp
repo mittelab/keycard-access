@@ -69,7 +69,7 @@ namespace ka {
          * @}
          */
 
-        pn532::post_interaction interact_token(member_token &token) override;
+        pn532::post_interaction interact_with_token(member_token &token) override;
     };
 
     class gate {

@@ -113,7 +113,7 @@ namespace ka {
         }
     }
 
-    pn532::post_interaction gate_responder::interact_token(member_token &token) {
+    pn532::post_interaction gate_responder::interact_with_token(member_token &token) {
         if (_g.is_configured()) {
             _g.try_authenticate(token, *this);
         }

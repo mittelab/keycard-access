@@ -13,9 +13,9 @@ namespace ka {
 
     member_token::member_token(desfire::tag &tag) : _tag{&tag}, _root_key{desfire::key<desfire::cipher_type::des>{}} {}
 
-    pn532::post_interaction member_token_responder::interact(desfire::tag &tag) {
+    pn532::post_interaction member_token_responder::interact_with_tag(desfire::tag &tag) {
         member_token token{tag};
-        return interact_token(token);
+        return interact_with_token(token);
     }
 
     r<token_id> member_token::get_id() const {

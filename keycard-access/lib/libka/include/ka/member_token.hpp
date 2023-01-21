@@ -17,9 +17,9 @@ namespace ka {
      * @brief Specialization of a token responder which casts a @ref desfire::tag into a @ref member_token
      */
     struct member_token_responder : public virtual desfire::tag_responder<desfire::esp32::default_cipher_provider> {
-        pn532::post_interaction interact(desfire::tag &tag) override;
+        pn532::post_interaction interact_with_tag(desfire::tag &tag) override;
 
-        virtual pn532::post_interaction interact_token(member_token &token) = 0;
+        virtual pn532::post_interaction interact_with_token(member_token &token) = 0;
     };
 
     /**
