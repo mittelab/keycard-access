@@ -26,7 +26,7 @@ void gate_main() {
 
     if (not gate.is_configured()) {
         ESP_LOGW("KA", "Gate is not configured, entering target mode.");
-        ka::p2p::configure_gate(controller, gate);
+        ka::p2p::configure_gate_loop(controller, gate);
         gate.config_store();
         ESP_LOGI("KA", "Gate configured.");
     }
