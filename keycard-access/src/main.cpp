@@ -57,8 +57,8 @@ struct keymaker_responder final : public ka::member_token_responder {
     }
 
     pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        ESP_LOGI("KA", "Found %s target with NFC ID:", pn532::to_string(target.type));
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", target.nfcid.data(), target.nfcid.size(), ESP_LOG_INFO);
+        const auto s_nfcid = ka::util::hex_string(mlab::make_range(target.nfcid.data(), target.nfcid.data() + target.nfcid.size()));
+        ESP_LOGI("KA", "Found %s target with NFC ID %s.", pn532::to_string(target.type), s_nfcid.c_str());
         if (target.type == pn532::target_type::passive_106kbps_iso_iec_14443_4_typea) {
             return desfire::tag_responder<desfire::esp32::default_cipher_provider>::interact(scanner, target);
         } else {
@@ -73,11 +73,11 @@ struct keymaker_responder final : public ka::member_token_responder {
     }
 
     desfire::tag::result<> interact_with_token_internal(ka::member_token &token) {
-        desfire::esp32::suppress_log suppress{"KA"};
+        desfire::esp32::suppress_log suppress{"KA", DESFIRE_FS_DEFAULT_LOG_PREFIX, DESFIRE_DEFAULT_LOG_PREFIX};
         TRY_RESULT_AS(token.get_id(), r_id) {
             const auto root_key = km.keys().derive_token_root_key(*r_id);
             suppress.restore();
-            const std::string id_str = mlab::data_to_string(mlab::make_range(*r_id));
+            const std::string id_str = ka::util::hex_string(*r_id);
             ESP_LOGI("KA", "Got the following token: %s.", id_str.c_str());
             suppress.suppress();
             if (token.unlock_root()) {
@@ -105,16 +105,26 @@ struct keymaker_responder final : public ka::member_token_responder {
                             ESP_LOGI("KA", "I just enrolled gate %d", cfg.id);
                         }
                     }
-                    if (all_enrolled and not km._gates.empty()) {
+                    if (all_enrolled) {
                         ESP_LOGI("KA", "All gates enrolled, I'll format this PICC.");
                         TRY(token.unlock_root())
+                        /**
+                         * @todo Formatting seems to have no effect, is the whole thing running correctly?
+                         */
                         TRY(token.tag().format_picc())
+                        TRY(token.unlock_root())
+                        TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
                     }
                 } else {
                     suppress.restore();
                     ESP_LOGW("KA", "MAD was not set up, will format the PICC.");
                     TRY(token.unlock_root())
+                    /**
+                     * @todo Formatting seems to have no effect, is the whole thing running correctly?
+                     */
                     TRY(token.tag().format_picc())
+                    TRY(token.unlock_root())
+                    TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
                 }
             }
         }
@@ -145,6 +155,7 @@ void keymaker_main() {
 }
 
 extern "C" void app_main() {
+    desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
     ESP_LOGI("KA", "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
     int choice = 0;
