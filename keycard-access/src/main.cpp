@@ -199,6 +199,7 @@ struct keymaker_responder final : public ka::member_token_responder {
                 TRY(token.tag().format_picc())
                 TRY(token.setup_root(root_key))
                 TRY(token.setup_mad(ka::identity{*r_id, "Holder", "Publisher"}))
+                return mlab::result_success;
             } else if (token.try_set_root_key(root_key)) {
                 suppress.restore();
                 ESP_LOGI(LOG_PFX, "Token was set up.");
@@ -208,31 +209,30 @@ struct keymaker_responder final : public ka::member_token_responder {
                     ESP_LOGI(LOG_PFX, "MAD was set up for user %s (%s).", r_identity->holder.c_str(), r_identity->publisher.c_str());
                     ESP_LOGW(LOG_PFX, "We are now trusting this data, during regular operation, it should be authenticated!");
                     ESP_LOGI(LOG_PFX, "Setting up gates.");
-                    bool all_enrolled = true;
+                    bool all_gates_were_enrolled = true;
                     for (ka::gate_config const &cfg : km._gates) {
-                        if (token.is_gate_enrolled(cfg.id)) {
+                        const auto gate_app_master_key = cfg.app_base_key.derive_app_master_key(*r_id);
+                        if (token.is_gate_enrolled(cfg.id) and token.authenticate(cfg.id, gate_app_master_key)) {
                             ESP_LOGI(LOG_PFX, "Gate %d was already enrolled.", cfg.id);
                         } else {
-                            all_enrolled = false;
-                            TRY(token.enroll_gate(cfg.id, cfg.app_base_key.derive_app_master_key(*r_id), *r_identity))
+                            all_gates_were_enrolled = false;
+                            TRY(token.enroll_gate(cfg.id, gate_app_master_key, *r_identity))
                             ESP_LOGI(LOG_PFX, "I just enrolled gate %d", cfg.id);
                         }
                     }
-                    if (all_enrolled) {
-                        ESP_LOGI(LOG_PFX, "All gates enrolled, I'll format this PICC.");
-                        TRY(token.unlock_root())
-                        TRY(token.tag().format_picc())
-                        TRY(token.unlock_root())
-                        TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
+                    if (not all_gates_were_enrolled) {
+                        return mlab::result_success;
                     }
+                    ESP_LOGI(LOG_PFX, "All gates were already enrolled, I'll format this PICC.");
                 } else {
                     suppress.restore();
                     ESP_LOGW(LOG_PFX, "MAD was not set up, will format the PICC.");
-                    TRY(token.unlock_root())
-                    TRY(token.tag().format_picc())
-                    TRY(token.unlock_root())
-                    TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
                 }
+                // Format procedure
+                TRY(token.unlock_root())
+                TRY(token.tag().format_picc())
+                TRY(token.unlock_root())
+                TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
             } else {
                 ESP_LOGE(LOG_PFX, "I do not know the key of this PICC.");
                 return desfire::error::permission_denied;
@@ -287,8 +287,8 @@ extern "C" void app_main() {
     int choice = 0;
     while (choice == 0) {
         std::printf("Select operation mode of the demo:\n");
-        std::printf("\t1. gate\n");
-        std::printf("\t2. keymaker\n");
+        std::printf("\t1. Gate\n");
+        std::printf("\t2. Keymaker\n");
         std::printf("\t3. FormatMcFormatface\n");
         std::printf("> ");
         while (std::scanf("%d", &choice) != 1) {
