@@ -38,6 +38,7 @@ namespace ka {
             TRY(tag().change_key(k))
         }
         suppress.restore();
+        TRY(tag().select_application(desfire::root_app))
         // Can I enter with the key that was supplied?
         TRY(tag().authenticate(k))
         _root_key = k;
