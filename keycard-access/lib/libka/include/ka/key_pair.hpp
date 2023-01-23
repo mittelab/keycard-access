@@ -53,6 +53,9 @@ namespace ka {
     struct randomize_t {};
     static constexpr randomize_t randomize{};
 
+    struct pwhash_t {};
+    static constexpr pwhash_t pwhash{};
+
     class key_pair : public sec_key, public pub_key {
         void overwrite_pub_key();
 
@@ -62,6 +65,7 @@ namespace ka {
         explicit key_pair(sec_key sk);
         explicit key_pair(raw_sec_key sec_key_raw);
         explicit key_pair(mlab::range<std::uint8_t const *> sec_key_raw);
+        key_pair(pwhash_t, std::string const &password);
 
         [[nodiscard]] pub_key drop_secret_key() const;
 

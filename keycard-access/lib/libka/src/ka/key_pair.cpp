@@ -99,6 +99,10 @@ namespace ka {
         }
     }
 
+    key_pair::key_pair(pwhash_t, std::string const &password) : key_pair{} {
+        generate_from_pwhash(password);
+    }
+
 
     void key_pair::overwrite_pub_key() {
         if (auto [pub_key_raw, success] = derive_pub_key(); success) {
