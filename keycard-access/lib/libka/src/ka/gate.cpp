@@ -127,15 +127,15 @@ namespace ka {
         }
     }
     void gate_responder::on_activation(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        const auto s_id = util::hex_string(target.nfcid);
         ESP_LOGI("GATE", "Activated NFC target %s", s_id.c_str());
     }
     void gate_responder::on_release(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        const auto s_id = util::hex_string(target.nfcid);
         ESP_LOGI("GATE", "Released NFC target %s", s_id.c_str());
     }
     void gate_responder::on_leaving_rf(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string({target.nfcid.data(), target.nfcid.data() + target.nfcid.size()});
+        const auto s_id = util::hex_string(target.nfcid);
         ESP_LOGI("GATE", "NFC target %s has left the RF field.", s_id.c_str());
     }
     void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel::error err) {

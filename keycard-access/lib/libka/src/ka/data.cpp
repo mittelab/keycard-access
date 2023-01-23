@@ -37,6 +37,11 @@ namespace ka {
         std::string escape(std::string const &text) {
             return replace_all(replace_all(text, "\\", "\\\\"), "\n", "\\\n");
         }
+
+        std::string hex_string(std::vector<std::uint8_t> const &v) {
+            return hex_string(mlab::make_range(v.data(), v.data() + v.size()));
+        }
+
         std::string hex_string(mlab::range<std::uint8_t const *> rg) {
             std::string retval;
             retval.resize(2 * rg.size() + 1 /* final null separator */);

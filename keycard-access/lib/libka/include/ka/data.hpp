@@ -64,6 +64,7 @@ namespace ka {
         [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
 
         [[nodiscard]] std::string hex_string(mlab::range<std::uint8_t const *> rg);
+        [[nodiscard]] std::string hex_string(std::vector<std::uint8_t> const &v);
 
         template <std::size_t N>
         [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
