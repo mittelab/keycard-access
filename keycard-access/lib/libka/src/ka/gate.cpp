@@ -153,7 +153,7 @@ namespace ka {
         const auto r_desc = ns->set<std::string>(ka_desc, description());
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
-        const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key().data()));
+        const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key()));
         const auto r_commit = ns->commit();
         if (not (r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");

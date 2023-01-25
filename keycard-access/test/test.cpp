@@ -297,6 +297,33 @@ namespace ut {
         r_num = ns->get<std::uint32_t>("foo");
         TEST_ASSERT_FALSE(r_num);
 
+        const auto sample_data = mlab::bin_data{0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
+        TEST_ASSERT(ns->set("foo", sample_data));
+        TEST_ASSERT(ns->commit());
+        auto r_data = ns->get<mlab::bin_data>("foo");
+        TEST_ASSERT(r_data);
+        TEST_ASSERT(ns->erase("foo"));
+        TEST_ASSERT(ns->commit());
+
+        TEST_ASSERT_EQUAL(r_data->size(), sample_data.size());
+        TEST_ASSERT_EQUAL_HEX8_ARRAY(sample_data.data(), r_data->data(), sample_data.size());
+    }
+
+    void test_nvs_gate() {
+        {
+            gate g{};
+            g.regenerate_keys();
+            g.configure(0x00, "foobar", pub_key{test_key_pair().raw_pk()});
+            g.config_store();
+        }
+        {
+            gate g{};
+            TEST_ASSERT(g.config_load());
+            TEST_ASSERT_EQUAL(g.id(), 0x00);
+            TEST_ASSERT(g.description() == "foobar");
+            TEST_ASSERT(g.keys().raw_pk() == test_key_pair().raw_pk());
+            gate::config_clear();
+        }
     }
 }// namespace ut
 
@@ -305,6 +332,7 @@ extern "C" void app_main() {
 
     RUN_TEST(ut::test_keys);
     RUN_TEST(ut::test_nvs);
+    RUN_TEST(ut::test_nvs_gate);
     RUN_TEST(ut::test_encrypt_decrypt);
 
     ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);
