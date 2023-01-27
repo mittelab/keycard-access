@@ -149,7 +149,7 @@ namespace ka {
             ESP_LOGE("KA", "Unable to create or access NVS namespace.");
             return;
         }
-        const auto r_id = ns->set<gate_id>(ka_gid, id());
+        const auto r_id = ns->set<std::uint32_t>(ka_gid, id());
         const auto r_desc = ns->set<std::string>(ka_desc, description());
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
@@ -239,13 +239,13 @@ namespace ka {
             return false;
         }
         ESP_LOGW("KA", "Loading gate configuration.");
-        const auto r_id = ns->get<gate_id>(ka_gid);
+        const auto r_id = ns->get<std::uint32_t>(ka_gid);
         const auto r_desc = ns->get<std::string>(ka_desc);
         const auto r_prog_pk = assert_size(ns->get<mlab::bin_data>(ka_prog_pk), raw_pub_key::array_size, "programmer key");
         const auto r_sk = assert_size(ns->get<mlab::bin_data>(ka_sk), raw_sec_key::array_size, "secret key");
         const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_base_key::array_size, "gate app base key");
         if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
-            _id = *r_id;
+            _id = gate_id{*r_id};
             _desc = *r_desc;
             _kp = key_pair{r_sk->data_view()};
             _prog_pk = pub_key{r_prog_pk->data_view()};
