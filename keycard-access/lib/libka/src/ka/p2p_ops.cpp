@@ -112,11 +112,11 @@ namespace ka::p2p {
         mlab::bin_data msg{mlab::prealloc(6 + gate_description.size())};
         msg << bits::command_code_configure << mlab::lsb32 << gid << mlab::view_from_string(gate_description);
         TRY_RESULT(comm.communicate(msg, 1s)) {
-            if (r->size() != gate_app_base_key::array_size) {
+            if (r->size() != gate_base_key::array_size) {
                 ESP_LOGE("KA", "Invalid configure response received.");
                 return pn532::channel::error::comm_malformed;
             }
-            gate_app_base_key base_key{};
+            gate_base_key base_key{};
             std::copy(std::begin(*r), std::end(*r), std::begin(base_key));
             km.register_gate({gid, pub_key{comm.peer_pub_key()}, base_key});
         }

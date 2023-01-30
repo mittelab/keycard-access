@@ -51,22 +51,22 @@ namespace ka {
         }
     }// namespace
 
-    static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
-    gate_app_master_key gate_app_base_key::derive_app_master_key(const token_id &token_id) const {
+    gate_token_key gate_base_key::derive_token_key(const token_id &token_id, std::uint8_t key_no) const {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         pack_token_id(token_id),
+                         util::pack_token_id(token_id),
                          app_master_key_context.data(),
                          data())) {
             ESP_LOGE("KA", "Unable to derive root key.");
         }
-        return gate_app_master_key{0, derived_key_data};
+        return gate_token_key{key_no, derived_key_data};
     }
 
     void gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
-        if (app_base_key() == gate_app_base_key{} or keys().raw_pk() == raw_pub_key{}) {
+        if (app_base_key() == gate_base_key{} or keys().raw_pk() == raw_pub_key{}) {
             ESP_LOGE("KA", "Keys have not been generated for this gate! You must re-query the public key.");
             regenerate_keys();
         }
@@ -74,7 +74,7 @@ namespace ka {
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
-        ESP_LOGI("KA", "Configured as gate %d: %s", this->id(), description().c_str());
+        ESP_LOGI("KA", "Configured as gate %d: %s", std::uint32_t(this->id()), description().c_str());
         ESP_LOGI("KA", "Gate public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
         ESP_LOGI("KA", "Programmer public key:");
@@ -86,7 +86,7 @@ namespace ka {
         if (const auto r = token.is_gate_enrolled(id()); r and *r) {
             // We should be able to get the id
             if (const auto r_id = token.get_id(); r_id) {
-                if (const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id)); r_auth) {
+                if (const auto r_auth = token.authenticate(id(), app_base_key().derive_token_key(*r_id)); r_auth) {
                     ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
                     responder.on_authentication_success(*r_auth);
                 } else {
@@ -243,7 +243,7 @@ namespace ka {
         const auto r_desc = ns->get<std::string>(ka_desc);
         const auto r_prog_pk = assert_size(ns->get<mlab::bin_data>(ka_prog_pk), raw_pub_key::array_size, "programmer key");
         const auto r_sk = assert_size(ns->get<mlab::bin_data>(ka_sk), raw_sec_key::array_size, "secret key");
-        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_app_base_key::array_size, "gate app base key");
+        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_base_key::array_size, "gate app base key");
         if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
             _id = *r_id;
             _desc = *r_desc;

@@ -22,16 +22,16 @@ namespace ka {
 
     class gate;
 
-    struct gate_app_base_key_tag {};
+    struct gate_base_key_tag {};
 
-    struct gate_app_base_key : public tagged_array<gate_app_base_key_tag, 32> {
-        [[nodiscard]] gate_app_master_key derive_app_master_key(token_id const &token_id) const;
+    struct gate_base_key : public tagged_array<gate_base_key_tag, 32> {
+        [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
     };
 
     struct gate_config {
         gate_id id{};
         pub_key gate_pub_key;
-        gate_app_base_key app_base_key{};
+        gate_base_key app_base_key{};
     };
 
     /**
@@ -72,6 +72,8 @@ namespace ka {
         pn532::post_interaction interact_with_token(member_token &token) override;
     };
 
+    class keyed_gate_locator;
+
     class gate {
     public:
         /**
@@ -104,7 +106,7 @@ namespace ka {
         [[nodiscard]] inline pub_key programmer_pub_key() const;
         [[nodiscard]] inline std::string description() const;
         [[nodiscard]] inline gate_id id() const;
-        [[nodiscard]] inline gate_app_base_key app_base_key() const;
+        [[nodiscard]] inline gate_base_key app_base_key() const;
 
         void regenerate_keys();
         void configure(gate_id id, std::string desc, pub_key prog_pub_key);
@@ -127,7 +129,7 @@ namespace ka {
         std::string _desc;
         key_pair _kp;
         pub_key _prog_pk;
-        gate_app_base_key _base_key{};
+        gate_base_key _base_key{};
     };
 }// namespace ka
 
@@ -148,7 +150,7 @@ namespace ka {
         return _id;
     }
 
-    gate_app_base_key gate::app_base_key() const {
+    gate_base_key gate::app_base_key() const {
         return _base_key;
     }
 
@@ -174,6 +176,7 @@ namespace ka {
                 std::uint32_t(id[0]);
         return app_id_uint >= gate_aid_range_begin and app_id_uint < gate_aid_range_end;
     }
+
 }// namespace ka
 
 #endif//KEYCARDACCESS_GATE_HPP

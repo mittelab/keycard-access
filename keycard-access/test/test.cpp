@@ -227,7 +227,7 @@ namespace ut {
         member_token token{*instance.tag};
 
         constexpr gate_id gid = 0x00;
-        constexpr gate_app_base_key gkey{
+        constexpr gate_base_key gkey{
                 0x1d, 0x00, 0x05, 0x07, 0x09, 0x0a, 0x16, 0x02, 0x08, 0x06, 0x11, 0x0c, 0x1f, 0x12, 0x10, 0x18,
                 0x01, 0x19, 0x04, 0x0b, 0x0d, 0x15, 0x0e, 0x17, 0x1a, 0x1b, 0x14, 0x1e, 0x03, 0x13, 0x0f, 0x1c
         };
@@ -246,17 +246,17 @@ namespace ut {
         auto r_enrolled = token.is_gate_enrolled(gid);
         TEST_ASSERT(ok_and<false>(r_enrolled));
 
-        TEST_ASSERT(token.enroll_gate(gid, gkey.derive_app_master_key(r_id->id), *r_id));
+        TEST_ASSERT(token.enroll_gate(gid, gkey.derive_token_key(r_id->id), *r_id));
 
         r_enrolled = token.is_gate_enrolled(gid);
         TEST_ASSERT(ok_and<true>(r_enrolled));
 
-        TEST_ASSERT(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+        TEST_ASSERT(token.authenticate(gid, gkey.derive_token_key(r_id->id)));
 
         // Check that it can be authenticated also with a member token with an unknown password
         {
             member_token token_no_root{*instance.tag};
-            TEST_ASSERT(token_no_root.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+            TEST_ASSERT(token_no_root.authenticate(gid, gkey.derive_token_key(r_id->id)));
         }
 
         TEST_ASSERT(token.unlock_root());
@@ -266,7 +266,7 @@ namespace ut {
         TEST_ASSERT(ok_and<false>(r_enrolled));
 
         suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+        TEST_ASSERT_FALSE(token.authenticate(gid, gkey.derive_token_key(r_id->id)));
     }
 
     void test_nvs() {

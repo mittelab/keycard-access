@@ -211,7 +211,7 @@ struct keymaker_responder final : public ka::member_token_responder {
                     ESP_LOGI(LOG_PFX, "Setting up gates.");
                     bool all_gates_were_enrolled = true;
                     for (ka::gate_config const &cfg : km._gates) {
-                        const auto gate_app_master_key = cfg.app_base_key.derive_app_master_key(*r_id);
+                        const auto gate_app_master_key = cfg.app_base_key.derive_token_key(*r_id);
                         if (token.is_gate_enrolled(cfg.id) and token.authenticate(cfg.id, gate_app_master_key)) {
                             ESP_LOGI(LOG_PFX, "Gate %d was already enrolled.", cfg.id);
                         } else {

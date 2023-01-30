@@ -18,6 +18,7 @@
 namespace ka {
     namespace {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};
+        constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> gate_key_context{"gatekey"};
         constexpr unsigned long long pwhash_memlimit = 0x2000;
         constexpr unsigned long long pwhash_opslimit = 4;
         constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
@@ -73,12 +74,24 @@ namespace ka {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         pack_token_id(id),
+                         util::pack_token_id(id),
                          root_key_context.data(),
                          raw_sk().data())) {
             ESP_LOGE("KA", "Unable to derive root key.");
         }
         return token_root_key{0, derived_key_data};
+    }
+
+    gate_app_master_key sec_key::derive_gate_app_master_key(const token_id &id) const {
+        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        if (0 != crypto_kdf_blake2b_derive_from_key(
+                         derived_key_data.data(), derived_key_data.size(),
+                         util::pack_token_id(id),
+                         gate_key_context.data(),
+                         raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to derive gate app master key.");
+        }
+        return gate_app_master_key{0, derived_key_data};
     }
 
     key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {

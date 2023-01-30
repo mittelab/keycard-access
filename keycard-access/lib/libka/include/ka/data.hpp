@@ -28,12 +28,16 @@ namespace ka {
 
     struct derived_key {};
 
-    struct gate_app_master_key : public key_type, public derived_key {
+    struct gate_token_key : public key_type, public derived_key {
         using key_type::key_type;
     };
 
     struct token_root_key : public key_type, public derived_key {
         using key_type::key_type;
+    };
+
+    struct gate_app_master_key : public gate_token_key {
+        using gate_token_key::gate_token_key;
     };
 
     struct hash_tag;
@@ -70,6 +74,9 @@ namespace ka {
         [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
 
         [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);
+
+        [[nodiscard]] constexpr std::uint32_t pack_app_id(desfire::app_id aid);
+        [[nodiscard]] constexpr desfire::app_id unpack_app_id(std::uint32_t aid);
     }// namespace util
 
 };// namespace ka
