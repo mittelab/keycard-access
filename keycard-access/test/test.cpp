@@ -367,9 +367,11 @@ namespace ut {
     }
 
     void test_nvs_gate() {
+        key_pair gate_kp;
         {
             gate g{};
             g.regenerate_keys();
+            gate_kp = g.keys();
             g.configure(gate_id{0x00}, "foobar", pub_key{test_key_pair().raw_pk()});
             g.config_store();
         }
@@ -378,7 +380,9 @@ namespace ut {
             TEST_ASSERT(g.config_load());
             TEST_ASSERT_EQUAL(g.id(), 0x00);
             TEST_ASSERT(g.description() == "foobar");
-            TEST_ASSERT(g.keys().raw_pk() == test_key_pair().raw_pk());
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), gate_kp.raw_pk().data(), raw_pub_key::array_size);
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), gate_kp.raw_sk().data(), raw_sec_key::array_size);
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.programmer_pub_key().raw_pk().data(), test_key_pair().raw_pk().data(), raw_pub_key::array_size);
             gate::config_clear();
         }
     }
