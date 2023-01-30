@@ -12,12 +12,13 @@ namespace ka {
     class secure_target;
     class secure_initiator;
 
-    struct keymaker_mock {
+    class keymaker {
+    public:
         key_pair _kp{randomize};
         std::vector<gate_config> _gates;
 
         [[nodiscard]] key_pair const &keys() const { return _kp; }
-        [[nodiscard]] gate_id allocate_gate_id() { return _gates.size(); }
+        [[nodiscard]] gate_id allocate_gate_id() { return gate_id{_gates.size()}; }
         void register_gate(gate_config cfg) {
             if (cfg.id == _gates.size()) {
                 _gates.emplace_back(cfg);
@@ -27,7 +28,6 @@ namespace ka {
         }
     };
 
-    using keymaker = keymaker_mock;
 }
 namespace ka::p2p {
 
