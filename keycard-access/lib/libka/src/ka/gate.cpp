@@ -230,6 +230,8 @@ namespace ka {
         if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
             _id = gate_id{*r_id};
             _desc = *r_desc;
+            // Trim the nul ending character
+            _desc.erase(std::find(std::begin(_desc), std::end(_desc), '\0'), std::end(_desc));
             _kp = key_pair{r_sk->data_view()};
             _prog_pk = pub_key{r_prog_pk->data_view()};
             std::copy(std::begin(*r_base_key), std::end(*r_base_key), std::begin(_base_key));
