@@ -101,16 +101,27 @@ namespace ka {
         return not operator==(other);
     }
 
-    constexpr std::uint64_t pack_token_id(token_id id) {
-        std::uint64_t retval = 0;
-        for (auto b : id) {
-            retval = (retval << 8) | b;
-        }
-        return retval;
-    }
 
     namespace util {
 
+        constexpr std::uint64_t pack_token_id(token_id id) {
+            std::uint64_t retval = 0;
+            for (auto b : id) {
+                retval = (retval << 8) | b;
+            }
+            return retval;
+        }
+
+        constexpr std::uint32_t pack_app_id(desfire::app_id aid) {
+            return (std::uint32_t(aid[0]) << 16) |
+                   (std::uint32_t(aid[1]) << 8) |
+                   std::uint32_t(aid[2]);
+        }
+        constexpr desfire::app_id unpack_app_id(std::uint32_t aid) {
+            return {std::uint8_t((aid >> 16) & 0xff),
+                    std::uint8_t((aid >> 8) & 0xff),
+                    std::uint8_t(aid & 0xff)};
+        }
         template <std::size_t N>
         std::string hex_string(std::array<std::uint8_t, N> const &a) {
             return hex_string(mlab::make_range<std::uint8_t const *>(a.data(), a.data() + a.size()));
