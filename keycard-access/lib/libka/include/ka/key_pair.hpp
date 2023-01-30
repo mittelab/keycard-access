@@ -46,6 +46,13 @@ namespace ka {
          */
         [[nodiscard]] token_root_key derive_token_root_key(token_id const &id) const;
 
+        /**
+         * @brief A differentiated app key to be used as the master of a token app.
+         * @param token_id Id of the token
+         * @return A key_type which gives root access to the card.
+         */
+        [[nodiscard]] gate_app_master_key derive_gate_app_master_key(token_id const &id) const;
+
     protected:
         raw_sec_key _sk{};
     };

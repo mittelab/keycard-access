@@ -8,9 +8,9 @@
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
 #include <pn532/controller.hpp>
+#include <sdkconfig.h>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
-#include <sdkconfig.h>
 
 
 using namespace std::chrono_literals;
@@ -32,75 +32,59 @@ namespace ka {
         constexpr bool nvs_encrypted = false;
 #endif
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
-
-        [[nodiscard]] bool might_be_tampering(desfire::error e) {
-            switch (e) {
-                case desfire::error::authentication_error:
-                    [[fallthrough]];
-                case desfire::error::file_integrity_error:
-                    // Wrong hash
-                    [[fallthrough]];
-                case desfire::error::length_error:
-                    // Wrong hash length
-                    [[fallthrough]];
-                case desfire::error::permission_denied:
-                    return true;
-                default:
-                    return false;
-            }
-        }
     }// namespace
 
-    static_assert(gate_app_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
-    gate_app_master_key gate_app_base_key::derive_app_master_key(const token_id &token_id) const {
+    gate_token_key gate_base_key::derive_token_key(const token_id &token_id, std::uint8_t key_no) const {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         pack_token_id(token_id),
+                         util::pack_token_id(token_id),
                          app_master_key_context.data(),
                          data())) {
             ESP_LOGE("KA", "Unable to derive root key.");
         }
-        return gate_app_master_key{0, derived_key_data};
+        return gate_token_key{key_no, derived_key_data};
     }
 
     void gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
-        if (app_base_key() == gate_app_base_key{} or keys().raw_pk() == raw_pub_key{}) {
+        if (app_base_key() == gate_base_key{} or keys().raw_pk() == raw_pub_key{}) {
             ESP_LOGE("KA", "Keys have not been generated for this gate! You must re-query the public key.");
             regenerate_keys();
         }
-        ESP_LOGI("KA", "Configuring gate.");
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
-        ESP_LOGI("KA", "Configured as gate %d: %s", this->id(), description().c_str());
-        ESP_LOGI("KA", "Gate public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
-        ESP_LOGI("KA", "Programmer public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
     }
 
 
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
-        if (const auto r = token.is_gate_enrolled(id()); r and *r) {
-            // We should be able to get the id
-            if (const auto r_id = token.get_id(); r_id) {
-                if (const auto r_auth = token.authenticate(id(), app_base_key().derive_app_master_key(*r_id)); r_auth) {
-                    ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
-                    responder.on_authentication_success(*r_auth);
-                } else {
-                    const bool tampering = might_be_tampering(r_auth.error());
-                    if (tampering) {
-                        ESP_LOGW("KA", "Authentication error might indicate tampering: %s", desfire::to_string(r_auth.error()));
-                    }
-                    responder.on_authentication_fail(*r_id, r_auth.error(), token.get_identity(), tampering);
-                }
-            } else {
-                ESP_LOGW("KA", "Enrolled but invalid MAD, error: %s", desfire::to_string(r_id.error()));
+        if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {
+            ESP_LOGI("KA", "Authenticated as %s.", r->first.holder.c_str());
+            responder.on_authentication_success(r->first);
+        } else {
+            switch (r.error()) {
+                case desfire::error::app_not_found:
+                    [[fallthrough]];
+                case desfire::error::file_not_found:
+                    ESP_LOGI("KA", "Not enrolled.");
+                    break;
+                case desfire::error::app_integrity_error:
+                    [[fallthrough]];
+                case desfire::error::crypto_error:
+                    [[fallthrough]];
+                case desfire::error::malformed:
+                    [[fallthrough]];
+                case desfire::error::file_integrity_error:
+                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    responder.on_authentication_fail(r.error(), true);
+                    break;
+                default:
+                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    responder.on_authentication_fail(r.error(), false);
+                    break;
             }
-        } else if (r and not *r) {
-            ESP_LOGI("KA", "Not enrolled.");
         }
     }
 
@@ -115,16 +99,9 @@ namespace ka {
         const auto s_id = util::hex_string(id.id);
         ESP_LOGI("GATE", "Authenticated as %s via %s.", id.holder.c_str(), s_id.c_str());
     }
-    void gate_responder::on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {
-        const auto s_id = util::hex_string(id);
-        if (unverified_id) {
-            ESP_LOGE("GATE", "Authentication failed (%s): token %s claims to be %s%s.",
-                     desfire::to_string(auth_error), s_id.c_str(), unverified_id->holder.c_str(),
-                     (might_be_tampering ? " (might be tampering)." : "."));
-        } else {
-            ESP_LOGE("GATE", "Authentication failed (%s) on token %s%s.",
-                     desfire::to_string(auth_error), s_id.c_str(), (might_be_tampering ? " (might be tampering)." : "."));
-        }
+    void gate_responder::on_authentication_fail(desfire::error auth_error, bool might_be_tampering) {
+        ESP_LOGE("GATE", "Authentication failed: %s%s.",
+                 member_token::describe(auth_error), (might_be_tampering ? " (might be tampering)." : "."));
     }
     void gate_responder::on_activation(pn532::scanner &, pn532::scanned_target const &target) {
         const auto s_id = util::hex_string(target.nfcid);
@@ -149,13 +126,13 @@ namespace ka {
             ESP_LOGE("KA", "Unable to create or access NVS namespace.");
             return;
         }
-        const auto r_id = ns->set<gate_id>(ka_gid, id());
+        const auto r_id = ns->set<std::uint32_t>(ka_gid, id());
         const auto r_desc = ns->set<std::string>(ka_desc, description());
         const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
-        const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(key_pair().raw_sk()));
+        const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(keys().raw_sk()));
         const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key()));
         const auto r_commit = ns->commit();
-        if (not (r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
+        if (not(r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");
         }
     }
@@ -231,7 +208,7 @@ namespace ka {
             }
             return r_data;
         }
-    }
+    }// namespace
 
     bool gate::config_load(nvs::partition &partition) {
         auto ns = partition.open_namespc(ka_namespc);
@@ -239,14 +216,16 @@ namespace ka {
             return false;
         }
         ESP_LOGW("KA", "Loading gate configuration.");
-        const auto r_id = ns->get<gate_id>(ka_gid);
+        const auto r_id = ns->get<std::uint32_t>(ka_gid);
         const auto r_desc = ns->get<std::string>(ka_desc);
         const auto r_prog_pk = assert_size(ns->get<mlab::bin_data>(ka_prog_pk), raw_pub_key::array_size, "programmer key");
         const auto r_sk = assert_size(ns->get<mlab::bin_data>(ka_sk), raw_sec_key::array_size, "secret key");
-        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_app_base_key::array_size, "gate app base key");
+        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_base_key::array_size, "gate app base key");
         if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
-            _id = *r_id;
+            _id = gate_id{*r_id};
             _desc = *r_desc;
+            // Trim the nul ending character
+            _desc.erase(std::find(std::begin(_desc), std::end(_desc), '\0'), std::end(_desc));
             _kp = key_pair{r_sk->data_view()};
             _prog_pk = pub_key{r_prog_pk->data_view()};
             std::copy(std::begin(*r_base_key), std::end(*r_base_key), std::begin(_base_key));
@@ -259,6 +238,14 @@ namespace ka {
             ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
         }
         return false;
+    }
+
+    void gate::log_public_gate_info() const {
+        ESP_LOGI("KA", "Gate %d: %s", std::uint32_t(this->id()), description().c_str());
+        ESP_LOGI("KA", "Gate public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI("KA", "Keymaker public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
     }
 
     void gate::config_clear(nvs::partition &partition) {

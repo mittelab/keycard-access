@@ -12,12 +12,13 @@ namespace ka {
     class secure_target;
     class secure_initiator;
 
-    struct keymaker_mock {
+    class keymaker {
+    public:
         key_pair _kp{randomize};
         std::vector<gate_config> _gates;
 
         [[nodiscard]] key_pair const &keys() const { return _kp; }
-        [[nodiscard]] gate_id allocate_gate_id() { return _gates.size(); }
+        [[nodiscard]] gate_id allocate_gate_id() { return gate_id{_gates.size()}; }
         void register_gate(gate_config cfg) {
             if (cfg.id == _gates.size()) {
                 _gates.emplace_back(cfg);
@@ -27,8 +28,7 @@ namespace ka {
         }
     };
 
-    using keymaker = keymaker_mock;
-}
+}// namespace ka
 namespace ka::p2p {
 
     pn532::p2p::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
@@ -40,6 +40,6 @@ namespace ka::p2p {
     void configure_gate_loop(pn532::controller &ctrl, gate &g);
     [[nodiscard]] bool configure_gate_loop(pn532::controller &ctrl, keymaker &km, std::string const &gate_description);
 
-}
+}// namespace ka::p2p
 
 #endif//KEYCARD_ACCESS_P2P_OPS_HPP

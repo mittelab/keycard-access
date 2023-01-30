@@ -1,15 +1,16 @@
+#include <chrono>
 #include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/esp32/utils.hpp>
 #include <ka/config.hpp>
 #include <ka/desfire_fs.hpp>
+#include <ka/gate.hpp>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
-#include <ka/gate.hpp>
 #include <ka/nvs.hpp>
+#include <ka/p2p_ops.hpp>
 #include <pn532/esp32/hsu.hpp>
 #include <thread>
 #include <unity.h>
-#include <chrono>
 
 
 using namespace ka;
@@ -69,15 +70,19 @@ namespace ut {
         constexpr auto test_publisher = "Mittelab";
 
         [[nodiscard]] key_pair &test_key_pair() {
-            static key_pair _kp{{
-                    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-            }};
+            static key_pair _kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
             if (not _kp.is_valid()) {
                 ESP_LOGE("TEST", "Chosen fixed key pair is invalid.");
                 std::abort();
             }
             return _kp;
+        }
+
+        [[nodiscard]] keymaker &test_km() {
+            static keymaker _km{};
+            _km._kp = test_key_pair();
+            return _km;
         }
 
         using namespace ::desfire::esp32;
@@ -91,6 +96,9 @@ namespace ut {
 
     template <bool B, class Result>
     [[nodiscard]] bool ok_and(Result const &res);
+
+    template <desfire::error E, class Result>
+    [[nodiscard]] bool is_err(Result const &res);
 
     struct {
         std::unique_ptr<pn532::esp32::hsu_channel> channel;
@@ -164,61 +172,7 @@ namespace ut {
         TEST_FAIL_MESSAGE("Unable to find the correct key.");
     }
 
-    void test_mad() {
-        TEST_ASSERT(instance.tag != nullptr);
-        if (instance.tag == nullptr) {
-            return;
-        }
-
-        member_token token{*instance.tag};
-        auto r_id = token.get_id();
-        TEST_ASSERT(r_id);
-        if (not r_id) {
-            return;
-        }
-        TEST_ASSERT(token.setup_root(test_key_pair().derive_token_root_key(*r_id)));
-        TEST_ASSERT(token.setup_mad({*r_id, ut::test_holder, ut::test_publisher}));
-
-        // Mad must be readable without auth
-        TEST_ASSERT(instance.tag->select_application());
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
-        // CardUID is not accessible without auth
-        TEST_ASSERT_FALSE(instance.tag->get_card_uid());
-        suppress.restore();
-        TEST_ASSERT(instance.tag->select_application());
-
-        // But the id from get_version must be
-        r_id = token.get_id();
-        const auto r_mad_version = token.get_mad_version();
-        const auto r_holder = token.get_holder();
-        const auto r_publisher = token.get_publisher();
-
-        TEST_ASSERT(r_id);
-        TEST_ASSERT(r_mad_version);
-        TEST_ASSERT(r_holder);
-        TEST_ASSERT(r_publisher);
-
-        if (r_mad_version) {
-            TEST_ASSERT_EQUAL(*r_mad_version, 0x03);
-        }
-        if (r_holder) {
-            TEST_ASSERT(*r_holder == test_holder);
-        }
-        if (r_publisher) {
-            TEST_ASSERT(*r_publisher == test_publisher);
-        }
-        if (r_id) {
-            // Should be sensible enough
-            TEST_ASSERT(*r_id == instance.nfc_id);
-        }
-
-        // Check that the mad application is not trivially writable
-        TEST_ASSERT(instance.tag->select_application(member_token::mad_aid));
-        suppress.suppress();
-        TEST_ASSERT_FALSE(instance.tag->create_file(0x00, desfire::file_settings<desfire::file_type::value>{}));
-    }
-
-    void test_enroll_and_auth() {
+    void test_root_ops() {
         TEST_ASSERT(instance.tag != nullptr);
         if (instance.tag == nullptr) {
             return;
@@ -226,47 +180,148 @@ namespace ut {
 
         member_token token{*instance.tag};
 
-        constexpr gate_id gid = 0x00;
-        constexpr gate_app_base_key gkey{
-                0x1d, 0x00, 0x05, 0x07, 0x09, 0x0a, 0x16, 0x02, 0x08, 0x06, 0x11, 0x0c, 0x1f, 0x12, 0x10, 0x18,
-                0x01, 0x19, 0x04, 0x0b, 0x0d, 0x15, 0x0e, 0x17, 0x1a, 0x1b, 0x14, 0x1e, 0x03, 0x13, 0x0f, 0x1c
-        };
-
-        const auto r_id = token.get_identity();
+        const auto r_id = token.get_id();
         TEST_ASSERT(r_id);
-        if (not r_id) {
+
+        const auto rkey = test_key_pair().derive_token_root_key(*r_id);
+        const desfire::any_key default_k{desfire::cipher_type::des};
+        const desfire::any_key seondary_k{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version};
+
+        TEST_ASSERT(ok_and<true>(token.check_root_key(default_k)));
+        TEST_ASSERT(ok_and<false>(token.check_root_key(seondary_k)));
+
+        TEST_ASSERT(is_err<desfire::error::permission_denied>(token.check_root(rkey)));
+        TEST_ASSERT(token.setup_root(rkey, true));
+        TEST_ASSERT(ok_and<true>(token.check_root_key(rkey)));
+
+        TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
+
+        TEST_ASSERT(token.tag().active_app() == desfire::root_app);
+        TEST_ASSERT(token.tag().active_key_no() == 0);
+
+        auto r_rights = token.tag().get_app_settings();
+        TEST_ASSERT(r_rights);
+
+        r_rights->rights.dir_access_without_auth = true;
+        r_rights->rights.create_delete_without_master_key = false;
+
+        desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {"KA"}};
+
+        TEST_ASSERT(token.tag().change_app_settings(r_rights->rights));
+        TEST_ASSERT(ok_and<false>(token.check_root(rkey)));
+
+        r_rights->rights.dir_access_without_auth = false;
+        r_rights->rights.create_delete_without_master_key = true;
+
+        TEST_ASSERT(token.tag().change_app_settings(r_rights->rights));
+        TEST_ASSERT(ok_and<false>(token.check_root(rkey)));
+
+        r_rights->rights.dir_access_without_auth = true;
+        r_rights->rights.create_delete_without_master_key = true;
+
+        TEST_ASSERT(token.tag().change_app_settings(r_rights->rights));
+        TEST_ASSERT(ok_and<false>(token.check_root(rkey)));
+
+        suppress.restore();
+
+        TEST_ASSERT(token.setup_root(rkey, true));
+    };
+
+    void test_app_ops() {
+        TEST_ASSERT(instance.tag != nullptr);
+        if (instance.tag == nullptr) {
             return;
         }
 
-        auto suppress = suppress_log{DESFIRE_LOG_PREFIX};
-        TEST_ASSERT(token.try_set_root_key(test_key_pair().derive_token_root_key(r_id->id)));
-        suppress.restore();
+        member_token token{*instance.tag};
 
-        TEST_ASSERT(token.get_identity());
-        auto r_enrolled = token.is_gate_enrolled(gid);
-        TEST_ASSERT(ok_and<false>(r_enrolled));
+        const auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
 
-        TEST_ASSERT(token.enroll_gate(gid, gkey.derive_app_master_key(r_id->id), *r_id));
+        const auto rkey = test_key_pair().derive_token_root_key(*r_id);
+        const auto mkey = test_key_pair().derive_gate_app_master_key(*r_id);
+        TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
 
-        r_enrolled = token.is_gate_enrolled(gid);
-        TEST_ASSERT(ok_and<true>(r_enrolled));
+        TEST_ASSERT(is_err<desfire::error::parameter_error>(token.create_gate_app({0x00, 0x00, 0x00}, rkey, mkey)));
+        TEST_ASSERT(token.create_gate_app(gate_id::first_aid, rkey, mkey));
 
-        TEST_ASSERT(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+        constexpr desfire::app_id aid = {0xf5, 0x10, 0x01};
+        TEST_ASSERT(ok_and<true>(token.check_master_key(mkey, gate_id::first_aid, true)));
+        TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_key(mkey, aid)));
 
-        // Check that it can be authenticated also with a member token with an unknown password
+        const gate_app_master_key tweaked_mkey{0, {}};
+        TEST_ASSERT(ok_and<false>(token.check_master_key(tweaked_mkey, gate_id::first_aid, false)));
+
+        TEST_ASSERT(token.ensure_gate_app(gate_id::first_aid, rkey, mkey));
+
+        TEST_ASSERT(desfire::fs::login_app(token.tag(), desfire::root_app, rkey));
+        TEST_ASSERT(token.tag().delete_application(gate_id::first_aid));
+
+        // Make sure that all master methods fail at this point with app_not_found.
+        // That's a sign that they are calling check_gate_app
         {
-            member_token token_no_root{*instance.tag};
-            TEST_ASSERT(token_no_root.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(test_km(), {}, true)));
+            TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(test_km(), true, false)));
+
+            // They must fail even if we do not test the app
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(test_km(), {}, false)));
+            TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(test_km(), false, false)));
         }
 
-        TEST_ASSERT(token.unlock_root());
-        TEST_ASSERT(desfire::fs::delete_app_if_exists(token.tag(), gate::id_to_app_id(gid)));
+        TEST_ASSERT(token.ensure_gate_app(gate_id::first_aid, rkey, mkey));
+        TEST_ASSERT(token.check_gate_app(gate_id::first_aid, true));
+        TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_app(aid, false)));
 
-        r_enrolled = token.is_gate_enrolled(gid);
-        TEST_ASSERT(ok_and<false>(r_enrolled));
+        constexpr gate_id gid = gate_id::from_app_and_file(aid, 0x01).second;
+        gate g{};
+        g.regenerate_keys();
+        desfire::esp32::suppress_log suppress{"KA"};
+        g.configure(gid, "", pub_key{test_key_pair().raw_pk()});
+        suppress.restore();
+        const gate_config cfg{gid, pub_key{g.keys().raw_pk()}, g.app_base_key()};
+        const gate_token_key key = g.app_base_key().derive_token_key(*r_id, gid.key_no());
 
-        suppress = suppress_log{DESFIRE_LOG_PREFIX, DESFIRE_FS_DEFAULT_LOG_PREFIX, "KA"};
-        TEST_ASSERT_FALSE(token.authenticate(gid, gkey.derive_app_master_key(r_id->id)));
+        // Make sure that all methods that have a check_app switch actually do check the app by ensuring it fails with app_not_found
+        {
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(test_km(), cfg, {}, true)));
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, true, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_gate_file(g, true, false)));
+
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(test_km(), cfg, {}, true, true)));
+
+            const auto r_gates = token.list_gates(true, true);
+            TEST_ASSERT(r_gates);
+            TEST_ASSERT(r_gates->empty());
+
+            const auto r_gate_apps = token.list_gate_apps(true);
+            TEST_ASSERT(r_gate_apps);
+            TEST_ASSERT(r_gate_apps->end() == aid);
+
+            // They must fail even if we do not test the app
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(test_km(), cfg, {}, false)));
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_gate_file(g, false, false)));
+
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(test_km(), cfg, {}, false, false)));
+        }
+        // TODO attempt at changing the key and see check_app and check_app_key fail
+        // TODO attempt at chainging the app config and see all tests failing but not those where we skip.
     }
 
     void test_nvs() {
@@ -310,10 +365,12 @@ namespace ut {
     }
 
     void test_nvs_gate() {
+        key_pair gate_kp;
         {
             gate g{};
             g.regenerate_keys();
-            g.configure(0x00, "foobar", pub_key{test_key_pair().raw_pk()});
+            gate_kp = g.keys();
+            g.configure(gate_id{0x00}, "foobar", pub_key{test_key_pair().raw_pk()});
             g.config_store();
         }
         {
@@ -321,7 +378,9 @@ namespace ut {
             TEST_ASSERT(g.config_load());
             TEST_ASSERT_EQUAL(g.id(), 0x00);
             TEST_ASSERT(g.description() == "foobar");
-            TEST_ASSERT(g.keys().raw_pk() == test_key_pair().raw_pk());
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), gate_kp.raw_pk().data(), raw_pub_key::array_size);
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), gate_kp.raw_sk().data(), raw_sec_key::array_size);
+            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.programmer_pub_key().raw_pk().data(), test_key_pair().raw_pk().data(), raw_pub_key::array_size);
             gate::config_clear();
         }
     }
@@ -365,8 +424,8 @@ extern "C" void app_main() {
         }
 
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
-        RUN_TEST(ut::test_mad);
-        RUN_TEST(ut::test_enroll_and_auth);
+        RUN_TEST(ut::test_root_ops);
+        RUN_TEST(ut::test_app_ops);
 
         // Always conclude with a format test so that it leaves the test suite clean
         ut::instance.warn_before_formatting = false;
@@ -406,6 +465,11 @@ namespace ut {
     template <bool B, class Result>
     bool ok_and(Result const &res) {
         return res and *res == B;
+    }
+
+    template <desfire::error E, class Result>
+    bool is_err(Result const &res) {
+        return not res and res.error() == E;
     }
 
 }// namespace ut

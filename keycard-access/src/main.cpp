@@ -38,11 +38,7 @@ void gate_main() {
         ESP_LOGI(LOG_PFX, "Gate configured.");
     }
 
-    ESP_LOGI(LOG_PFX, "Gate %d \"%s\".", gate.id(), gate.description().c_str());
-    ESP_LOGI(LOG_PFX, "Gate public key:");
-    ESP_LOG_BUFFER_HEX_LEVEL(LOG_PFX, gate.keys().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
-    ESP_LOGI(LOG_PFX, "Keymaker public key:");
-    ESP_LOG_BUFFER_HEX_LEVEL(LOG_PFX, gate.programmer_pub_key().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
+    gate.log_public_gate_info();
 
     ka::gate_responder responder{gate};
     scanner.loop(responder, false /* already performed */);
@@ -82,10 +78,8 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     static constexpr std::array<std::uint8_t, 16> secondary_aes_key = {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
 
     [[nodiscard]] static ka::key_pair &test_key_pair() {
-        static ka::key_pair _kp{{
-                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-        }};
+        static ka::key_pair _kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
         return _kp;
     }
 
@@ -97,16 +91,16 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     desfire::tag::result<> interact_with_tag_internal(desfire::tag &tag) const {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::vector<desfire::any_key> keys_to_test = {
-                    default_k,
-                    test_key_pair().derive_token_root_key(current_id),
-                    demo_key_pair().derive_token_root_key(current_id),
-                    desfire::any_key{desfire::cipher_type::des3_2k},
-                    desfire::any_key{desfire::cipher_type::des3_3k},
-                    desfire::any_key{desfire::cipher_type::aes128},
-                    desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
+                default_k,
+                test_key_pair().derive_token_root_key(current_id),
+                demo_key_pair().derive_token_root_key(current_id),
+                desfire::any_key{desfire::cipher_type::des3_2k},
+                desfire::any_key{desfire::cipher_type::des3_3k},
+                desfire::any_key{desfire::cipher_type::aes128},
+                desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
         const auto s_nfcid = ka::util::hex_string(current_id);
         ESP_LOGI(LOG_PFX, "Attempting to recover root key for ID %s", s_nfcid.c_str());
         TRY(tag.select_application());
@@ -186,57 +180,40 @@ struct keymaker_responder final : public ka::member_token_responder {
     }
 
     desfire::tag::result<> interact_with_token_internal(ka::member_token &token) {
-        desfire::esp32::suppress_log suppress{LOG_PFX, DESFIRE_FS_DEFAULT_LOG_PREFIX, DESFIRE_DEFAULT_LOG_PREFIX};
-        TRY_RESULT_AS(token.get_id(), r_id) {
-            const auto root_key = km.keys().derive_token_root_key(*r_id);
-            suppress.restore();
-            const std::string id_str = ka::util::hex_string(*r_id);
-            ESP_LOGI(LOG_PFX, "Got the following token: %s.", id_str.c_str());
-            suppress.suppress();
-            if (token.unlock_root()) {
-                suppress.restore();
-                ESP_LOGI(LOG_PFX, "Empty token, setting up MAD.");
-                TRY(token.tag().format_picc())
-                TRY(token.setup_root(root_key))
-                TRY(token.setup_mad(ka::identity{*r_id, "Holder", "Publisher"}))
-                return mlab::result_success;
-            } else if (token.try_set_root_key(root_key)) {
-                suppress.restore();
-                ESP_LOGI(LOG_PFX, "Token was set up.");
-                suppress.suppress();
-                if (const auto r_identity = token.get_identity(); r_identity) {
-                    suppress.restore();
-                    ESP_LOGI(LOG_PFX, "MAD was set up for user %s (%s).", r_identity->holder.c_str(), r_identity->publisher.c_str());
-                    ESP_LOGW(LOG_PFX, "We are now trusting this data, during regular operation, it should be authenticated!");
-                    ESP_LOGI(LOG_PFX, "Setting up gates.");
-                    bool all_gates_were_enrolled = true;
-                    for (ka::gate_config const &cfg : km._gates) {
-                        const auto gate_app_master_key = cfg.app_base_key.derive_app_master_key(*r_id);
-                        if (token.is_gate_enrolled(cfg.id) and token.authenticate(cfg.id, gate_app_master_key)) {
-                            ESP_LOGI(LOG_PFX, "Gate %d was already enrolled.", cfg.id);
-                        } else {
-                            all_gates_were_enrolled = false;
-                            TRY(token.enroll_gate(cfg.id, gate_app_master_key, *r_identity))
-                            ESP_LOGI(LOG_PFX, "I just enrolled gate %d", cfg.id);
-                        }
+        const ka::identity unique_id{{}, "Holder", "Publisher"};
+        if (const auto r_deployed = token.is_deployed_correctly(km); r_deployed) {
+            ESP_LOGI(LOG_PFX, "Token was deployed.");
+            bool all_gates_were_enrolled = true;
+            for (ka::gate_config const &cfg : km._gates) {
+                if (const auto r_enrolled = token.is_gate_enrolled_correctly(km, cfg); r_enrolled) {
+                    if (r_enrolled->first) {
+                        ESP_LOGI(LOG_PFX, "Gate %d was already enrolled.", std::uint32_t(cfg.id));
+                        continue;
                     }
-                    if (not all_gates_were_enrolled) {
-                        return mlab::result_success;
-                    }
-                    ESP_LOGI(LOG_PFX, "All gates were already enrolled, I'll format this PICC.");
+                } else if (ka::member_token::has_custom_meaning(r_enrolled.error())) {
+                    ESP_LOGW(LOG_PFX, "Invalid gate enrollment: %s", ka::member_token::describe(r_enrolled.error()));
+                    continue;
                 } else {
-                    suppress.restore();
-                    ESP_LOGW(LOG_PFX, "MAD was not set up, will format the PICC.");
+                    return r_enrolled.error();
                 }
-                // Format procedure
-                TRY(token.unlock_root())
-                TRY(token.tag().format_picc())
-                TRY(token.unlock_root())
-                TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
-            } else {
-                ESP_LOGE(LOG_PFX, "I do not know the key of this PICC.");
-                return desfire::error::permission_denied;
+                all_gates_were_enrolled = false;
+                TRY(token.enroll_gate(km, cfg, unique_id))
+                ESP_LOGI(LOG_PFX, "I just enrolled gate %d", std::uint32_t(cfg.id));
             }
+            if (all_gates_were_enrolled) {
+                ESP_LOGI(LOG_PFX, "All gates were already enrolled, I'll format this PICC.");
+                const auto rkey = km.keys().derive_token_root_key(*r_deployed);
+                TRY(desfire::fs::login_app(token.tag(), desfire::root_app, rkey))
+                TRY(token.tag().format_picc())
+                TRY(desfire::fs::login_app(token.tag(), desfire::root_app, rkey))
+                TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
+            }
+        } else if (ka::member_token::has_custom_meaning(r_deployed.error())) {
+            ESP_LOGI(LOG_PFX, "Token deploy status: %s", ka::member_token::describe(r_deployed.error()));
+            ESP_LOGI(LOG_PFX, "Attempting deploy.");
+            TRY(token.deploy(km, unique_id))
+        } else {
+            return r_deployed.error();
         }
         return mlab::result_success;
     }

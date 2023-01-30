@@ -18,18 +18,22 @@
 namespace ka {
     namespace {
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> root_key_context{"rootkey"};
+        constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> gate_key_context{"gatekey"};
         constexpr unsigned long long pwhash_memlimit = 0x2000;
         constexpr unsigned long long pwhash_opslimit = 4;
         constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
 
-        template <class> struct size_of_array {};
-        template <std::size_t N> struct  size_of_array<std::array<char, N>> {
+        template <class>
+        struct size_of_array {};
+        template <std::size_t N>
+        struct size_of_array<std::array<char, N>> {
             static constexpr std::size_t size = N;
         };
-        template <std::size_t N> struct  size_of_array<std::array<std::uint8_t, N>> {
+        template <std::size_t N>
+        struct size_of_array<std::array<std::uint8_t, N>> {
             static constexpr std::size_t size = N;
         };
-    }
+    }// namespace
 
     static_assert(raw_pub_key::array_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_box_SECRETKEYBYTES);
@@ -73,12 +77,24 @@ namespace ka {
         std::array<std::uint8_t, key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         pack_token_id(id),
+                         util::pack_token_id(id),
                          root_key_context.data(),
                          raw_sk().data())) {
             ESP_LOGE("KA", "Unable to derive root key.");
         }
         return token_root_key{0, derived_key_data};
+    }
+
+    gate_app_master_key sec_key::derive_gate_app_master_key(const token_id &id) const {
+        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        if (0 != crypto_kdf_blake2b_derive_from_key(
+                         derived_key_data.data(), derived_key_data.size(),
+                         util::pack_token_id(id),
+                         gate_key_context.data(),
+                         raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to derive gate app master key.");
+        }
+        return gate_app_master_key{0, derived_key_data};
     }
 
     key_pair::key_pair(raw_sec_key sec_key_raw) : sec_key{sec_key_raw}, pub_key{} {
@@ -140,8 +156,7 @@ namespace ka {
     void key_pair::generate_from_pwhash(std::string const &password) {
         static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
         if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
-            password.length() > crypto_pwhash_argon2id_PASSWD_MAX)
-        {
+            password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
             ESP_LOGE("KA", "Password must be between %u and %u characters long.",
                      crypto_pwhash_argon2id_PASSWD_MIN,
                      crypto_pwhash_argon2id_PASSWD_MAX);
@@ -152,8 +167,7 @@ namespace ka {
                          password.data(), password.length(),
                          pwhash_salt.data(),
                          pwhash_opslimit, pwhash_memlimit,
-                         crypto_pwhash_argon2id_ALG_ARGON2ID13))
-        {
+                         crypto_pwhash_argon2id_ALG_ARGON2ID13)) {
             ESP_LOGE("KA", "Unable to derive key from password, out of memory.");
             _pk = {};
             _sk = {};

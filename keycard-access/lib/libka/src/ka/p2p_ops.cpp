@@ -3,12 +3,12 @@
 //
 
 #include <desfire/esp32/utils.hpp>
+#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
-#include <ka/desfire_fs.hpp>
 
 
 namespace ka::p2p {
@@ -32,6 +32,7 @@ namespace ka::p2p {
             keymaker &_km;
             std::string const &_desc;
             bool _success;
+
         public:
             configure_gate_responder(keymaker &km, std::string const &desc) : _km{km}, _desc{desc}, _success{false} {}
 
@@ -49,7 +50,7 @@ namespace ka::p2p {
             }
         };
 
-    }
+    }// namespace
 
     void configure_gate_loop(pn532::controller &ctrl, gate &g) {
         pn532::p2p::pn532_target raw_comm{ctrl};
@@ -81,7 +82,7 @@ namespace ka::p2p {
         ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
 
         TRY_RESULT(comm.receive(1s)) {
-            gate_id new_id = g.id();
+            std::uint32_t new_id = g.id();
             mlab::bin_stream s{*r};
             if (s.pop() != bits::command_code_configure) {
                 s.set_bad();
@@ -94,7 +95,8 @@ namespace ka::p2p {
             }
 
             // Finally:
-            g.configure(new_id, std::move(new_desc), pub_key{comm.peer_pub_key()});
+            g.configure(gate_id{new_id}, std::move(new_desc), pub_key{comm.peer_pub_key()});
+            g.log_public_gate_info();
             TRY(comm.send(mlab::bin_data::chain(g.app_base_key()), 1s))
         }
         return mlab::result_success;
@@ -110,13 +112,13 @@ namespace ka::p2p {
          */
         const auto gid = km.allocate_gate_id();
         mlab::bin_data msg{mlab::prealloc(6 + gate_description.size())};
-        msg << bits::command_code_configure << mlab::lsb32 << gid << mlab::view_from_string(gate_description);
+        msg << bits::command_code_configure << mlab::lsb32 << std::uint32_t(gid) << mlab::view_from_string(gate_description);
         TRY_RESULT(comm.communicate(msg, 1s)) {
-            if (r->size() != gate_app_base_key::array_size) {
+            if (r->size() != gate_base_key::array_size) {
                 ESP_LOGE("KA", "Invalid configure response received.");
                 return pn532::channel::error::comm_malformed;
             }
-            gate_app_base_key base_key{};
+            gate_base_key base_key{};
             std::copy(std::begin(*r), std::end(*r), std::begin(base_key));
             km.register_gate({gid, pub_key{comm.peer_pub_key()}, base_key});
         }
@@ -135,4 +137,4 @@ namespace ka::p2p {
         secure_initiator comm{raw_comm, km.keys()};
         return bool(configure_gate_exchange(km, comm, gate_description));
     }
-}
+}// namespace ka::p2p

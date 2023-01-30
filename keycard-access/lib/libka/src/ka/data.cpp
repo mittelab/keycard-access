@@ -22,8 +22,7 @@ namespace ka {
                 const std::size_t end = std::clamp(cur_pos, beg, text.length());
                 retval.append(
                         std::begin(text) + std::string::difference_type(beg),
-                        std::begin(text) + std::string::difference_type(end)
-                );
+                        std::begin(text) + std::string::difference_type(end));
             };
 
             while ((cur_pos = text.find(search, last_pos)) != std::string::npos) {
@@ -61,7 +60,7 @@ namespace ka {
             std::copy_n(std::begin(d), std::min(token_id::array_size, d.size()), std::begin(id));
             return id;
         }
-    }
+    }// namespace util
 
     std::string identity::string_representation() const {
         return util::hex_string(id) + "\n" + util::escape(holder) + "\n" + util::escape(publisher);
@@ -87,7 +86,7 @@ namespace ka {
     bool identity::operator!=(identity const &other) const {
         return id != other.id or holder != other.holder or publisher != other.publisher;
     }
-}
+}// namespace ka
 
 namespace mlab {
     mlab::range<std::uint8_t const *> view_from_string(std::string const &s) {
@@ -120,5 +119,21 @@ namespace mlab {
                 reinterpret_cast<char const *>(bd.data()),
                 reinterpret_cast<char const *>(bd.data() + bd.size())};
         return std::string{std::begin(view), std::end(view)};
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::identity &id) {
+        /**
+         * @todo This is temporary
+         */
+        id.holder = data_to_string(s.read(s.remaining()));
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::identity const &id) {
+        /**
+         * @todo This is temporary
+         */
+        bd << view_from_string(id.holder);
+        return bd;
     }
 }// namespace mlab
