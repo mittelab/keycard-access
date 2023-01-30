@@ -2,11 +2,11 @@
 // Created by spak on 1/8/23.
 //
 
+#include <cstring>
 #include <esp_err.h>
 #include <esp_log.h>
 #include <ka/nvs.hpp>
 #include <nvs_flash.h>
-#include <cstring>
 
 namespace ka::nvs {
 
@@ -18,7 +18,7 @@ namespace ka::nvs {
             ESP_ERROR_CHECK(nvs_flash_erase());
             err = nvs_flash_init();
         } else
-        ESP_ERROR_CHECK(err);
+            ESP_ERROR_CHECK(err);
     }
 
     nvs::~nvs() {
@@ -136,7 +136,7 @@ namespace ka::nvs {
     }
 
     const_namespc::const_namespc(std::shared_ptr<const partition> part, nvs_handle_t hdl)
-            : _part{std::move(part)}, _hdl{hdl} {}
+        : _part{std::move(part)}, _hdl{hdl} {}
 
 
     r<std::uint8_t> const_namespc::get_u8(const char *key) const {
@@ -291,4 +291,4 @@ namespace ka::nvs {
             return ns_wptr.lock();
         }
     }
-}// namespace ka
+}// namespace ka::nvs

@@ -78,7 +78,7 @@ namespace ka::p2p {
         [[nodiscard]] result<mlab::bin_data> receive(ms timeout) override;
         result<> send(mlab::bin_data const &data, ms timeout) override;
     };
-}
+}// namespace ka::p2p
 
 
 namespace ka::p2p {
@@ -95,6 +95,6 @@ namespace ka::p2p {
     raw_pub_key const &secure_initiator::peer_pub_key() const {
         return _peer_pk;
     }
-}
+}// namespace ka::p2p
 
 #endif//KEYCARD_ACCESS_SECURE_P2P_HPP

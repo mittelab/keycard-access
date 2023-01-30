@@ -5,10 +5,10 @@
 #ifndef KEYCARD_ACCESS_DATA_HPP
 #define KEYCARD_ACCESS_DATA_HPP
 
+#include <cmath>
 #include <desfire/data.hpp>
 #include <desfire/keys.hpp>
 #include <desfire/tag.hpp>
-#include <cmath>
 
 namespace ka {
 
@@ -16,6 +16,7 @@ namespace ka {
 
     class gate_id {
         std::uint32_t _idx = 0;
+
     public:
         using value_type = std::uint32_t;
 
@@ -131,7 +132,8 @@ namespace mlab {
 }// namespace mlab
 
 namespace std {
-    template <> struct numeric_limits<ka::gate_id> {
+    template <>
+    struct numeric_limits<ka::gate_id> {
         static constexpr bool is_specialized = true;
         static constexpr bool is_signed = false;
         static constexpr bool is_integer = true;
@@ -168,7 +170,7 @@ namespace std {
         static constexpr ka::gate_id signaling_NaN() noexcept { return ka::gate_id{0}; }
         static constexpr ka::gate_id denorm_min() noexcept { return ka::gate_id{0}; }
     };
-}
+}// namespace std
 
 namespace ka {
 

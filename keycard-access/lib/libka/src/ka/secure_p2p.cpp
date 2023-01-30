@@ -50,8 +50,7 @@ namespace ka::p2p {
         }
         // Derive the keys
         if (0 != crypto_kx_client_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data()))
-        {
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel::error::failure;
         }
@@ -89,8 +88,7 @@ namespace ka::p2p {
         }
         // Derive the keys
         if (0 != crypto_kx_server_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data()))
-        {
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel::error::failure;
         }
@@ -176,4 +174,4 @@ namespace ka::p2p {
         }
         return mlab::result_success;
     }
-}
+}// namespace ka::p2p

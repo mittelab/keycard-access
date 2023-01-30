@@ -5,9 +5,9 @@
 #ifndef KEYCARDACCESS_MEMBER_TOKEN_HPP
 #define KEYCARDACCESS_MEMBER_TOKEN_HPP
 
-#include <ka/data.hpp>
-#include <desfire/tag_responder.hpp>
 #include <desfire/esp32/cipher_provider.hpp>
+#include <desfire/tag_responder.hpp>
+#include <ka/data.hpp>
 
 namespace ka {
 
@@ -195,6 +195,7 @@ namespace ka {
          */
         template <class Fn>
         r<> list_gate_apps_internal(bool check_app, Fn &&app_action) const;
+
     public:
         explicit member_token(desfire::tag &tag);
 
@@ -790,7 +791,7 @@ namespace std {
         using pointer = desfire::app_id;
         using reference_wrapper = desfire::app_id;
     };
-}
+}// namespace std
 namespace ka {
 
     desfire::tag &member_token::tag() const {

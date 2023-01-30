@@ -3,12 +3,12 @@
 //
 
 #include <desfire/esp32/utils.hpp>
+#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
-#include <ka/desfire_fs.hpp>
 
 
 namespace ka::p2p {
@@ -32,6 +32,7 @@ namespace ka::p2p {
             keymaker &_km;
             std::string const &_desc;
             bool _success;
+
         public:
             configure_gate_responder(keymaker &km, std::string const &desc) : _km{km}, _desc{desc}, _success{false} {}
 
@@ -49,7 +50,7 @@ namespace ka::p2p {
             }
         };
 
-    }
+    }// namespace
 
     void configure_gate_loop(pn532::controller &ctrl, gate &g) {
         pn532::p2p::pn532_target raw_comm{ctrl};
@@ -136,4 +137,4 @@ namespace ka::p2p {
         secure_initiator comm{raw_comm, km.keys()};
         return bool(configure_gate_exchange(km, comm, gate_description));
     }
-}
+}// namespace ka::p2p

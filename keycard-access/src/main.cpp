@@ -78,10 +78,8 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     static constexpr std::array<std::uint8_t, 16> secondary_aes_key = {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
 
     [[nodiscard]] static ka::key_pair &test_key_pair() {
-        static ka::key_pair _kp{{
-                0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
-        }};
+        static ka::key_pair _kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
         return _kp;
     }
 
@@ -93,16 +91,16 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     desfire::tag::result<> interact_with_tag_internal(desfire::tag &tag) const {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::vector<desfire::any_key> keys_to_test = {
-                    default_k,
-                    test_key_pair().derive_token_root_key(current_id),
-                    demo_key_pair().derive_token_root_key(current_id),
-                    desfire::any_key{desfire::cipher_type::des3_2k},
-                    desfire::any_key{desfire::cipher_type::des3_3k},
-                    desfire::any_key{desfire::cipher_type::aes128},
-                    desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
+                default_k,
+                test_key_pair().derive_token_root_key(current_id),
+                demo_key_pair().derive_token_root_key(current_id),
+                desfire::any_key{desfire::cipher_type::des3_2k},
+                desfire::any_key{desfire::cipher_type::des3_3k},
+                desfire::any_key{desfire::cipher_type::aes128},
+                desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
         const auto s_nfcid = ka::util::hex_string(current_id);
         ESP_LOGI(LOG_PFX, "Attempting to recover root key for ID %s", s_nfcid.c_str());
         TRY(tag.select_application());

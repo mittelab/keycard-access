@@ -52,6 +52,7 @@ namespace ka {
          * @return A key_type which gives root access to the card.
          */
         [[nodiscard]] gate_app_master_key derive_gate_app_master_key(token_id const &id) const;
+
     protected:
         raw_sec_key _sk{};
     };

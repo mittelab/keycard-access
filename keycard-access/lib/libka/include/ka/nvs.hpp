@@ -8,9 +8,9 @@
 #include <esp_partition.h>
 #include <map>
 #include <memory>
-#include <nvs_flash.h>
-#include <mlab/result.hpp>
 #include <mlab/bin_data.hpp>
+#include <mlab/result.hpp>
+#include <nvs_flash.h>
 
 namespace ka::nvs {
 
@@ -38,6 +38,7 @@ namespace ka::nvs {
 
     class nvs {
         std::map<std::string, std::weak_ptr<partition>> _open_partitions;
+
     public:
         nvs();
         nvs(nvs const &) = delete;
@@ -53,6 +54,7 @@ namespace ka::nvs {
         esp_partition_t const *_part;
         mutable std::map<std::string, std::weak_ptr<const_namespc>> _open_cns;
         std::map<std::string, std::weak_ptr<namespc>> _open_ns;
+
     public:
         explicit partition(esp_partition_t const &part, bool secure);
         ~partition();
@@ -88,8 +90,8 @@ namespace ka::nvs {
 
         friend class partition;
         const_namespc(std::shared_ptr<const partition> part, nvs_handle_t hdl);
-    public:
 
+    public:
         const_namespc() = default;
         const_namespc(const_namespc const &) = delete;
         const_namespc &operator=(const_namespc const &) = delete;
@@ -130,6 +132,7 @@ namespace ka::nvs {
 
         friend class partition;
         namespc(std::shared_ptr<partition> part, nvs_handle_t hdl);
+
     public:
         namespc() = default;
         namespc(namespc const &) = delete;
@@ -214,6 +217,6 @@ namespace ka::nvs {
     std::shared_ptr<const_namespc> partition::open_namespc(const char *nsname) const {
         return open_const_namespc(nsname);
     }
-}
+}// namespace ka::nvs
 
 #endif//KEYCARD_ACCESS_NVS_HPP

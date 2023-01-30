@@ -6,8 +6,8 @@
 #include <desfire/kdf.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
-#include <ka/p2p_ops.hpp>
 #include <ka/member_token.hpp>
+#include <ka/p2p_ops.hpp>
 
 namespace ka {
 
@@ -58,7 +58,7 @@ namespace ka {
                     }
                 }
             };
-        }
+        }// namespace impl
 
         template <class R>
         decltype(auto) pack_token_id(R &&r, token_id id) {

@@ -5,11 +5,11 @@
 #ifndef KEYCARDACCESS_GATE_HPP
 #define KEYCARDACCESS_GATE_HPP
 
-#include <ka/member_token.hpp>
-#include <ka/data.hpp>
 #include <cstdint>
 #include <desfire/data.hpp>
+#include <ka/data.hpp>
 #include <ka/key_pair.hpp>
+#include <ka/member_token.hpp>
 
 namespace pn532 {
     class controller;
@@ -50,6 +50,7 @@ namespace ka {
      */
     class gate_responder : public virtual member_token_responder, public virtual gate_auth_responder {
         gate &_g;
+
     public:
         explicit gate_responder(gate &g) : _g{g} {}
 

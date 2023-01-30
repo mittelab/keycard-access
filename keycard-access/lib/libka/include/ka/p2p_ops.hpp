@@ -28,7 +28,7 @@ namespace ka {
         }
     };
 
-}
+}// namespace ka
 namespace ka::p2p {
 
     pn532::p2p::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
@@ -40,6 +40,6 @@ namespace ka::p2p {
     void configure_gate_loop(pn532::controller &ctrl, gate &g);
     [[nodiscard]] bool configure_gate_loop(pn532::controller &ctrl, keymaker &km, std::string const &gate_description);
 
-}
+}// namespace ka::p2p
 
 #endif//KEYCARD_ACCESS_P2P_OPS_HPP

@@ -8,9 +8,9 @@
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
 #include <pn532/controller.hpp>
+#include <sdkconfig.h>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
-#include <sdkconfig.h>
 
 
 using namespace std::chrono_literals;
@@ -132,7 +132,7 @@ namespace ka {
         const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(keys().raw_sk()));
         const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key()));
         const auto r_commit = ns->commit();
-        if (not (r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
+        if (not(r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
             ESP_LOGE("KA", "Unable to save gate configuration.");
         }
     }
@@ -208,7 +208,7 @@ namespace ka {
             }
             return r_data;
         }
-    }
+    }// namespace
 
     bool gate::config_load(nvs::partition &partition) {
         auto ns = partition.open_namespc(ka_namespc);
