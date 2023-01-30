@@ -32,23 +32,6 @@ namespace ka {
         constexpr bool nvs_encrypted = false;
 #endif
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
-
-        [[nodiscard]] bool might_be_tampering(desfire::error e) {
-            switch (e) {
-                case desfire::error::authentication_error:
-                    [[fallthrough]];
-                case desfire::error::file_integrity_error:
-                    // Wrong hash
-                    [[fallthrough]];
-                case desfire::error::length_error:
-                    // Wrong hash length
-                    [[fallthrough]];
-                case desfire::error::permission_denied:
-                    return true;
-                default:
-                    return false;
-            }
-        }
     }// namespace
 
     static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
@@ -83,24 +66,31 @@ namespace ka {
 
 
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
-        if (const auto r = token.is_gate_enrolled(id()); r and *r) {
-            // We should be able to get the id
-            if (const auto r_id = token.get_id(); r_id) {
-                if (const auto r_auth = token.authenticate(id(), app_base_key().derive_token_key(*r_id)); r_auth) {
-                    ESP_LOGI("KA", "Authenticated as %s.", r_auth->holder.c_str());
-                    responder.on_authentication_success(*r_auth);
-                } else {
-                    const bool tampering = might_be_tampering(r_auth.error());
-                    if (tampering) {
-                        ESP_LOGW("KA", "Authentication error might indicate tampering: %s", desfire::to_string(r_auth.error()));
-                    }
-                    responder.on_authentication_fail(*r_id, r_auth.error(), token.get_identity(), tampering);
-                }
-            } else {
-                ESP_LOGW("KA", "Enrolled but invalid MAD, error: %s", desfire::to_string(r_id.error()));
+        if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {
+            ESP_LOGI("KA", "Authenticated as %s.", r->first.holder.c_str());
+            responder.on_authentication_success(r->first);
+        } else {
+            switch (r.error()) {
+                case desfire::error::app_not_found:
+                    [[fallthrough]];
+                case desfire::error::file_not_found:
+                    ESP_LOGI("KA", "Not enrolled.");
+                    break;
+                case desfire::error::app_integrity_error:
+                    [[fallthrough]];
+                case desfire::error::crypto_error:
+                    [[fallthrough]];
+                case desfire::error::malformed:
+                    [[fallthrough]];
+                case desfire::error::file_integrity_error:
+                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    responder.on_authentication_fail(r.error(), true);
+                    break;
+                default:
+                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    responder.on_authentication_fail(r.error(), false);
+                    break;
             }
-        } else if (r and not *r) {
-            ESP_LOGI("KA", "Not enrolled.");
         }
     }
 
@@ -115,16 +105,9 @@ namespace ka {
         const auto s_id = util::hex_string(id.id);
         ESP_LOGI("GATE", "Authenticated as %s via %s.", id.holder.c_str(), s_id.c_str());
     }
-    void gate_responder::on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {
-        const auto s_id = util::hex_string(id);
-        if (unverified_id) {
-            ESP_LOGE("GATE", "Authentication failed (%s): token %s claims to be %s%s.",
-                     desfire::to_string(auth_error), s_id.c_str(), unverified_id->holder.c_str(),
-                     (might_be_tampering ? " (might be tampering)." : "."));
-        } else {
-            ESP_LOGE("GATE", "Authentication failed (%s) on token %s%s.",
-                     desfire::to_string(auth_error), s_id.c_str(), (might_be_tampering ? " (might be tampering)." : "."));
-        }
+    void gate_responder::on_authentication_fail(desfire::error auth_error, bool might_be_tampering) {
+        ESP_LOGE("GATE", "Authentication failed: %s%s.",
+                 member_token::describe(auth_error), (might_be_tampering ? " (might be tampering)." : "."));
     }
     void gate_responder::on_activation(pn532::scanner &, pn532::scanned_target const &target) {
         const auto s_id = util::hex_string(target.nfcid);

@@ -39,7 +39,7 @@ namespace ka {
      */
     struct gate_auth_responder {
         virtual void on_authentication_success(identity const &id) {}
-        virtual void on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) {}
+        virtual void on_authentication_fail(desfire::error auth_error, bool might_be_tampering) {}
 
         virtual ~gate_auth_responder() = default;
     };
@@ -60,7 +60,7 @@ namespace ka {
          * @{
          */
         void on_authentication_success(identity const &id) override;
-        void on_authentication_fail(token_id const &id, desfire::error auth_error, r<identity> const &unverified_id, bool might_be_tampering) override;
+        void on_authentication_fail(desfire::error auth_error, bool might_be_tampering) override;
         void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override;
         void on_release(pn532::scanner &scanner, pn532::scanned_target const &target) override;
         void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override;

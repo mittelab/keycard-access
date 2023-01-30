@@ -34,7 +34,7 @@ namespace ka {
          * @}
          */
 
-        static constexpr desfire::app_id first_aid = {0xf5, 0x10, 00};
+        static constexpr desfire::app_id first_aid = {0xf5, 0x10, 0x00};
 
         constexpr gate_id() = default;
         explicit constexpr gate_id(std::uint32_t idx);
