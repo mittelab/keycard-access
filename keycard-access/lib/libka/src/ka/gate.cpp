@@ -53,15 +53,9 @@ namespace ka {
             ESP_LOGE("KA", "Keys have not been generated for this gate! You must re-query the public key.");
             regenerate_keys();
         }
-        ESP_LOGI("KA", "Configuring gate.");
         _id = id;
         _desc = std::move(desc);
         _prog_pk = prog_pub_key;
-        ESP_LOGI("KA", "Configured as gate %d: %s", std::uint32_t(this->id()), description().c_str());
-        ESP_LOGI("KA", "Gate public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
-        ESP_LOGI("KA", "Programmer public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
     }
 
 
@@ -244,6 +238,14 @@ namespace ka {
             ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
         }
         return false;
+    }
+
+    void gate::log_public_gate_info() const {
+        ESP_LOGI("KA", "Gate %d: %s", std::uint32_t(this->id()), description().c_str());
+        ESP_LOGI("KA", "Gate public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI("KA", "Keymaker public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
     }
 
     void gate::config_clear(nvs::partition &partition) {

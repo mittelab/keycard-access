@@ -95,6 +95,7 @@ namespace ka::p2p {
 
             // Finally:
             g.configure(gate_id{new_id}, std::move(new_desc), pub_key{comm.peer_pub_key()});
+            g.log_public_gate_info();
             TRY(comm.send(mlab::bin_data::chain(g.app_base_key()), 1s))
         }
         return mlab::result_success;

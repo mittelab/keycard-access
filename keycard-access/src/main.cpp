@@ -38,11 +38,7 @@ void gate_main() {
         ESP_LOGI(LOG_PFX, "Gate configured.");
     }
 
-    ESP_LOGI(LOG_PFX, "Gate %d \"%s\".", std::uint32_t(gate.id()), gate.description().c_str());
-    ESP_LOGI(LOG_PFX, "Gate public key:");
-    ESP_LOG_BUFFER_HEX_LEVEL(LOG_PFX, gate.keys().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
-    ESP_LOGI(LOG_PFX, "Keymaker public key:");
-    ESP_LOG_BUFFER_HEX_LEVEL(LOG_PFX, gate.programmer_pub_key().raw_pk().data(), ka::raw_pub_key::array_size, ESP_LOG_INFO);
+    gate.log_public_gate_info();
 
     ka::gate_responder responder{gate};
     scanner.loop(responder, false /* already performed */);

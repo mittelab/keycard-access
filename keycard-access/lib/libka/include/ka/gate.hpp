@@ -105,6 +105,8 @@ namespace ka {
 
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
 
+        void log_public_gate_info() const;
+
     private:
         gate_id _id = std::numeric_limits<gate_id>::max();
         std::string _desc;
