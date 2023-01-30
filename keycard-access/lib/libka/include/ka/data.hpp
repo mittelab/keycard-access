@@ -125,6 +125,9 @@ namespace mlab {
     [[nodiscard]] std::string data_to_string(bin_data const &bd);
     [[nodiscard]] std::string data_to_string(mlab::range<mlab::bin_data::const_iterator> rg);
     [[nodiscard]] std::string data_to_string(mlab::range<std::uint8_t const *> rg);
+
+    bin_stream &operator>>(bin_stream &s, ka::identity &id);
+    bin_data &operator<<(bin_data &bd, ka::identity const &id);
 }// namespace mlab
 
 namespace std {

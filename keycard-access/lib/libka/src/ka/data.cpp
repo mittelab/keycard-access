@@ -121,4 +121,20 @@ namespace mlab {
                 reinterpret_cast<char const *>(bd.data() + bd.size())};
         return std::string{std::begin(view), std::end(view)};
     }
+
+    bin_stream &operator>>(bin_stream &s, ka::identity &id) {
+        /**
+         * @todo This is temporary
+         */
+        id.holder = data_to_string(s.read(s.remaining()));
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::identity const &id) {
+        /**
+         * @todo This is temporary
+         */
+        bd << view_from_string(id.holder);
+        return bd;
+    }
 }// namespace mlab
