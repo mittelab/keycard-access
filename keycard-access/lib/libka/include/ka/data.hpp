@@ -182,7 +182,7 @@ namespace ka {
 
     constexpr gate_id operator""_g(unsigned long long int id) {
         constexpr unsigned long long int lo = std::numeric_limits<gate_id>::min();
-        constexpr unsigned long long int hi = std::numeric_limits<gate_id>::min();
+        constexpr unsigned long long int hi = std::numeric_limits<gate_id>::max();
         return gate_id{std::uint32_t(std::clamp(id, lo, hi))};
     }
 
