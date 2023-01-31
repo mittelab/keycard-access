@@ -280,6 +280,7 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km, {}, true)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km, true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km)));
 
             // They must fail even if we do not test the app
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(false, false)));
@@ -288,6 +289,7 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km, {}, false)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km)));
         }
 
         /**
@@ -296,6 +298,7 @@ namespace ut {
         TEST_ASSERT(token.ensure_gate_app(gate_id::first_aid, rkey, mkey));
         TEST_ASSERT(token.check_gate_app(gate_id::first_aid, true));
         TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_app(aid, false)));
+        TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_deployed_correctly(bundle.km)));
 
         /**
          * Create a fully working gate
@@ -446,6 +449,58 @@ namespace ut {
         }
     }
 
+    void test_file_ops() {
+        TEST_ASSERT(instance.tag != nullptr);
+        if (instance.tag == nullptr) {
+            return;
+        }
+
+        member_token token{*instance.tag};
+
+        const auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
+
+        const auto rkey = bundle.kp.derive_token_root_key(*r_id);
+        const auto mkey = bundle.kp.derive_gate_app_master_key(*r_id);
+        TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
+
+
+        /**
+         * Create a fully working gate
+         */
+        const auto &g = bundle.g0;
+        const auto gid = bundle.g0.id();
+        const auto &cfg = bundle.g0_cfg;
+        const gate_token_key key = bundle.g0.app_base_key().derive_token_key(*r_id, gid.key_no());
+
+        TEST_ASSERT(token.ensure_gate_app(gate_id::first_aid, rkey, mkey));
+        TEST_ASSERT(token.enroll_gate_key(gid, mkey, key, true));
+
+        /**
+         * Test that reading fails with file_not_found independently of checking
+         */
+        {
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_master_file(mkey, false, true)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_master_file(mkey, false, false)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_gate_file(gid, key, false, true)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_gate_file(gid, key, false, false)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_encrypted_master_file(bundle.km, false, true)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_encrypted_master_file(bundle.km, false, false)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_encrypted_gate_file(g, false, true)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.read_encrypted_gate_file(g, false, false)));
+
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.check_gate_file(gid, false, false)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.check_master_file(false, false)));
+
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, true)));
+            TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, true)));
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
+            TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, true)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_deployed_correctly(bundle.km)));
+        }
+
+    }
+
     void test_nvs() {
         nvs::nvs root{};
         auto part = root.open_partition(NVS_DEFAULT_PART_NAME, false);
@@ -539,6 +594,7 @@ extern "C" void app_main() {
         RUN_TEST(ut::test_tag_reset_root_key_and_format);
         RUN_TEST(ut::test_root_ops);
         RUN_TEST(ut::test_app_ops);
+        RUN_TEST(ut::test_file_ops);
 
         // Always conclude with a format test so that it leaves the test suite clean
         ut::instance.warn_before_formatting = false;
@@ -577,7 +633,11 @@ namespace ut {
 
     template <bool B, class Result>
     bool ok_and(Result const &res) {
-        return res and *res == B;
+        if constexpr (std::is_same_v<std::remove_const_t<std::remove_reference_t<decltype(*res)>>, bool>) {
+            return res and *res == B;
+        } else {
+            return res and res->first == B;
+        }
     }
 
     template <desfire::error E, class Result>
