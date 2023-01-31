@@ -12,7 +12,9 @@
 namespace ka {
 
     namespace {
-        constexpr desfire::key_rights gate_app_rights{0, false, true, false, false};
+        using pn532::operator""_b;
+
+        constexpr desfire::key_rights gate_app_rights{0_b, false, true, false, false};
 
         constexpr char boolalpha(bool b) {
             return b ? 'Y' : 'N';
@@ -399,13 +401,28 @@ namespace ka {
         } else {
             TRY_SILENT(silent_select_application(tag(), aid, false))
         }
+        // Is the key already enrolled?
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), key)) {
+            if (*r) {
+                return mlab::result_success;
+            }
+        }
+        // Could only be default key
+        const auto def_key = key_type{}.with_key_number(key.key_number());
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), def_key)) {
+            if (not *r) {
+                ESP_LOGW("KA", "App %02x%02x%02x, key %d: unable to recover previous key.", aid[0], aid[1], aid[2], key.key_number());
+                return desfire::error::app_integrity_error;
+            }
+        }
+        // We still need the master key to change it
         TRY_RESULT_SILENT(silent_try_authenticate(tag(), mkey)) {
             if (not *r) {
                 return desfire::error::permission_denied;
             }
         }
         desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
-        if (const auto r = tag().change_key(mkey, key.key_number(), key); not r) {
+        if (const auto r = tag().change_key(def_key, key); not r) {
             if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                 // The app settings are incorrect because they do not allow key change
                 ESP_LOGW("KA", "App %02x%02x%02x: does not allow changing key with master key.", aid[0], aid[1], aid[2]);

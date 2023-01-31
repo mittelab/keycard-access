@@ -66,6 +66,8 @@ namespace ut {
          * @}
          */
 
+        using pn532::operator""_b;
+
         constexpr char boolalpha(bool b) {
             return b ? 'Y' : 'N';
         }
@@ -349,7 +351,7 @@ namespace ut {
          * Create a second app with correct settings but on a wrong key. All methods that require the master key should fail.
          */
         {
-            constexpr desfire::key_rights gate_app_rights{0, false, true, false, false};
+            constexpr desfire::key_rights gate_app_rights{0_b, false, true, false, false};
             TEST_ASSERT(desfire::fs::login_app(token.tag(), desfire::root_app, rkey));
             TEST_ASSERT(desfire::fs::create_app(token.tag(), aid, key, gate_app_rights, ka::gate_id::gates_per_app));
 
@@ -373,12 +375,12 @@ namespace ut {
             using create_parms = std::pair<desfire::key_rights, std::uint8_t>;
             constexpr auto correct_extra_keys = std::uint8_t(gate_id::gates_per_app);
             constexpr std::array<create_parms, 6> parms{
-                    create_parms{{1, false, true, false, false}, correct_extra_keys},
-                    create_parms{{0, true, true, false, false}, correct_extra_keys},
-                    create_parms{{0, false, false, false, false}, correct_extra_keys},
-                    create_parms{{0, false, true, true, false}, correct_extra_keys},
-                    create_parms{{0, false, true, false, true}, correct_extra_keys},
-                    create_parms{{0, false, true, false, false}, correct_extra_keys - 1},
+                    create_parms{{1_b, false, true, false, false}, correct_extra_keys},
+                    create_parms{{0_b, true, true, false, false}, correct_extra_keys},
+                    create_parms{{0_b, false, false, false, false}, correct_extra_keys},
+                    create_parms{{0_b, false, true, true, false}, correct_extra_keys},
+                    create_parms{{0_b, false, true, false, true}, correct_extra_keys},
+                    create_parms{{0_b, false, true, false, false}, correct_extra_keys - 1},
             };
             for (auto const &[rights, extra_keys] : parms) {
                 ESP_LOGI("TEST", "Testing invalid app settings: "
