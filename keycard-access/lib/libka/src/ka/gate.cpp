@@ -192,7 +192,6 @@ namespace ka {
     }
 
     void gate::regenerate_keys() {
-        ESP_LOGW("KA", "Generating new gate configuration.");
         *this = gate{};
         _kp.generate_random();
         randombytes_buf(_base_key.data(), _base_key.size());
