@@ -66,27 +66,32 @@ namespace ut {
          * @}
          */
 
-        constexpr auto test_holder = "user";
-        constexpr auto test_publisher = "Mittelab";
         constexpr char boolalpha(bool b) {
             return b ? 'Y' : 'N';
         }
 
-        [[nodiscard]] key_pair &test_key_pair() {
-            static key_pair _kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
-            if (not _kp.is_valid()) {
-                ESP_LOGE("TEST", "Chosen fixed key pair is invalid.");
-                std::abort();
-            }
-            return _kp;
-        }
+        struct test_bundle {
+            ka::key_pair kp;
+            ka::keymaker km;
+            ka::gate g0;
+            ka::gate_config g0_cfg;
+            ka::gate g13;
+            ka::gate_config g13_cfg;
+            ka::identity id;
 
-        [[nodiscard]] keymaker &test_km() {
-            static keymaker _km{};
-            _km._kp = test_key_pair();
-            return _km;
-        }
+            test_bundle() {
+                kp = key_pair{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                               0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
+                km._kp = kp;
+                g0.regenerate_keys();
+                g13.regenerate_keys();
+                g0.configure(0_g, "Gate 0", pub_key{km.keys().raw_pk()});
+                g13.configure(13_g, "Gate 13", pub_key{km.keys().raw_pk()});
+                g0_cfg = gate_config{g0.id(), pub_key{g0.keys().raw_pk()}, g0.app_base_key()};
+                g13_cfg = gate_config{g13.id(), pub_key{g13.keys().raw_pk()}, g13.app_base_key()};
+                id = identity{{}, "Test user", "Test deployer"};
+            }
+        } const bundle{};
 
         using namespace ::desfire::esp32;
     }// namespace
@@ -142,8 +147,8 @@ namespace ut {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::array<desfire::any_key, 10> keys_to_test{
                 default_k,
-                test_key_pair().derive_token_root_key(instance.nfc_id),
-                r_info ? test_key_pair().derive_token_root_key(token_id{r_info->serial_no}) : default_k,
+                bundle.kp.derive_token_root_key(instance.nfc_id),
+                r_info ? bundle.kp.derive_token_root_key(token_id{r_info->serial_no}) : default_k,
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},
@@ -186,7 +191,7 @@ namespace ut {
         const auto r_id = token.get_id();
         TEST_ASSERT(r_id);
 
-        const auto rkey = test_key_pair().derive_token_root_key(*r_id);
+        const auto rkey = bundle.kp.derive_token_root_key(*r_id);
         const desfire::any_key default_k{desfire::cipher_type::des};
         const desfire::any_key seondary_k{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version};
 
@@ -242,8 +247,8 @@ namespace ut {
         constexpr desfire::app_id aid = {0xf5, 0x10, 0x01};
         TEST_ASSERT(r_id);
 
-        const auto rkey = test_key_pair().derive_token_root_key(*r_id);
-        const auto mkey = test_key_pair().derive_gate_app_master_key(*r_id);
+        const auto rkey = bundle.kp.derive_token_root_key(*r_id);
+        const auto mkey = bundle.kp.derive_gate_app_master_key(*r_id);
         TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
 
         /**
@@ -272,17 +277,17 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(test_km(), {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km, {}, true)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(test_km(), true, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km, true, false)));
 
             // They must fail even if we do not test the app
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(test_km(), {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km, {}, false)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(test_km(), false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km, false, false)));
         }
 
         /**
@@ -295,12 +300,10 @@ namespace ut {
         /**
          * Create a fully working gate
          */
-        constexpr gate_id gid = gate_id::from_app_and_file(aid, 0x01).second;
-        gate g{};
-        g.regenerate_keys();
-        g.configure(gid, "", pub_key{test_key_pair().raw_pk()});
-        const gate_config cfg{gid, pub_key{g.keys().raw_pk()}, g.app_base_key()};
-        const gate_token_key key = g.app_base_key().derive_token_key(*r_id, gid.key_no());
+        const auto &g = bundle.g13;
+        const auto gid = bundle.g13.id();
+        const auto &cfg = bundle.g13_cfg;
+        const gate_token_key key = bundle.g13.app_base_key().derive_token_key(*r_id, gid.key_no());
 
         /**
          * Make sure that all gate methods fail with app not found on the second gate app (which does not
@@ -312,12 +315,12 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(test_km(), cfg, {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km, cfg, {}, true)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, true, true)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_gate_file(g, true, false)));
 
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(test_km(), cfg, {}, true, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km, cfg, {}, true, true)));
 
             const auto r_gates = token.list_gates(true, true);
             TEST_ASSERT(r_gates);
@@ -331,12 +334,12 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(test_km(), cfg, {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km, cfg, {}, false)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_gate_file(g, false, false)));
 
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(test_km(), cfg, {}, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km, cfg, {}, false, false)));
         }
 
         /**
@@ -393,12 +396,12 @@ namespace ut {
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_gate_file(gid, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_gate_file(gid, key, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_gate_file(gid, mkey, {}, true)));
-                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_encrypted_gate_file(test_km(), cfg, {}, true)));
+                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_encrypted_gate_file(bundle.km, cfg, {}, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.is_gate_enrolled(gid, true, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_encrypted_gate_file(g, true, false)));
 
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.enroll_gate_key(gid, mkey, key, true)));
-                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(test_km(), cfg, {}, true, true)));
+                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km, cfg, {}, true, true)));
 
                     const auto r_gates = token.list_gates(true, true);
                     TEST_ASSERT(r_gates);
@@ -422,16 +425,16 @@ namespace ut {
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_gate_file(gid, key, false, true)));
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.is_gate_enrolled(gid, false, true)));
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_encrypted_gate_file(g, false, true)));
-                        TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(test_km(), cfg, {}, false, true)));
+                        TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km, cfg, {}, false, true)));
                         suppress.restore();
                     }
                     // These pass if we do not check the app
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.read_gate_file(gid, key, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_gate_file(gid, mkey, {}, false)));
-                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_encrypted_gate_file(test_km(), cfg, {}, false)));
+                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_encrypted_gate_file(bundle.km, cfg, {}, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.read_encrypted_gate_file(g, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.enroll_gate_key(gid, mkey, key, false)));
-                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.check_encrypted_gate_file(test_km(), cfg, {}, false, false)));
+                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.check_encrypted_gate_file(bundle.km, cfg, {}, false, false)));
 
                     r_gate_apps = token.list_gate_apps(false);
                     TEST_ASSERT(r_gate_apps);
@@ -484,24 +487,15 @@ namespace ut {
     }
 
     void test_nvs_gate() {
-        key_pair gate_kp;
-        {
-            gate g{};
-            g.regenerate_keys();
-            gate_kp = g.keys();
-            g.configure(gate_id{0x00}, "foobar", pub_key{test_key_pair().raw_pk()});
-            g.config_store();
-        }
-        {
-            gate g{};
-            TEST_ASSERT(g.config_load());
-            TEST_ASSERT_EQUAL(g.id(), 0x00);
-            TEST_ASSERT(g.description() == "foobar");
-            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), gate_kp.raw_pk().data(), raw_pub_key::array_size);
-            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), gate_kp.raw_sk().data(), raw_sec_key::array_size);
-            TEST_ASSERT_EQUAL_HEX8_ARRAY(g.programmer_pub_key().raw_pk().data(), test_key_pair().raw_pk().data(), raw_pub_key::array_size);
-            gate::config_clear();
-        }
+        bundle.g0.config_store();
+        gate g{};
+        TEST_ASSERT(g.config_load());
+        TEST_ASSERT_EQUAL(g.id(), bundle.g0.id());
+        TEST_ASSERT(g.description() == bundle.g0.description());
+        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), bundle.g0.keys().raw_pk().data(), raw_pub_key::array_size);
+        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), bundle.g0.keys().raw_sk().data(), raw_sec_key::array_size);
+        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.programmer_pub_key().raw_pk().data(), bundle.kp.raw_pk().data(), raw_pub_key::array_size);
+        gate::config_clear();
     }
 }// namespace ut
 
