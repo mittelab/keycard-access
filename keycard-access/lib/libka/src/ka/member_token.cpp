@@ -187,7 +187,7 @@ namespace ka {
         desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
         const auto aid = tag().active_app();
         if (auto r = tag().get_file_settings(fid); not r) {
-            if (r.error() == desfire::error::permission_denied) {
+            if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                 // App settings are incorrect
                 ESP_LOGW("KA", "App %02x%02x%02x: does not allow public file settings retrieval.", aid[0], aid[1], aid[2]);
                 return desfire::error::app_integrity_error;
