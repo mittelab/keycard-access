@@ -496,7 +496,7 @@ namespace ut {
 
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, true)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, true)));
-            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
+            TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, true)));
             TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_deployed_correctly(bundle.km)));
         }
