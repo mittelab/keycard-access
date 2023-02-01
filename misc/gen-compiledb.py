@@ -122,10 +122,6 @@ def main(args):
     with open(cdb_dest_path, 'w') as fp:
         json.dump(cdb, fp, indent=4)
 
-    for cmakelists_txt in glob.iglob(os.path.join(pio_ini_dir, '**', 'CMakeLists.txt'), recursive=True):
-        if os.path.isfile(cmakelists_txt):
-            print(f'Removing {cmakelists_txt}.')
-            os.unlink(cmakelists_txt)
     os.unlink(cdb_source_path)
 
 
