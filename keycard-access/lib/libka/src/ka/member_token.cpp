@@ -42,32 +42,6 @@ namespace ka {
             return true;
         }
 
-        namespace impl {
-            template <class, class>
-            struct extend_result {};
-
-            template <class T, class U>
-            struct extend_result<r<T>, U> {
-                template <class R>
-                [[nodiscard]] static r<T, U> extend(R &&r, U u) {
-                    if (not r) {
-                        return r.error();
-                    }
-                    if constexpr (std::is_trivially_move_constructible_v<T>) {
-                        return {*r, u};
-                    } else {
-                        return {std::move(*r), u};
-                    }
-                }
-            };
-        }// namespace impl
-
-        template <class R>
-        decltype(auto) pack_token_id(R &&r, token_id id) {
-            using extender = typename impl::extend_result<std::remove_const_t<R>, token_id>;
-            return extender::extend(std::forward<R>(r), id);
-        }
-
         /**
          * @note DESFIRE_FAIL_CMD/DESFIRE_FAIL_MSG only allowed with direct tag calls
          * @note Do not suppress unless you use tag directly
@@ -669,7 +643,7 @@ namespace ka {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto [aid, fid] = g.id().app_and_file();
             const auto key = g.app_base_key().derive_token_key(*r_id, g.id().key_no());
-            return pack_token_id(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.programmer_pub_key(), check_app, check_file), *r_id);
+            return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.programmer_pub_key(), check_app, check_file), r_id);
         }
     }
 
@@ -677,7 +651,7 @@ namespace ka {
     r<identity, token_id> member_token::read_encrypted_master_file(keymaker const &km, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto mkey = km.keys().derive_gate_app_master_key(*r_id);
-            return pack_token_id(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km.keys(), km.keys(), check_app, check_file), *r_id);
+            return mlab::concat_result(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km.keys(), km.keys(), check_app, check_file), r_id);
         }
     }
 
@@ -696,7 +670,7 @@ namespace ka {
     r<bool, token_id> member_token::check_encrypted_gate_file(keymaker const &km, gate_config const &g, identity const &id, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto key = g.app_base_key.derive_token_key(*r_id, g.id.key_no());
-            return pack_token_id(check_encrypted_gate_file_internal(key, km.keys(), g, id, check_app, check_file), *r_id);
+            return mlab::concat_result(check_encrypted_gate_file_internal(key, km.keys(), g, id, check_app, check_file), r_id);
         }
     }
 
@@ -708,7 +682,7 @@ namespace ka {
                 const auto key = g.app_base_key.derive_token_key(*r_id, g.id.key_no());
                 // The first app was already tested when reading the master file
                 const bool app_needs_testing = (aid != gate_id::first_aid);
-                return pack_token_id(check_encrypted_gate_file_internal(key, km.keys(), g, *r_exp_id, app_needs_testing, true), *r_id);
+                return mlab::concat_result(check_encrypted_gate_file_internal(key, km.keys(), g, *r_exp_id, app_needs_testing, true), r_id);
             }
         }
     }
