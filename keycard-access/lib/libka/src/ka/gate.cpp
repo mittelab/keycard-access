@@ -240,7 +240,7 @@ namespace ka {
     }
 
     void gate::log_public_gate_info() const {
-        ESP_LOGI("KA", "Gate %d: %s", std::uint32_t(this->id()), description().c_str());
+        ESP_LOGI("KA", "Gate %lu: %s", std::uint32_t(this->id()), description().c_str());
         ESP_LOGI("KA", "Gate public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
         ESP_LOGI("KA", "Keymaker public key:");
