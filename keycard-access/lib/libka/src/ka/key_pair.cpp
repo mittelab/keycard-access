@@ -74,7 +74,7 @@ namespace ka {
     }
 
     token_root_key sec_key::derive_token_root_key(token_id const &id) const {
-        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        desfire::key_data<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
                          util::pack_token_id(id),
@@ -86,7 +86,7 @@ namespace ka {
     }
 
     gate_app_master_key sec_key::derive_gate_app_master_key(const token_id &id) const {
-        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        desfire::key_data<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
                          util::pack_token_id(id),

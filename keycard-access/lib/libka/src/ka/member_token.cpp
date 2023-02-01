@@ -12,7 +12,7 @@
 namespace ka {
 
     namespace {
-        using pn532::operator""_b;
+        using namespace ::mlab_literals;
 
         constexpr desfire::key_rights gate_app_rights{0_b, false, true, false, false};
 

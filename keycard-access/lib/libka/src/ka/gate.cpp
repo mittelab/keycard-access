@@ -11,6 +11,7 @@
 #include <sdkconfig.h>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
+#include <mlab/strutils.hpp>
 
 
 using namespace std::chrono_literals;
@@ -37,7 +38,7 @@ namespace ka {
     static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
     gate_token_key gate_base_key::derive_token_key(const token_id &token_id, std::uint8_t key_no) const {
-        std::array<std::uint8_t, key_type::size> derived_key_data{};
+        desfire::key_data<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
                          util::pack_token_id(token_id),
@@ -96,7 +97,7 @@ namespace ka {
     }
 
     void gate_responder::on_authentication_success(identity const &id) {
-        const auto s_id = util::hex_string(id.id);
+        const auto s_id = mlab::data_to_hex_string(id.id);
         ESP_LOGI("GATE", "Authenticated as %s via %s.", id.holder.c_str(), s_id.c_str());
     }
     void gate_responder::on_authentication_fail(desfire::error auth_error, bool might_be_tampering) {
@@ -104,15 +105,15 @@ namespace ka {
                  member_token::describe(auth_error), (might_be_tampering ? " (might be tampering)." : "."));
     }
     void gate_responder::on_activation(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("GATE", "Activated NFC target %s", s_id.c_str());
     }
     void gate_responder::on_release(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("GATE", "Released NFC target %s", s_id.c_str());
     }
     void gate_responder::on_leaving_rf(pn532::scanner &, pn532::scanned_target const &target) {
-        const auto s_id = util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("GATE", "NFC target %s has left the RF field.", s_id.c_str());
     }
     void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel::error err) {

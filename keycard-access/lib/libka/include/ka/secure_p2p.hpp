@@ -20,9 +20,9 @@ namespace ka::p2p {
     struct rx_tag {};
     struct header_tag {};
 
-    using tx_key = tagged_array<tx_tag, 32>;
-    using rx_key = tagged_array<rx_tag, 32>;
-    using header = tagged_array<header_tag, crypto_secretstream_xchacha20poly1305_HEADERBYTES>;
+    using tx_key = mlab::tagged_array<tx_tag, 32>;
+    using rx_key = mlab::tagged_array<rx_tag, 32>;
+    using header = mlab::tagged_array<header_tag, crypto_secretstream_xchacha20poly1305_HEADERBYTES>;
 
     class secure_initiator : public initiator {
         initiator *_raw_layer = nullptr;

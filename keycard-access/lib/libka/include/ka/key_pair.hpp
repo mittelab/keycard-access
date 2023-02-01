@@ -12,8 +12,8 @@ namespace ka {
     struct pub_key_tag {};
     struct sec_key_tag {};
 
-    using raw_pub_key = tagged_array<pub_key_tag, 32>;
-    using raw_sec_key = tagged_array<sec_key_tag, 32>;
+    using raw_pub_key = mlab::tagged_array<pub_key_tag, 32>;
+    using raw_sec_key = mlab::tagged_array<sec_key_tag, 32>;
 
 
     class pub_key {

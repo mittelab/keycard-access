@@ -54,14 +54,6 @@ namespace ka {
 
     constexpr gate_id operator""_g(unsigned long long int id);
 
-    template <class, std::size_t Size>
-    struct tagged_array : public std::array<std::uint8_t, Size> {
-        static constexpr std::size_t array_size = Size;
-
-        [[nodiscard]] bool operator==(tagged_array const &other) const;
-        [[nodiscard]] bool operator!=(tagged_array const &other) const;
-    };
-
     template <class... Tn>
     using r = desfire::tag::result<Tn...>;
 
@@ -82,8 +74,8 @@ namespace ka {
     struct hash_tag;
     struct token_id_tag;
 
-    using hash_type = tagged_array<hash_tag, 64>;
-    using token_id = tagged_array<token_id_tag, 7>;
+    using hash_type = mlab::tagged_array<hash_tag, 64>;
+    using token_id = mlab::tagged_array<token_id_tag, 7>;
 
     struct identity {
         token_id id;
@@ -98,19 +90,12 @@ namespace ka {
     };
 
     namespace util {
-        [[nodiscard]] std::string replace_all(std::string const &text, std::string const &search, std::string const &replace);
         /**
          * Escapes backslashes and newlines (with a backslash in front).
          */
         [[nodiscard]] std::string escape(std::string const &text);
 
         [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
-
-        [[nodiscard]] std::string hex_string(mlab::range<std::uint8_t const *> rg);
-        [[nodiscard]] std::string hex_string(std::vector<std::uint8_t> const &v);
-
-        template <std::size_t N>
-        [[nodiscard]] std::string hex_string(std::array<std::uint8_t, N> const &a);
 
         [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);
 
@@ -121,12 +106,6 @@ namespace ka {
 };// namespace ka
 
 namespace mlab {
-    [[nodiscard]] mlab::range<std::uint8_t const *> view_from_string(std::string const &s);
-    [[nodiscard]] bin_data data_from_string(std::string const &s);
-    [[nodiscard]] std::string data_to_string(bin_data const &bd);
-    [[nodiscard]] std::string data_to_string(mlab::range<mlab::bin_data::const_iterator> rg);
-    [[nodiscard]] std::string data_to_string(mlab::range<std::uint8_t const *> rg);
-
     bin_stream &operator>>(bin_stream &s, ka::identity &id);
     bin_data &operator<<(bin_data &bd, ka::identity const &id);
 }// namespace mlab
@@ -218,17 +197,6 @@ namespace ka {
         const auto n_aid = util::pack_app_id(aid);
         return {true, gate_id{(n_aid - aid_range_begin) * gates_per_app + fid - 1}};
     }
-
-    template <class T, std::size_t Size>
-    bool tagged_array<T, Size>::operator==(tagged_array const &other) const {
-        return std::equal(std::begin(*this), std::end(*this), std::begin(other));
-    }
-
-    template <class T, std::size_t Size>
-    bool tagged_array<T, Size>::operator!=(tagged_array const &other) const {
-        return not operator==(other);
-    }
-
 
     namespace util {
 

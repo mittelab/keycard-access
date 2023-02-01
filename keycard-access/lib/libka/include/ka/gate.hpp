@@ -24,7 +24,7 @@ namespace ka {
 
     struct gate_base_key_tag {};
 
-    struct gate_base_key : public tagged_array<gate_base_key_tag, 32> {
+    struct gate_base_key : public mlab::tagged_array<gate_base_key_tag, 32> {
         [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
     };
 

@@ -66,7 +66,7 @@ namespace ut {
          * @}
          */
 
-        using pn532::operator""_b;
+        using namespace ::mlab_literals;
 
         constexpr char boolalpha(bool b) {
             return b ? 'Y' : 'N';

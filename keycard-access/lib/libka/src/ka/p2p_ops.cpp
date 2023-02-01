@@ -9,6 +9,7 @@
 #include <ka/secure_p2p.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
+#include <mlab/strutils.hpp>
 
 
 namespace ka::p2p {
@@ -112,7 +113,7 @@ namespace ka::p2p {
          */
         const auto gid = km.allocate_gate_id();
         mlab::bin_data msg{mlab::prealloc(6 + gate_description.size())};
-        msg << bits::command_code_configure << mlab::lsb32 << std::uint32_t(gid) << mlab::view_from_string(gate_description);
+        msg << bits::command_code_configure << mlab::lsb32 << std::uint32_t(gid) << mlab::data_view_from_string(gate_description);
         TRY_RESULT(comm.communicate(msg, 1s)) {
             if (r->size() != gate_base_key::array_size) {
                 ESP_LOGE("KA", "Invalid configure response received.");
