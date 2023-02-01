@@ -77,6 +77,8 @@ build test firmware:
       - "${PIO_PROJ_FOLDER}/.pio/**/firmware.elf"
   rules:
     - when: always
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
 
 
 test hardware:
