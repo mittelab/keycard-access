@@ -6,4 +6,4 @@
 	url = https://github.com/espressif/idf-extra-components
 [submodule "keycard-access/lib/_mittelib"]
 	path = keycard-access/lib/_mittelib
-	url = git@git.mittelab.org:proj/mittelib.git
+	url = https://git.mittelab.org/proj/mittelib.git
