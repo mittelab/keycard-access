@@ -507,15 +507,6 @@ namespace ut {
         }
 
         /**
-         * Needed to actually get to the gate file.
-         */
-        TEST_ASSERT(token.write_encrypted_master_file(bundle.km, bundle.id, true));
-        const auto r_identity = token.read_encrypted_master_file(bundle.km, true, true);
-        TEST_ASSERT(r_identity);
-        // The current identity implementation only persists the holder
-        TEST_ASSERT(r_identity->first.holder == bundle.id.holder);
-
-        /**
          * Test different files with invalid settings.
          */
         {
@@ -526,7 +517,15 @@ namespace ut {
             using std_settings = desfire::file_settings<file_type::standard>;
             using val_settings = desfire::file_settings<file_type::value>;
 
-            const std::array<desfire::any_file_settings, 6> invalid_settings = {
+            const std::array<desfire::any_file_settings, 6> invalid_master_settings = {
+                    std_settings{file_security::authenticated, access_rights{no_key, no_key, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, access_rights{0_b, no_key, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, access_rights{no_key, 0_b, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, access_rights{no_key, no_key, no_key, no_key}, 1},
+                    std_settings{file_security::encrypted, access_rights{no_key, no_key, 0_b, 0_b}, 1},
+                    val_settings{file_security::encrypted, access_rights{no_key, no_key, 0_b, no_key}, 0, 0, 0, false}};
+
+            const std::array<desfire::any_file_settings, 6> invalid_gate_settings = {
                     std_settings{file_security::authenticated, access_rights{no_key, no_key, gid.key_no(), no_key}, 1},
                     std_settings{file_security::encrypted, access_rights{0_b, no_key, gid.key_no(), no_key}, 1},
                     std_settings{file_security::encrypted, access_rights{no_key, 0_b, gid.key_no(), no_key}, 1},
@@ -536,7 +535,58 @@ namespace ut {
 
             const auto [aid, fid] = gid.app_and_file();
 
-            for (auto const &settings : invalid_settings) {
+            for (auto const &settings : invalid_master_settings) {
+                if (settings.type() == file_type::standard) {
+                    ESP_LOGI("TEST", "Testing invalid master std file settings: "
+                                     "sec=%s, rw=%c, chg=%c, r=%c, w=%c",
+                             desfire::to_string(settings.generic_settings().security),
+                             settings.generic_settings().rights.read_write.describe(),
+                             settings.generic_settings().rights.change.describe(),
+                             settings.generic_settings().rights.read.describe(),
+                             settings.generic_settings().rights.write.describe());
+                } else {
+                    ESP_LOGI("TEST", "Testing invalid master file type.");
+                }
+
+                TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, mkey));
+                TEST_ASSERT(token.tag().create_file(0x00, settings));
+
+                desfire::esp32::suppress_log suppress{"KA"};
+                TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_master_file(mkey, false, true)));
+                TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_master_file(bundle.km, false, true)));
+
+                if (settings.generic_settings().security != file_security::encrypted or
+                    settings.generic_settings().rights.read != 0_b or
+                    settings.type() != file_type::standard) {
+                    TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_master_file(mkey, false, false)));
+                    TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_master_file(bundle.km, false, false)));
+                } else {
+                    // This one passes
+                    TEST_ASSERT(token.read_master_file(mkey, false, false));
+                    TEST_ASSERT(is_err<desfire::error::crypto_error>(token.read_encrypted_master_file(bundle.km, false, false)));
+                }
+
+                TEST_ASSERT(ok_and<false>(token.check_master_file(false, false)));
+                TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.is_master_enrolled(false, true)));
+                // This one passes
+                TEST_ASSERT(ok_and<true>(token.is_master_enrolled(false, false)));
+                TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.is_deployed_correctly(bundle.km)));
+
+                TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, mkey));
+                TEST_ASSERT(token.tag().delete_file(0x00));
+            }
+
+            /**
+             * We need an actual master file to test at a gate file level
+             */
+            TEST_ASSERT(token.write_encrypted_master_file(bundle.km, bundle.id, true));
+            const auto r_identity = token.read_encrypted_master_file(bundle.km, true, true);
+            TEST_ASSERT(r_identity);
+            TEST_ASSERT(r_identity->first == bundle.id);
+            TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+            TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+
+            for (auto const &settings : invalid_gate_settings) {
                 if (settings.type() == file_type::standard) {
                     ESP_LOGI("TEST", "Testing invalid std file settings: "
                                      "sec=%s, rw=%c, chg=%c, r=%c, w=%c",
@@ -573,22 +623,56 @@ namespace ut {
                 TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(gid, false, false)));
                 TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
 
+                // Also this one
+                auto r_list = token.list_gates(false, false);
+                TEST_ASSERT(r_list);
+                TEST_ASSERT(r_list->size() == 1 and r_list->front() == gid);
+
+                r_list = token.list_gates(false, true);
+                TEST_ASSERT(r_list);
+                TEST_ASSERT(r_list->empty());
+
+
                 TEST_ASSERT(desfire::fs::login_app(token.tag(), aid, mkey));
                 TEST_ASSERT(token.tag().delete_file(fid));
             }
         }
 
         /**
-         * @todo Test invalid master file settings
+         * Now make sure that real gate enrollment works.
          */
+        {
+            // Note: a key is already enrolled, so this tests that re-enrolling works correctly
+            const ka::identity fake_identity{{}, "Not me", {}};
 
-        /**
-         * @todo Test that *actually* installing real data works
-         */
+            TEST_ASSERT(token.write_encrypted_gate_file(bundle.km, cfg, fake_identity, true));
+            TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(gid, true, true)));
+            TEST_ASSERT(ok_and<true>(token.check_gate_file(gid, true, true)));
+            TEST_ASSERT(token.read_gate_file(gid, key, true, true));
+            TEST_ASSERT(token.read_encrypted_gate_file(g, true, true));
 
-        /**
-         * @todo Failing read_data causes automatic logout, which is not correct
-         */
+            // Fake identity: must fail the "correctly" check
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
+
+            auto r_list = token.list_gates(true, true);
+            TEST_ASSERT(r_list);
+            TEST_ASSERT(r_list->size() == 1 and r_list->front() == gid);
+
+            // Attempting to enroll a fake identity should trigger parm error at this stage!
+            TEST_ASSERT(is_err<desfire::error::parameter_error>(token.enroll_gate(bundle.km, cfg, fake_identity)));
+
+            // Right, let's do this with the correct identity
+            TEST_ASSERT(token.write_encrypted_gate_file(bundle.km, cfg, bundle.id, true));
+            TEST_ASSERT(ok_and<true>(token.is_gate_enrolled_correctly(bundle.km, cfg)));
+
+            // Let's assert that the top-level enrollment works too
+            TEST_ASSERT(token.enroll_gate(bundle.km, cfg, bundle.id));
+
+            // And finally let us assert that listing the gates includes the one we just got
+            r_list = token.list_gates(true, true);
+            TEST_ASSERT(r_list);
+            TEST_ASSERT(r_list->size() == 1 and r_list->front() == gid);
+        }
     }
 
     void test_nvs() {
