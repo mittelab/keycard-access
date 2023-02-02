@@ -43,13 +43,13 @@ check format:
   before_script:
     - apk add --update --no-cache git clang clang-extra-tools
   script:
-    - pushd "${PIO_PROJ_FOLDER}"
+    - cd "${PIO_PROJ_FOLDER}"
     - >
       find . -not -path '*/\.*' -and -not -path './components/*' -and -not -path './lib/_*' -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
           echo "Formatting $FILE"
           clang-format --style file -i "$FILE"
       done
-    - popd
+    - cd ..
     - git diff --patch | tee 0001-Clang-format.patch
     - test ! -s 0001-Clang-format.patch
   artifacts:
