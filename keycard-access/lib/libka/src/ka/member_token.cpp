@@ -657,14 +657,11 @@ namespace ka {
     }
 
     [[nodiscard]] r<bool> member_token::check_encrypted_gate_file_internal(gate_token_key const &key, key_pair const &kp, gate_config const &g, identity const &id, bool check_app, bool check_file) const {
-        mlab::bin_data data;
-        data << id;
-        if (not kp.encrypt_for(kp, data)) {
-            return desfire::error::crypto_error;
-        }
         const auto [aid, fid] = g.id.app_and_file();
         TRY_RESULT_SILENT(read_gate_file_internal(aid, fid, key, check_app, check_file)) {
-            return data == *r;
+            mlab::bin_data data;
+            data << id;
+            return kp.blind_check_ciphertext(g.gate_pub_key, data, *r);
         }
     }
 

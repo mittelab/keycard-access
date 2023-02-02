@@ -78,6 +78,7 @@ namespace ka {
 
         [[nodiscard]] bool encrypt_for(pub_key const &recipient, mlab::bin_data &message) const;
         [[nodiscard]] bool decrypt_from(pub_key const &sender, mlab::bin_data &ciphertext) const;
+        [[nodiscard]] bool blind_check_ciphertext(pub_key const &recipient, mlab::bin_data &expected_message, mlab::bin_data const &previous_ciphertext) const;
 
         [[nodiscard]] bool is_valid() const;
 

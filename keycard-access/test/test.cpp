@@ -36,6 +36,11 @@ namespace ut {
 
         TEST_ASSERT_EQUAL(buffer.size(), message.size());
         TEST_ASSERT_EQUAL_HEX8_ARRAY(message.data(), buffer.data(), std::min(message.size(), buffer.size()));
+
+        TEST_ASSERT(k1.encrypt_for(k2, buffer));
+        mlab::bin_data test_buffer = message;
+
+        TEST_ASSERT(k1.blind_check_ciphertext(k2, test_buffer, buffer));
     }
 
     void test_keys() {

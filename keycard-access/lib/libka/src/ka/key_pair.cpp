@@ -210,6 +210,36 @@ namespace ka {
         return true;
     }
 
+    bool key_pair::blind_check_ciphertext(pub_key const &recipient, mlab::bin_data &expected_message, mlab::bin_data const &previous_ciphertext) const {
+        if (previous_ciphertext.size() < crypto_box_MACBYTES + crypto_box_NONCEBYTES) {
+            ESP_LOGE("KA", "Invalid ciphertext, too short.");
+            return false;
+        }
+        // Compute the expected_message length from the ciphertext and compare
+        const auto message_length = previous_ciphertext.size() - crypto_box_MACBYTES - crypto_box_NONCEBYTES;
+        if (expected_message.size() != message_length) {
+            return false;
+        }
+        // Extract the nonce view from the ciphertext
+        auto nonce_view = previous_ciphertext.data_view(message_length + crypto_box_MACBYTES);
+        // Encrypt using the same nonce. Prepare the space for the MAC bytes
+        expected_message.resize(expected_message.size() + crypto_box_MACBYTES);
+        auto message_view = expected_message.data_view(0, message_length);
+        auto ciphertext_view = expected_message.data_view(0, message_length + crypto_box_MACBYTES);
+        // Pipe into crypto_box_easy, overlap is allowed
+        if (0 != crypto_box_easy(
+                         ciphertext_view.data(), message_view.data(),
+                         message_view.size(), nonce_view.data(),
+                         recipient.raw_pk().data(), raw_sk().data())) {
+            ESP_LOGE("KA", "Unable to encrypt.");
+            expected_message.clear();
+            return false;
+        }
+        // Now compare the encrypted ciphertext to the previous ciphertext
+        assert(std::size_t(ciphertext_view.size()) < previous_ciphertext.size());
+        return std::equal(std::begin(ciphertext_view), std::end(ciphertext_view), std::begin(previous_ciphertext));
+    }
+
     bool key_pair::decrypt_from(pub_key const &sender, mlab::bin_data &ciphertext) const {
         if (ciphertext.size() < crypto_box_MACBYTES + crypto_box_NONCEBYTES) {
             ESP_LOGE("KA", "Invalid ciphertext, too short.");
