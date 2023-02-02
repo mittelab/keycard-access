@@ -52,18 +52,41 @@ namespace ka {
 namespace mlab {
 
     bin_stream &operator>>(bin_stream &s, ka::identity &id) {
-        /**
-         * @todo This is temporary
-         */
-        id.holder = data_to_string(s.read(s.remaining()));
+        if (s.remaining() < 7 + 2 + 2) {
+            s.set_bad();
+            return s;
+        }
+        s >> id.id;
+        std::uint16_t holder_length = 0, publisher_length = 0;
+        s >> mlab::lsb16 >> holder_length;
+        if (s.bad()) {
+            return s;
+        }
+        if (s.remaining() < holder_length + 2) {
+            s.set_bad();
+            return s;
+        }
+        id.holder = data_to_string(s.read(holder_length));
+        if (s.bad()) {
+            return s;
+        }
+        s >> mlab::lsb16 >> publisher_length;
+        if (s.remaining() < publisher_length) {
+            s.set_bad();
+            return s;
+        }
+        id.publisher = data_to_string(s.read(publisher_length));
         return s;
     }
 
     bin_data &operator<<(bin_data &bd, ka::identity const &id) {
-        /**
-         * @todo This is temporary
-         */
-        bd << data_view_from_string(id.holder);
-        return bd;
+        const auto holder_view = data_view_from_string(id.holder);
+        const auto publisher_view = data_view_from_string(id.publisher);
+        return bd << prealloc(bd.size() + id.id.size() + holder_view.size() + publisher_view.size() + 4)
+                  << id.id
+                  << mlab::lsb16 << holder_view.size()
+                  << holder_view
+                  << mlab::lsb16 << publisher_view.size()
+                  << publisher_view;
     }
 }// namespace mlab
