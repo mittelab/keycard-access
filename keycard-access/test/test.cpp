@@ -514,10 +514,10 @@ namespace ut {
          * Test different files with invalid settings.
          */
         {
-            using desfire::file_type;
-            using desfire::file_security;
-            using desfire::no_key;
             using desfire::access_rights;
+            using desfire::file_security;
+            using desfire::file_type;
+            using desfire::no_key;
             using std_settings = desfire::file_settings<file_type::standard>;
             using val_settings = desfire::file_settings<file_type::value>;
 
@@ -648,6 +648,22 @@ extern "C" void app_main() {
     RUN_TEST(ut::test_encrypt_decrypt);
 
     ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);
+
+    /**
+     * @note When running on the CI/CD machine, we need to make sure we are on HSU
+     */
+    if constexpr (pinout::supports_cicd_machine) {
+        gpio_set_direction(pinout::pn532_cicd_rstn, GPIO_MODE_OUTPUT);
+        gpio_set_direction(pinout::pn532_cicd_i0, GPIO_MODE_OUTPUT);
+        gpio_set_direction(pinout::pn532_cicd_i1, GPIO_MODE_OUTPUT);
+        // Power cycle the pn532
+        gpio_set_level(pinout::pn532_cicd_rstn, 0);
+        std::this_thread::sleep_for(500ms);
+        gpio_set_level(pinout::pn532_cicd_i0, 0);
+        gpio_set_level(pinout::pn532_cicd_i1, 0);
+        gpio_set_level(pinout::pn532_cicd_rstn, 1);
+        std::this_thread::sleep_for(500ms);
+    }
 
     ut::instance.channel = std::make_unique<pn532::esp32::hsu_channel>(
             pinout::uart_port, pinout::uart_config, pinout::pn532_hsu_tx, pinout::pn532_hsu_rx);
