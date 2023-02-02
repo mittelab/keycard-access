@@ -632,7 +632,7 @@ namespace ka {
             mlab::bin_stream s{*r};
             identity id{};
             s >> id;
-            if (not s.eof() or not s.good()) {
+            if (not s.eof() or s.bad()) {
                 return desfire::error::malformed;
             }
             return id;
