@@ -593,6 +593,10 @@ namespace ka {
             desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
             if (const auto r = tag().get_file_ids(); r) {
                 for (desfire::file_id fid : *r) {
+                    if (aid == gate_id::first_aid and fid == 0x00) {
+                        // Master file
+                        continue;
+                    }
                     if (const auto [success, gid] = gate_id::from_app_and_file(aid, fid); success) {
                         if (check_file) {
                             if (const auto r_check = check_gate_file_internal(fid, gid.key_no(), true); not r_check) {
