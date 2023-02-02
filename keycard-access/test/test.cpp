@@ -500,7 +500,6 @@ namespace ut {
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, true)));
             TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_deployed_correctly(bundle.km)));
         }
-
     }
 
     void test_nvs() {

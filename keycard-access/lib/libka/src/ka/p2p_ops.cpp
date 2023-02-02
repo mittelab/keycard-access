@@ -7,9 +7,9 @@
 #include <ka/gate.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
+#include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
-#include <mlab/strutils.hpp>
 
 
 namespace ka::p2p {

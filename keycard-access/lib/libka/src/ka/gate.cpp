@@ -7,11 +7,11 @@
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
+#include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <sdkconfig.h>
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
-#include <mlab/strutils.hpp>
 
 
 using namespace std::chrono_literals;

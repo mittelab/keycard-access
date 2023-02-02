@@ -38,16 +38,18 @@ variables:
 
 check format:
   stage: check
-  image: alpine
+  image: alpine:3.17
   allow_failure: true
   before_script:
     - apk add --update --no-cache git clang clang-extra-tools
   script:
+    - pushd "${PIO_PROJ_FOLDER}"
     - >
-      find ${PIO_PROJ_FOLDER} -not -path '*/\.*' -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
+      find . -not -path '*/\.*' -and -not -path './components/*' -and -not -path './lib/_*' -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
           echo "Formatting $FILE"
           clang-format --style file -i "$FILE"
       done
+    - popd
     - git diff --patch | tee 0001-Clang-format.patch
     - test ! -s 0001-Clang-format.patch
   artifacts:
