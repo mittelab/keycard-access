@@ -270,9 +270,6 @@ namespace ka {
             } else if (r.error() != desfire::error::file_not_found) {
                 DESFIRE_FAIL_MSG("tag().read_data(fid, desfire::cipher_mode::ciphered)", r);
             }
-            /**
-             * @todo What happens when reading a file with incorrect type?
-             */
             return r.error();
         } else {
             return r;
