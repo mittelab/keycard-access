@@ -24,6 +24,7 @@ variables:
     - ${PIO_PROJ_FOLDER}/src/**/*
     - ${PIO_PROJ_FOLDER}/include/**/*
     - ${PIO_PROJ_FOLDER}/lib/**/*
+    - ${PIO_PROJ_FOLDER}/test/**/*
     - ${PIO_PROJ_FOLDER}/platformio.ini
 
 .rules-changes-cicd: &rules-changes-cicd
