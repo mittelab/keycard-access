@@ -715,6 +715,82 @@ namespace ut {
         TEST_ASSERT_EQUAL_HEX8_ARRAY(sample_data.data(), r_data->data(), sample_data.size());
     }
 
+    void test_regular_flow() {
+        TEST_ASSERT(instance.tag != nullptr);
+        if (instance.tag == nullptr) {
+            return;
+        }
+
+        member_token token{*instance.tag};
+
+        const auto r_id = token.get_id();
+        TEST_ASSERT(r_id);
+
+        const auto rkey = bundle.kp.derive_token_root_key(*r_id);
+        TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
+
+        TEST_ASSERT(token.tag().format_picc());
+
+        TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km)));
+        TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
+
+        TEST_ASSERT(token.deploy(bundle.km, bundle.id));
+        TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+        TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+
+        TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(bundle.g0.id(), true, true)));
+        TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_gate_enrolled_correctly(bundle.km, bundle.g0_cfg)));
+        TEST_ASSERT(token.enroll_gate(bundle.km, bundle.g0_cfg, bundle.id));
+        TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+
+        TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+        TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g0.id(), true, true)));
+        TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km, bundle.g0_cfg));
+
+        // Does it work twice in a row?
+        TEST_ASSERT(token.enroll_gate(bundle.km, bundle.g0_cfg, bundle.id));
+        TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+
+        TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+        TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g0.id(), true, true)));
+        TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km, bundle.g0_cfg));
+
+        // Does it access?
+        const auto r_gate_id = token.read_encrypted_gate_file(bundle.g0, true, true);
+        TEST_ASSERT(r_gate_id);
+        const auto r_master_id = token.read_encrypted_master_file(bundle.km, true, true);
+        TEST_ASSERT(r_master_id);
+        TEST_ASSERT(*r_gate_id == *r_master_id);
+
+        // Benchmark reading the gate file
+        ESP_LOGI("TEST", "Benchmarking read_encrypted_gate_file...");
+        static constexpr auto n_tests = 20;
+        mlab::timer t;
+        for (std::size_t i = 0; i < n_tests; ++i) {
+            TEST_ASSERT(token.read_encrypted_gate_file(bundle.g0, true, true));
+        }
+        const auto elapsed = t.elapsed();
+        ESP_LOGI("TEST", "Benchmark ended, average time: %0.f ms.", double(elapsed.count()) / n_tests);
+
+        // Does it work with a different gate app?
+        TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
+        TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_gate_enrolled_correctly(bundle.km, bundle.g13_cfg)));
+        TEST_ASSERT(token.enroll_gate(bundle.km, bundle.g13_cfg, bundle.id));
+        TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+
+        TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+        TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
+        TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km, bundle.g13_cfg));
+
+        // Does it work twice in a row?
+        TEST_ASSERT(token.enroll_gate(bundle.km, bundle.g13_cfg, bundle.id));
+        TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
+
+        TEST_ASSERT(token.is_deployed_correctly(bundle.km));
+        TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
+        TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km, bundle.g13_cfg));
+    }
+
     void test_nvs_gate() {
         bundle.g0.config_store();
         gate g{};
@@ -785,6 +861,7 @@ extern "C" void app_main() {
         RUN_TEST(ut::test_root_ops);
         RUN_TEST(ut::test_app_ops);
         RUN_TEST(ut::test_file_ops);
+        RUN_TEST(ut::test_regular_flow);
 
         // Always conclude with a format test so that it leaves the test suite clean
         ut::instance.warn_before_formatting = false;
