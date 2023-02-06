@@ -10,9 +10,9 @@
 #include <ka/p2p_ops.hpp>
 
 namespace ka {
+    using namespace mlab_literals;
 
     namespace {
-        using namespace ::mlab_literals;
 
         constexpr desfire::key_rights gate_app_rights{0_b, false, true, false, false};
 
