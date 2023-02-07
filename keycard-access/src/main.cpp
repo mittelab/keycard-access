@@ -1,10 +1,11 @@
-#include "desfire/esp32/utils.hpp"
+#include <desfire/esp32/utils.hpp>
 #include <esp_log.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <ka/config.hpp>
 #include <ka/gate.hpp>
 #include <ka/p2p_ops.hpp>
+#include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>
 
@@ -48,17 +49,17 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     ka::token_id current_id{};
 
     void on_activation(pn532::scanner &, pn532::scanned_target const &target) override {
-        const auto s_id = ka::util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("NFC", "Activated: %s target %s.", pn532::to_string(target.type), s_id.c_str());
     }
 
     void on_release(pn532::scanner &, pn532::scanned_target const &target) override {
-        const auto s_id = ka::util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("NFC", "Released: %s target %s.", pn532::to_string(target.type), s_id.c_str());
     }
 
     void on_leaving_rf(pn532::scanner &, pn532::scanned_target const &target) override {
-        const auto s_id = ka::util::hex_string(target.nfcid);
+        const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("NFC", "Out of RF: %s target %s.", pn532::to_string(target.type), s_id.c_str());
     }
 
@@ -101,12 +102,12 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
                 desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
                 desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
                 desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
-        const auto s_nfcid = ka::util::hex_string(current_id);
+        const auto s_nfcid = mlab::data_to_hex_string(current_id);
         ESP_LOGI(LOG_PFX, "Attempting to recover root key for ID %s", s_nfcid.c_str());
         TRY(tag.select_application());
         for (auto const &key : keys_to_test) {
             const auto key_body = key.get_packed_key_body();
-            const auto s_key_body = ka::util::hex_string(key_body);
+            const auto s_key_body = mlab::data_to_hex_string(key_body);
             ESP_LOGI(LOG_PFX, "Trying %s...", s_key_body.c_str());
             auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
             if (tag.authenticate(key)) {
@@ -116,11 +117,11 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
                 TRY(tag.authenticate(default_k));
                 ESP_LOGI(LOG_PFX, "NFC ID: %s", s_nfcid.c_str());
                 TRY_RESULT(tag.get_info()) {
-                    const auto s_serial = ka::util::hex_string(r->serial_no);
+                    const auto s_serial = mlab::data_to_hex_string(r->serial_no);
                     ESP_LOGI(LOG_PFX, "Serial: %s", s_nfcid.c_str());
                 }
                 TRY_RESULT(tag.get_card_uid()) {
-                    const auto s_card_uid = ka::util::hex_string(*r);
+                    const auto s_card_uid = mlab::data_to_hex_string(*r);
                     ESP_LOGI(LOG_PFX, "CardID: %s", s_nfcid.c_str());
                 }
                 TRY_RESULT(tag.get_application_ids()) {
@@ -164,7 +165,7 @@ struct keymaker_responder final : public ka::member_token_responder {
     }
 
     pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        const auto s_nfcid = ka::util::hex_string(target.nfcid);
+        const auto s_nfcid = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI(LOG_PFX, "Found %s target with NFC ID %s.", pn532::to_string(target.type), s_nfcid.c_str());
         if (target.type == pn532::target_type::passive_106kbps_iso_iec_14443_4_typea) {
             return desfire::tag_responder<desfire::esp32::default_cipher_provider>::interact(scanner, target);
@@ -187,7 +188,7 @@ struct keymaker_responder final : public ka::member_token_responder {
             for (ka::gate_config const &cfg : km._gates) {
                 if (const auto r_enrolled = token.is_gate_enrolled_correctly(km, cfg); r_enrolled) {
                     if (r_enrolled->first) {
-                        ESP_LOGI(LOG_PFX, "Gate %d was already enrolled.", std::uint32_t(cfg.id));
+                        ESP_LOGI(LOG_PFX, "Gate %lu was already enrolled.", std::uint32_t(cfg.id));
                         continue;
                     }
                 } else if (ka::member_token::has_custom_meaning(r_enrolled.error())) {
@@ -198,7 +199,7 @@ struct keymaker_responder final : public ka::member_token_responder {
                 }
                 all_gates_were_enrolled = false;
                 TRY(token.enroll_gate(km, cfg, unique_id))
-                ESP_LOGI(LOG_PFX, "I just enrolled gate %d", std::uint32_t(cfg.id));
+                ESP_LOGI(LOG_PFX, "I just enrolled gate %lu", std::uint32_t(cfg.id));
             }
             if (all_gates_were_enrolled) {
                 ESP_LOGI(LOG_PFX, "All gates were already enrolled, I'll format this PICC.");
