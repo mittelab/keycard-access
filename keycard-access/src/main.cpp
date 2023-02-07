@@ -22,8 +22,8 @@ void gate_main() {
     pn532::controller controller{hsu_chn};
     pn532::scanner scanner{controller};
 
-    ESP_LOGI(LOG_PFX, "Loading configuration.");
-    ka::gate gate = ka::gate::load_from_config();
+    ESP_LOGI(LOG_PFX, "Reconfiguring as a new demo gate.");
+    ka::gate gate;
 
     if (not scanner.init_and_test_controller()) {
         ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
@@ -191,10 +191,12 @@ struct keymaker_responder final : public ka::member_token_responder {
                         ESP_LOGI(LOG_PFX, "Gate %lu was already enrolled.", std::uint32_t(cfg.id));
                         continue;
                     }
-                } else if (ka::member_token::has_custom_meaning(r_enrolled.error())) {
-                    ESP_LOGW(LOG_PFX, "Invalid gate enrollment: %s", ka::member_token::describe(r_enrolled.error()));
-                    continue;
-                } else {
+                } else if (r_enrolled.error() != desfire::error::app_not_found and
+                           r_enrolled.error() != desfire::error::file_not_found) {
+                    if (ka::member_token::has_custom_meaning(r_enrolled.error())) {
+                        ESP_LOGW(LOG_PFX, "Invalid gate enrollment: %s", ka::member_token::describe(r_enrolled.error()));
+                        continue;
+                    }
                     return r_enrolled.error();
                 }
                 all_gates_were_enrolled = false;
