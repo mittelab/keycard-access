@@ -183,7 +183,7 @@ extern "C" void app_main() {
     ka::keymaker km{};
     km._kp.generate_from_pwhash("foobar");
     ka::gate g{};
-    g.configure_demo(ka::gate_id{0}, "Fiera", ka::pub_key{km.keys().raw_pk()});
+    g.configure_demo_from_pwhash("foobar2", ka::gate_id{0}, "Fiera", ka::pub_key{km.keys().raw_pk()});
 
     pn532::scanner scanner{controller};
 

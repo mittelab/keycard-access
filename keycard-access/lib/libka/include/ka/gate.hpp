@@ -92,7 +92,11 @@ namespace ka {
 
         void regenerate_keys();
         void configure(gate_id id, std::string desc, pub_key prog_pub_key);
-        void configure_demo(gate_id id, std::string desc, pub_key prog_pub_key);
+
+        /**
+         * @warning This is intended for demonstrational use only on one device, *never* use in prod!
+         */
+        void configure_demo_from_pwhash(std::string const &password, gate_id id, std::string desc, pub_key prog_pub_key);
 
         void config_store(nvs::partition &partition) const;
         [[nodiscard]] bool config_load(nvs::partition &partition);
