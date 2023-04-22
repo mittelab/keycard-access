@@ -387,6 +387,7 @@ extern "C" void app_main() {
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
     int choice = 0;
+    const auto start = std::chrono::high_resolution_clock::now();
     while (choice == 0) {
         std::printf("Select operation mode of the demo:\n");
         std::printf("\t1. Gate\n");
@@ -398,6 +399,11 @@ extern "C" void app_main() {
         if (choice < 1 or choice > 3) {
             std::printf("Insert '1' or '2' or '3'.");
             choice = 0;
+        }
+
+        const auto elapsed = duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - start);
+        if (elapsed.count() > 5) {
+            choice = 1;
         }
     }
     std::printf("\n");
