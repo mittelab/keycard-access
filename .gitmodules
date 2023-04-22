@@ -7,3 +7,6 @@
 [submodule "keycard-access/lib/_mittelib"]
 	path = keycard-access/lib/_mittelib
 	url = https://git.mittelab.org/proj/mittelib.git
+[submodule "keycard-access/lib/_libneon"]
+	path = keycard-access/lib/_libneon
+	url = https://git.mittelab.org/5p4k/libneon.git

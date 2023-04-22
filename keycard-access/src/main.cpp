@@ -8,7 +8,17 @@
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>
+#include <neo/strip.hpp>
+#include <neo/led.hpp>
+#include <neo/gradient_fx.hpp>
+#include <neo/timer.hpp>
 
+static constexpr rmt_channel_t rmt_channel = RMT_CHANNEL_0;
+static constexpr gpio_num_t strip_gpio_pin = GPIO_NUM_13;
+static constexpr std::size_t strip_num_leds = 16;
+
+using namespace std::chrono_literals;
+using namespace neo::literals;
 
 // Override the log prefix
 #define LOG_PFX "KADEMO"
