@@ -59,6 +59,14 @@ namespace ka {
         _prog_pk = prog_pub_key;
     }
 
+    void gate::configure_demo(gate_id id, std::string desc, pub_key prog_pub_key) {
+        _base_key = gate_base_key{};
+        _kp.generate_from_pwhash("foobar2");
+        _id = id;
+        _desc = std::move(desc);
+        _prog_pk = prog_pub_key;
+    }
+
 
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
         if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {

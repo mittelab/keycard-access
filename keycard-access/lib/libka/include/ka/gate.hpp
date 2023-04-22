@@ -92,6 +92,7 @@ namespace ka {
 
         void regenerate_keys();
         void configure(gate_id id, std::string desc, pub_key prog_pub_key);
+        void configure_demo(gate_id id, std::string desc, pub_key prog_pub_key);
 
         void config_store(nvs::partition &partition) const;
         [[nodiscard]] bool config_load(nvs::partition &partition);
