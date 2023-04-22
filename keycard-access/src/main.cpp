@@ -175,8 +175,6 @@ extern "C" void app_main() {
         ESP_LOGE("NEO", "Trasmit failed with status %s", esp_err_to_name(err));
     }
     neo::steady_timer timer{32ms, fx.make_steady_timer_callback(strip, manager), 0};
-    timer.start();
-
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
@@ -213,6 +211,7 @@ extern "C" void app_main() {
         }
     }
     std::printf("\n");
+    timer.start();
 
     if (choice == 1) {
         std::printf("Acting as gate.\n");
