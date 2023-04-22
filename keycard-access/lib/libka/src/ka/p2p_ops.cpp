@@ -18,7 +18,7 @@ namespace ka::p2p {
     }
 
     namespace {
-        [[nodiscard]] std::array<std::uint8_t, 10> fabricate_nfcid(gate const &g) {
+        [[nodiscard]] pn532::nfcid_3t fabricate_nfcid(gate const &g) {
             return {
                     std::uint8_t(g.id() & 0xff),
                     std::uint8_t((g.id() >> 8) & 0xff),
@@ -39,8 +39,8 @@ namespace ka::p2p {
 
             [[nodiscard]] inline bool success() const { return _success; }
 
-            void get_scan_target_types(pn532::scanner &, std::vector<pn532::target_type> &targets) const override {
-                targets = {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps};
+            std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
+                return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps};
             }
 
             pn532::post_interaction interact(pn532::scanner &scanner, const pn532::scanned_target &target) override {
@@ -77,7 +77,7 @@ namespace ka::p2p {
         return responder.success();
     }
 
-    pn532::p2p::result<> configure_gate_exchange(gate &g, secure_target &comm) {
+    pn532::result<> configure_gate_exchange(gate &g, secure_target &comm) {
         TRY(comm.handshake());
         ESP_LOGI("KA", "Comm opened, peer's public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
@@ -92,7 +92,7 @@ namespace ka::p2p {
             std::string new_desc = mlab::data_to_string(s.peek());
             if (s.bad()) {
                 ESP_LOGE("KA", "Invalid configure command received.");
-                return pn532::channel::error::comm_malformed;
+                return pn532::channel_error::malformed;
             }
 
             // Finally:
@@ -103,7 +103,7 @@ namespace ka::p2p {
         return mlab::result_success;
     }
 
-    pn532::p2p::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description) {
+    pn532::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description) {
         TRY(comm.handshake());
         ESP_LOGI("KA", "Comm opened, peer's public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
@@ -117,7 +117,7 @@ namespace ka::p2p {
         TRY_RESULT(comm.communicate(msg, 1s)) {
             if (r->size() != gate_base_key::array_size) {
                 ESP_LOGE("KA", "Invalid configure response received.");
-                return pn532::channel::error::comm_malformed;
+                return pn532::channel_error::malformed;
             }
             gate_base_key base_key{};
             std::copy(std::begin(*r), std::end(*r), std::begin(base_key));

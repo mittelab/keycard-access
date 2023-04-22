@@ -55,7 +55,7 @@ namespace ka {
     constexpr gate_id operator""_g(unsigned long long int id);
 
     template <class... Tn>
-    using r = desfire::tag::result<Tn...>;
+    using r = desfire::result<Tn...>;
 
     struct derived_key {};
 

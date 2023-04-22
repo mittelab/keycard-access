@@ -38,7 +38,7 @@ namespace ka {
     static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
     gate_token_key gate_base_key::derive_token_key(const token_id &token_id, std::uint8_t key_no) const {
-        desfire::key_data<key_type::size> derived_key_data{};
+        desfire::key_body<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
                          util::pack_token_id(token_id),
@@ -116,7 +116,7 @@ namespace ka {
         const auto s_id = mlab::data_to_hex_string(target.nfcid);
         ESP_LOGI("GATE", "NFC target %s has left the RF field.", s_id.c_str());
     }
-    void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel::error err) {
+    void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel_error err) {
         ESP_LOGV("GATE", "Scan failed with error: %s", pn532::to_string(err));
     }
 

@@ -21,7 +21,7 @@ namespace ka::p2p {
         if (_did_handshake) {
             return peer_pub_key();
         } else if (_raw_layer == nullptr) {
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         mlab::reduce_timeout rt{timeout};
         tx_key tx{};
@@ -32,7 +32,7 @@ namespace ka::p2p {
             return r.error();
         } else if (r->size() != raw_pub_key::array_size) {
             ESP_LOGE("KA", "Invalid %s size %d.", "initiator pubkey", r->size());
-            return pn532::channel::error::comm_malformed;
+            return pn532::channel_error::malformed;
         } else {
             std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
         }
@@ -52,7 +52,7 @@ namespace ka::p2p {
         if (0 != crypto_kx_client_session_keys(
                          rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         crypto_secretstream_xchacha20poly1305_init_push(&_tx, _hdr.data(), tx.data());
         crypto_secretstream_xchacha20poly1305_init_pull(&_rx, initiator_header.data(), rx.data());
@@ -71,7 +71,7 @@ namespace ka::p2p {
         if (_did_handshake) {
             return peer_pub_key();
         } else if (_raw_layer == nullptr) {
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         mlab::reduce_timeout rt{timeout};
         tx_key tx{};
@@ -82,7 +82,7 @@ namespace ka::p2p {
             return r.error();
         } else if (r->size() != raw_pub_key::array_size) {
             ESP_LOGE("KA", "Invalid %s size %d.", "target pubkey", r->size());
-            return pn532::channel::error::comm_malformed;
+            return pn532::channel_error::malformed;
         } else {
             std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
         }
@@ -90,7 +90,7 @@ namespace ka::p2p {
         if (0 != crypto_kx_server_session_keys(
                          rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         // Setup up only tx, and exchange headers
         crypto_secretstream_xchacha20poly1305_init_push(&_tx, _hdr.data(), tx.data());
@@ -111,7 +111,7 @@ namespace ka::p2p {
 
     result<mlab::bin_data> secure_initiator::communicate(const mlab::bin_data &data, ms timeout) {
         if (_raw_layer == nullptr) {
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         mlab::reduce_timeout rt{timeout};
         if (const auto r = handshake(rt.remaining()); not r) {
@@ -123,13 +123,13 @@ namespace ka::p2p {
             return r.error();
         } else if (r->size() < crypto_secretstream_xchacha20poly1305_ABYTES) {
             ESP_LOGE("KA", "Invalid %s size %d.", "received msg", r->size());
-            return pn532::channel::error::comm_malformed;
+            return pn532::channel_error::malformed;
         } else {
             _buffer.resize(r->size() - crypto_secretstream_xchacha20poly1305_ABYTES);
             if (0 != crypto_secretstream_xchacha20poly1305_pull(
                              &_rx, _buffer.data(), nullptr, nullptr, r->data(), r->size(), nullptr, 0)) {
                 ESP_LOGE("KA", "Failed decrypting incoming message.");
-                return pn532::channel::error::failure;
+                return pn532::channel_error::app_error;
             }
             return _buffer;
         }
@@ -137,7 +137,7 @@ namespace ka::p2p {
 
     result<mlab::bin_data> secure_target::receive(ms timeout) {
         if (_raw_layer == nullptr) {
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         mlab::reduce_timeout rt{timeout};
         if (const auto r = handshake(rt.remaining()); not r) {
@@ -147,13 +147,13 @@ namespace ka::p2p {
             return r.error();
         } else if (r->size() < crypto_secretstream_xchacha20poly1305_ABYTES) {
             ESP_LOGE("KA", "Invalid %s size %d.", "received msg", r->size());
-            return pn532::channel::error::comm_malformed;
+            return pn532::channel_error::malformed;
         } else {
             _buffer.resize(r->size() - crypto_secretstream_xchacha20poly1305_ABYTES);
             if (0 != crypto_secretstream_xchacha20poly1305_pull(
                              &_rx, _buffer.data(), nullptr, nullptr, r->data(), r->size(), nullptr, 0)) {
                 ESP_LOGE("KA", "Failed decrypting incoming message.");
-                return pn532::channel::error::failure;
+                return pn532::channel_error::app_error;
             }
             return _buffer;
         }
@@ -161,7 +161,7 @@ namespace ka::p2p {
 
     result<> secure_target::send(const mlab::bin_data &data, ms timeout) {
         if (_raw_layer == nullptr) {
-            return pn532::channel::error::failure;
+            return pn532::channel_error::app_error;
         }
         mlab::reduce_timeout rt{timeout};
         if (const auto r = handshake(rt.remaining()); not r) {

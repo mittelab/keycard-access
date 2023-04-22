@@ -3,6 +3,7 @@
 //
 
 #include <desfire/esp32/utils.hpp>
+#include <desfire/bits.hpp>
 #include <desfire/kdf.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
@@ -177,7 +178,7 @@ namespace ka {
                 ESP_LOGW("KA", "App %02x%02x%02x, file %02x, invalid file type %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(r->type()));
                 return false;
             }
-            const auto &gs = r->generic_settings();
+            const auto &gs = r->common_settings();
             if (gs.security != desfire::file_security::encrypted) {
                 ESP_LOGW("KA", "App %02x%02x%02x, file %02x, invalid security mode %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(gs.security));
                 return false;
@@ -262,7 +263,7 @@ namespace ka {
                 return desfire::error::permission_denied;
             }
         }
-        if (auto r = tag().read_data(fid, desfire::cipher_mode::ciphered); not r) {
+        if (auto r = tag().read_data(fid, desfire::comm_mode::ciphered); not r) {
             if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error or r.error() == desfire::error::crypto_error) {
                 // File settings are incorrect
                 ESP_LOGW("KA", "App %02x%02x%02x, file %02x: does not allow reading with key %d.", aid[0], aid[1], aid[2], fid, key.key_number());

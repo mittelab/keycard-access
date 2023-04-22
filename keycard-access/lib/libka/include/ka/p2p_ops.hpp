@@ -31,8 +31,8 @@ namespace ka {
 }// namespace ka
 namespace ka::p2p {
 
-    pn532::p2p::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
-    pn532::p2p::result<> configure_gate_exchange(gate &g, secure_target &comm);
+    pn532::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
+    pn532::result<> configure_gate_exchange(gate &g, secure_target &comm);
 
     [[nodiscard]] bool configure_gate_in_rf(pn532::controller &ctrl, gate &g);
     [[nodiscard]] bool configure_gate_in_rf(pn532::controller &ctrl, std::uint8_t logical_index, keymaker &km, std::string const &gate_description);

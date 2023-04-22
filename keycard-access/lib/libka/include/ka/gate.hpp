@@ -65,7 +65,7 @@ namespace ka {
         void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override;
         void on_release(pn532::scanner &scanner, pn532::scanned_target const &target) override;
         void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override;
-        void on_failed_scan(pn532::scanner &scanner, pn532::channel::error err) override;
+        void on_failed_scan(pn532::scanner &scanner, pn532::channel_error err) override;
         /**
          * @}
          */

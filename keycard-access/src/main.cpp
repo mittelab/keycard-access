@@ -63,7 +63,7 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
         ESP_LOGI("NFC", "Out of RF: %s target %s.", pn532::to_string(target.type), s_id.c_str());
     }
 
-    void on_failed_scan(pn532::scanner &, pn532::channel::error err) override {
+    void on_failed_scan(pn532::scanner &, pn532::channel_error err) override {
         ESP_LOGW("NFC", "Failed scan: %s", pn532::to_string(err));
     }
 
@@ -89,7 +89,7 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
         return _kp;
     }
 
-    desfire::tag::result<> interact_with_tag_internal(desfire::tag &tag) const {
+    desfire::result<> interact_with_tag_internal(desfire::tag &tag) const {
         const desfire::any_key default_k{desfire::cipher_type::des};
         const std::vector<desfire::any_key> keys_to_test = {
                 default_k,
@@ -158,9 +158,9 @@ struct keymaker_responder final : public ka::member_token_responder {
         km._kp.generate_from_pwhash("foobar");
     }
 
-    void get_scan_target_types(pn532::scanner &, std::vector<pn532::target_type> &targets) const override {
+    std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
         // Allow both DEP targets (gates to be configured) and Mifare targets
-        targets = {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
+        return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
                    pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
     }
 
@@ -180,7 +180,7 @@ struct keymaker_responder final : public ka::member_token_responder {
         return pn532::post_interaction::reject;
     }
 
-    desfire::tag::result<> interact_with_token_internal(ka::member_token &token) {
+    desfire::result<> interact_with_token_internal(ka::member_token &token) {
         const ka::identity unique_id{{}, "Holder", "Publisher"};
         if (const auto r_deployed = token.is_deployed_correctly(km); r_deployed) {
             ESP_LOGI(LOG_PFX, "Token was deployed.");
