@@ -270,8 +270,124 @@ void format_mcformatface_main() {
     scanner.loop(responder, false /* already performed */);
 }
 
+
+struct fiera_gate_responder final : public ka::gate_responder {
+    neo::gradient_fx &fx;
+
+    fiera_gate_responder(ka::gate &g, neo::gradient_fx &fx_) : ka::gate_responder{g}, fx{fx_} {}
+
+    void on_authentication_success(ka::identity const &id) override {
+        if (id.holder == "Mittelab") {
+            fx.set_gradient(neo::gradient{{0xff0000_rgb, 0xffff00_rgb, 0x00ff00_rgb, 0x00ffff_rgb, 0x0000ff_rgb, 0xff00ff_rgb, 0xff0000_rgb}});
+        } else if (id.holder == "Token2") {
+            fx.set_gradient(neo::gradient{{0xff0000_rgb, 0xffff00_rgb, 0xff0000_rgb}});
+        } else if (id.holder == "Token3") {
+            fx.set_gradient(neo::gradient{{0xffff00_rgb, 0x00ff00_rgb, 0xffff00_rgb}});
+        } else if (id.holder == "Token4") {
+            fx.set_gradient(neo::gradient{{0x00ff00_rgb, 0x00ffff_rgb, 0x00ff00_rgb}});
+        } else {
+            fx.set_gradient(neo::gradient{{0x00ffff_rgb, 0xaaaaaa_rgb, 0x00ffff_rgb}});
+        }
+    }
+
+    void on_authentication_fail(desfire::error auth_error, bool might_be_tampering) override {
+        fx.set_gradient(neo::gradient{{0xaa0000_rgb}});
+    }
+
+    void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override {
+        fx.set_gradient(neo::gradient{{0x000000_rgb, 0xffffff_rgb}});
+    }
+
+    void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override {
+        fx.set_gradient(neo::gradient{{0x000000_rgb, 0xaaaaaaa_rgb}});
+    }
+};
+
+
+struct fiera_keymaker_responder final : public ka::member_token_responder {
+    ka::keymaker &km;
+    unsigned token_idx;
+    ka::gate_config cfg;
+
+    explicit fiera_keymaker_responder(ka::keymaker &km_, ka::gate_config cfg_) : km{km_}, token_idx{0}, cfg{cfg_} {}
+
+    desfire::result<> interact_with_token_internal(ka::member_token &token) {
+        ka::identity unique_id;
+        TRY_RESULT(token.get_id()) {
+            unique_id.id = *r;
+        }
+        unique_id.publisher = "Mittelab";
+        if (token_idx++ == 0) {
+            unique_id.holder = "Mittelab";
+        } else {
+            char buffer[40];
+            std::sprintf(buffer, "Token%d", token_idx);
+            unique_id.holder = buffer;
+        }
+        ESP_LOGI(LOG_PFX, "Programming token as: %s", unique_id.holder.c_str());
+
+        if (const auto r_deployed = token.is_deployed_correctly(km); r_deployed) {
+            const auto rkey = km.keys().derive_token_root_key(*r_deployed);
+            TRY(desfire::fs::login_app(token.tag(), desfire::root_app, rkey))
+            TRY(token.tag().format_picc())
+            TRY(desfire::fs::login_app(token.tag(), desfire::root_app, rkey))
+            TRY(token.tag().change_key(desfire::key<desfire::cipher_type::des>{}))
+        } else if (ka::member_token::has_custom_meaning(r_deployed.error())) {
+            ESP_LOGI(LOG_PFX, "Token deploy status: %s", ka::member_token::describe(r_deployed.error()));
+            ESP_LOGI(LOG_PFX, "Attempting deploy.");
+            TRY(token.deploy(km, unique_id))
+            TRY(token.enroll_gate(km, cfg, unique_id))
+            ESP_LOGI(LOG_PFX, "Enrolled correctly!");
+        } else {
+            return r_deployed.error();
+        }
+        return mlab::result_success;
+    }
+
+    pn532::post_interaction interact_with_token(ka::member_token &token) override {
+        const bool success = bool(interact_with_token_internal(token));
+        ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_ERROR), LOG_PFX, "Interaction complete.");
+        return pn532::post_interaction::reject;
+    }
+};
+
+
 extern "C" void app_main() {
     desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
+
+    neo::rmt_manager manager{neo::make_rmt_config(rmt_channel, strip_gpio_pin), true};
+    neo::strip<neo::grb_led> strip{manager, neo::controller::ws2812_800khz, strip_num_leds};
+    neo::gradient_fx fx{neo::gradient{{0x000000_rgb, 0xaaaaaa_rgb}}, 2s};
+
+    if (const auto err = strip.transmit(manager, true); err != ESP_OK) {
+        ESP_LOGE("NEO", "Trasmit failed with status %s", esp_err_to_name(err));
+    }
+    neo::steady_timer timer{32ms, fx.make_steady_timer_callback(strip, manager), 0};
+    timer.start();
+
+
+    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
+    pn532::controller controller{hsu_chn};
+
+
+    ka::keymaker km{};
+    km._kp.generate_from_pwhash("foobar");
+    ka::gate g{};
+    if (not g.config_load()) {
+        g.regenerate_keys();
+        g.configure(ka::gate_id{0}, "Fiera", ka::pub_key{km.keys().raw_pk()});
+        km.register_gate(ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()});
+    }
+
+    pn532::scanner scanner{controller};
+
+    if (not scanner.init_and_test_controller()) {
+        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
+        return;
+    }
+    ESP_LOGI(LOG_PFX, "Self-test passed.");
+
+
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
     int choice = 0;
@@ -279,7 +395,6 @@ extern "C" void app_main() {
         std::printf("Select operation mode of the demo:\n");
         std::printf("\t1. Gate\n");
         std::printf("\t2. Keymaker\n");
-        std::printf("\t3. FormatMcFormatface\n");
         std::printf("> ");
         while (std::scanf("%d", &choice) != 1) {
             vTaskDelay(pdMS_TO_TICKS(100));
@@ -290,21 +405,16 @@ extern "C" void app_main() {
         }
     }
     std::printf("\n");
-    switch (choice) {
-        case 1:
-            std::printf("Acting as gate.\n");
-            gate_main();
-            break;
-        case 2:
-            std::printf("Acting as keymaker.\n");
-            keymaker_main();
-            break;
-        case 3:
-            std::printf("Enter... Format McFormatface\n");
-            format_mcformatface_main();
-            break;
-        default:
-            break;
+
+    if (choice == 1) {
+        std::printf("Acting as gate.\n");
+        fiera_gate_responder responder{g, fx};
+        scanner.loop(responder, false /* already performed */);
+    } else if (choice == 2) {
+        std::printf("Acting as keymaker.\n");
+        fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}};
+        scanner.loop(km_responder, false /* already performed */);
     }
+
     vTaskSuspend(nullptr);
 }
