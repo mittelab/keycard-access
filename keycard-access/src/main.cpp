@@ -11,6 +11,7 @@
 #include <neo/strip.hpp>
 #include <neo/led.hpp>
 #include <neo/gradient_fx.hpp>
+#include <neo/any_fx.hpp>
 #include <neo/timer.hpp>
 
 static constexpr rmt_channel_t rmt_channel = RMT_CHANNEL_0;
@@ -90,35 +91,120 @@ desfire::result<> try_hard_to_format(desfire::tag &tag, ka::token_id current_id)
     return desfire::error::authentication_error;
 }
 
-struct fiera_gate_responder final : public ka::gate_responder {
-    neo::gradient_fx &fx;
 
-    fiera_gate_responder(ka::gate &g, neo::gradient_fx &fx_) : ka::gate_responder{g}, fx{fx_} {}
+namespace {
+    const std::array<neo::gradient, 7> default_gradients = {
+            neo::gradient{{0xff0000_rgb, 0xffff00_rgb, 0x00ff00_rgb, 0x00ffff_rgb, 0x0000ff_rgb, 0xff00ff_rgb, 0xff0000_rgb}},
+            neo::gradient({0xcc0000_rgb, 0xcccc00_rgb, 0xcc0000_rgb}),
+            neo::gradient({0xcccc00_rgb, 0x00cc00_rgb, 0xcccc00_rgb}),
+            neo::gradient({0x00cc00_rgb, 0x00cccc_rgb, 0x00cc00_rgb}),
+            neo::gradient({0x00cccc_rgb, 0x0000cc_rgb, 0x00cccc_rgb}),
+            neo::gradient({0x0000cc_rgb, 0xcc00cc_rgb, 0x0000cc_rgb}),
+            neo::gradient({0xcc00cc_rgb, 0xcc0000_rgb, 0xcc0000_rgb})
+    };
+}
+
+class neopx_status {
+    neo::rmt_manager _manager;
+    neo::strip<neo::grb_led> _strip;
+    neo::any_fx _fx;
+    neo::steady_timer _timer;
+
+public:
+
+    neopx_status()
+        : _manager{neo::make_rmt_config(rmt_channel, strip_gpio_pin), true},
+          _strip{_manager, neo::controller::ws2812_800khz, strip_num_leds},
+          _fx{},
+          _timer{32ms, _fx.make_steady_timer_callback(_strip, _manager), 0}
+    {
+        if (const auto err = _strip.transmit(_manager, true); err != ESP_OK) {
+            ESP_LOGE("NEO", "Trasmit failed with status %s", esp_err_to_name(err));
+        }
+        _timer.start();
+    }
+
+    void set_spinner(neo::rgb c) {
+        _fx.g_fx().set_gradient(neo::gradient{{0x0_rgb, c}});
+        _fx.g_fx().set_duration(2s);
+        _fx.g_fx().set_repeats(1.f);
+        _fx.set_type(neo::fx_type::gradient);
+    }
+
+    void set_pulse_solid(neo::rgb c, float low = 0.f, float high = 1.f) {
+        neo::rgb lo_col = c, hi_col = c;
+        lo_col.blend(0x0_rgb, 1.f - low);
+        hi_col.blend(0x0_rgb, 1.f - high);
+        _fx.m_fx().set_matrix({lo_col, hi_col, lo_col}, 1);
+        _fx.m_fx().set_duration_x(0s);
+        _fx.m_fx().set_duration_y(4s);
+        _fx.set_type(neo::fx_type::matrix);
+    }
+
+    void set_pulse_gradient(neo::gradient const &g, float low = 0.f, float high = 1.f) {
+        const auto n = _strip.size();
+        std::vector<neo::rgb> matrix;
+        matrix.reserve(3 * n);
+        matrix.resize(n);
+        g.sample_uniform(1.f / float(n), 0.f, matrix);
+        matrix.resize(3 * n);
+        std::copy_n(std::begin(matrix), n, std::begin(matrix) + signed(n));
+        for (std::size_t i = 0; i < n; ++i) {
+            matrix[i].blend(0x0_rgb, 1.f - low);
+            matrix[n + i].blend(0x0_rgb, 1.f - high);
+        }
+        std::copy_n(std::begin(matrix), n, std::begin(matrix) + 2 * signed(n));
+
+        _fx.m_fx().set_matrix(std::move(matrix), n);
+        _fx.m_fx().set_duration_x(0s);
+        _fx.m_fx().set_duration_y(4s);
+        _fx.set_type(neo::fx_type::matrix);
+    }
+
+    void set_solid(neo::rgb c) {
+        _fx.s_fx().set_color(c);
+        _fx.set_type(neo::fx_type::solid);
+    }
+
+    void set_solid(neo::gradient g) {
+        _fx.g_fx().set_gradient(std::move(g));
+        _fx.g_fx().set_duration(0s);
+        _fx.g_fx().set_repeats(1.f);
+        _fx.set_type(neo::fx_type::gradient);
+    }
+};
+
+struct fiera_gate_responder final : public ka::gate_responder {
+    neopx_status &s;
+
+    fiera_gate_responder(ka::gate &g, neopx_status &s_) : ka::gate_responder{g}, s{s_} {}
 
     void on_authentication_success(ka::identity const &id) override {
-        if (id.holder == "Mittelab") {
-            fx.set_gradient(neo::gradient{{0xff0000_rgb, 0xffff00_rgb, 0x00ff00_rgb, 0x00ffff_rgb, 0x0000ff_rgb, 0xff00ff_rgb, 0xff0000_rgb}});
-        } else if (id.holder == "Token2") {
-            fx.set_gradient(neo::gradient{{0xff0000_rgb, 0xffff00_rgb, 0xff0000_rgb}});
-        } else if (id.holder == "Token3") {
-            fx.set_gradient(neo::gradient{{0xffff00_rgb, 0x00ff00_rgb, 0xffff00_rgb}});
-        } else if (id.holder == "Token4") {
-            fx.set_gradient(neo::gradient{{0x00ff00_rgb, 0x00ffff_rgb, 0x00ff00_rgb}});
+        if (id.holder.size() >= 6 and id.holder.substr(0, 5) == "Token") {
+            const auto snum = id.holder.substr(5);
+            const auto *begin = snum.c_str();
+            char *end = nullptr;
+            const auto idx = std::strtoul(snum.c_str(), &end, 10);
+            if (end != nullptr and begin != end) {
+                s.set_solid(default_gradients[idx % default_gradients.size()]);
+            } else {
+                s.set_solid(0xaaaaaa_rgb);
+            }
         } else {
-            fx.set_gradient(neo::gradient{{0x00ffff_rgb, 0xaaaaaa_rgb, 0x00ffff_rgb}});
+            s.set_solid(0xdd0044_rgb);
         }
     }
 
     void on_authentication_fail(desfire::error auth_error, bool might_be_tampering) override {
-        fx.set_gradient(neo::gradient{{0xaa0000_rgb}});
+        s.set_solid(0xdd0044_rgb);
     }
 
     void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        fx.set_gradient(neo::gradient{{0x000000_rgb, 0xffffff_rgb}});
+        s.set_spinner(0xffffff_rgb);
     }
 
     void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        fx.set_gradient(neo::gradient{{0x000000_rgb, 0xaaaaaaa_rgb}});
+        s.set_spinner(0xcccccc_rgb);
     }
 };
 
@@ -127,8 +213,9 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
     ka::keymaker &km;
     unsigned token_idx;
     ka::gate_config cfg;
+    neopx_status &s;
 
-    explicit fiera_keymaker_responder(ka::keymaker &km_, ka::gate_config cfg_) : km{km_}, token_idx{0}, cfg{cfg_} {}
+    explicit fiera_keymaker_responder(ka::keymaker &km_, ka::gate_config cfg_, neopx_status &s_) : km{km_}, token_idx{0}, cfg{cfg_}, s{s_} {}
 
     desfire::result<> interact_with_token_internal(ka::member_token &token) {
         ka::identity who;
