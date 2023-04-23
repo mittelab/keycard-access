@@ -16,6 +16,10 @@
 
 static constexpr rmt_channel_t rmt_channel = RMT_CHANNEL_0;
 static constexpr gpio_num_t strip_gpio_pin = GPIO_NUM_13;
+static constexpr gpio_num_t switch_gnd = GPIO_NUM_33;
+static constexpr gpio_num_t switch_read = GPIO_NUM_32;
+static constexpr gpio_num_t switch_float = GPIO_NUM_35;
+
 static constexpr std::size_t strip_num_leds = 16;
 
 using namespace std::chrono_literals;
@@ -116,7 +120,7 @@ public:
         : _manager{neo::make_rmt_config(rmt_channel, strip_gpio_pin), true},
           _strip{_manager, neo::controller::ws2812_800khz, strip_num_leds},
           _fx{},
-          _timer{32ms, _fx.make_steady_timer_callback(_strip, _manager), 0}
+          _timer{32ms, _fx.make_steady_timer_callback(_strip, _manager), 1}
     {
         if (const auto err = _strip.transmit(_manager, true); err != ESP_OK) {
             ESP_LOGE("NEO", "Trasmit failed with status %s", esp_err_to_name(err));
@@ -263,9 +267,21 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
 };
 
 
+void setup_switch() {
+    gpio_set_direction(switch_float, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(switch_float, GPIO_FLOATING);
+    gpio_set_direction(switch_gnd, GPIO_MODE_OUTPUT);
+    gpio_set_level(switch_gnd, 0);
+    gpio_set_direction(switch_read, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(switch_read, GPIO_PULLUP_ONLY);
+}
+
+
 extern "C" void app_main() {
     neopx_status s;
     s.set_pulse_solid(0xffffff_rgb, 0.2, 0.6);
+
+    setup_switch();
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
@@ -286,28 +302,13 @@ extern "C" void app_main() {
 
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
-    int choice = 1;
-    while (choice == 0) {
-        std::printf("Select operation mode of the demo:\n");
-        std::printf("\t1. Gate\n");
-        std::printf("\t2. Keymaker\n");
-        std::printf("> ");
-        while (std::scanf("%d", &choice) != 1) {
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-        if (choice < 1 or choice > 3) {
-            std::printf("Insert '1' or '2' or '3'.");
-            choice = 0;
-        }
-    }
-    std::printf("\n");
 
-    if (choice == 1) {
+    if (gpio_get_level(switch_read) == 0) {
         std::printf("Acting as gate.\n");
         fiera_gate_responder responder{g, s};
         s.set_spinner(0xaaaaaa_rgb);
         scanner.loop(responder, false /* already performed */);
-    } else if (choice == 2) {
+    } else {
         std::printf("Acting as keymaker.\n");
         s.set_pulse_gradient(default_gradients[0], 0.2, 0.6);
         fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}, s};
