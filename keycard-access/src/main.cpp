@@ -191,7 +191,7 @@ struct fiera_gate_responder final : public ka::gate_responder {
                 s.set_solid(0xaaaaaa_rgb);
             }
         } else {
-            s.set_solid(0xdd0044_rgb);
+            s.set_solid(0xcc0000_rgb);
         }
     }
 
@@ -204,7 +204,7 @@ struct fiera_gate_responder final : public ka::gate_responder {
     }
 
     void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        s.set_spinner(0xcccccc_rgb);
+        s.set_spinner(0xaaaaaa_rgb);
     }
 };
 
@@ -254,7 +254,7 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
     }
 
     void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-        s.set_spinner(0xcccccc_rgb);
+        s.set_spinner(0xaaaaaa_rgb);
     }
 
     void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override {
@@ -286,7 +286,7 @@ extern "C" void app_main() {
 
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
-    int choice = 0;
+    int choice = 1;
     while (choice == 0) {
         std::printf("Select operation mode of the demo:\n");
         std::printf("\t1. Gate\n");
@@ -305,7 +305,7 @@ extern "C" void app_main() {
     if (choice == 1) {
         std::printf("Acting as gate.\n");
         fiera_gate_responder responder{g, s};
-        s.set_spinner(0xcccccc_rgb);
+        s.set_spinner(0xaaaaaa_rgb);
         scanner.loop(responder, false /* already performed */);
     } else if (choice == 2) {
         std::printf("Acting as keymaker.\n");
