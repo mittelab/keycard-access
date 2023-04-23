@@ -13,6 +13,8 @@
 #include <neo/gradient_fx.hpp>
 #include <neo/any_fx.hpp>
 #include <neo/timer.hpp>
+#include <pn532/esp32/irq_assert.hpp>
+#include <thread>
 
 static constexpr rmt_channel_t rmt_channel = RMT_CHANNEL_0;
 static constexpr gpio_num_t strip_gpio_pin = GPIO_NUM_13;
@@ -282,6 +284,7 @@ extern "C" void app_main() {
     s.set_pulse_solid(0xffffff_rgb, 0.2, 0.6);
 
     setup_switch();
+    pn532::esp32::irq_assert irq{true, switch_read, GPIO_INTR_ANYEDGE};
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
@@ -303,16 +306,31 @@ extern "C" void app_main() {
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
 
-    if (gpio_get_level(switch_read) == 0) {
-        std::printf("Acting as gate.\n");
-        fiera_gate_responder responder{g, s};
-        s.set_spinner(0xaaaaaa_rgb);
-        scanner.loop(responder, false /* already performed */);
-    } else {
-        std::printf("Acting as keymaker.\n");
-        s.set_pulse_gradient(default_gradients[0], 0.2, 0.6);
-        fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}, s};
-        scanner.loop(km_responder, false /* already performed */);
+    auto switch_activated = [&]() {
+        for (bool asserted = irq(1s); true; asserted = irq(1s)) {
+            if (asserted) {
+                ESP_LOGI(LOG_PFX, "Asserted interrupt.");
+                scanner.stop();
+            } else {
+                ESP_LOGI(LOG_PFX, "Not asserted.");
+            }
+        }
+    };
+
+    std::thread switch_thread{switch_activated};
+
+    while (true) {
+        if (gpio_get_level(switch_read) == 0) {
+            std::printf("Acting as gate.\n");
+            fiera_gate_responder responder{g, s};
+            s.set_spinner(0xaaaaaa_rgb);
+            scanner.loop(responder, false /* already performed */);
+        } else {
+            std::printf("Acting as keymaker.\n");
+            s.set_pulse_gradient(default_gradients[0], 0.2, 0.6);
+            fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}, s};
+            scanner.loop(km_responder, false /* already performed */);
+        }
     }
 
     vTaskSuspend(nullptr);
