@@ -196,7 +196,7 @@ struct fiera_gate_responder final : public ka::gate_responder {
     }
 
     void on_authentication_fail(desfire::error auth_error, bool might_be_tampering) override {
-        s.set_solid(0xdd0044_rgb);
+        s.set_solid(0xcc0000_rgb);
     }
 
     void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override {
@@ -223,10 +223,8 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
             who.id = *r;
         }
         who.publisher = "Mittelab";
-        if (token_idx++ == 0) {
-            who.holder = "Mittelab";
-        } else {
-            char buffer[40];
+        {
+            char buffer[16];
             std::sprintf(buffer, "Token%d", token_idx);
             who.holder = buffer;
         }
@@ -239,6 +237,7 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
         TRY(token.deploy(km, who))
         TRY(token.enroll_gate(km, cfg, who))
         ESP_LOGI(LOG_PFX, "Enrolled correctly!");
+        ++token_idx;
 
         return mlab::result_success;
     }
@@ -246,26 +245,30 @@ struct fiera_keymaker_responder final : public ka::member_token_responder {
     pn532::post_interaction interact_with_token(ka::member_token &token) override {
         const bool success = bool(interact_with_token_internal(token));
         ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_ERROR), LOG_PFX, "Interaction complete.");
+        if (success) {
+            s.set_solid(0x00cc00_rgb);
+        } else {
+            s.set_solid(0xcc0000_rgb);
+        }
         return pn532::post_interaction::reject;
+    }
+
+    void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override {
+        s.set_spinner(0xcccccc_rgb);
+    }
+
+    void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override {
+        s.set_pulse_gradient(default_gradients[token_idx % default_gradients.size()], 0.2, 0.6);
     }
 };
 
 
 extern "C" void app_main() {
-    desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
-
-    neo::rmt_manager manager{neo::make_rmt_config(rmt_channel, strip_gpio_pin), true};
-    neo::strip<neo::grb_led> strip{manager, neo::controller::ws2812_800khz, strip_num_leds};
-    neo::gradient_fx fx{neo::gradient{{0x000000_rgb, 0xaaaaaa_rgb}}, 2s};
-
-    if (const auto err = strip.transmit(manager, true); err != ESP_OK) {
-        ESP_LOGE("NEO", "Trasmit failed with status %s", esp_err_to_name(err));
-    }
-    neo::steady_timer timer{32ms, fx.make_steady_timer_callback(strip, manager), 0};
+    neopx_status s;
+    s.set_pulse_solid(0xffffff_rgb, 0.2, 0.6);
 
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
     pn532::controller controller{hsu_chn};
-
 
     ka::keymaker km{};
     km._kp.generate_from_pwhash("foobar");
@@ -283,7 +286,7 @@ extern "C" void app_main() {
 
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     vTaskDelay(pdMS_TO_TICKS(2000));
-    int choice = 1;
+    int choice = 0;
     while (choice == 0) {
         std::printf("Select operation mode of the demo:\n");
         std::printf("\t1. Gate\n");
@@ -298,15 +301,16 @@ extern "C" void app_main() {
         }
     }
     std::printf("\n");
-    timer.start();
 
     if (choice == 1) {
         std::printf("Acting as gate.\n");
-        fiera_gate_responder responder{g, fx};
+        fiera_gate_responder responder{g, s};
+        s.set_spinner(0xcccccc_rgb);
         scanner.loop(responder, false /* already performed */);
     } else if (choice == 2) {
         std::printf("Acting as keymaker.\n");
-        fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}};
+        s.set_pulse_gradient(default_gradients[0], 0.2, 0.6);
+        fiera_keymaker_responder km_responder{km, ka::gate_config{g.id(), ka::pub_key{g.keys().raw_pk()}, g.app_base_key()}, s};
         scanner.loop(km_responder, false /* already performed */);
     }
 
