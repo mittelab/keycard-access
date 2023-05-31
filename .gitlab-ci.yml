@@ -13,8 +13,7 @@ stages:
 variables:
   PIO_PROJ_FOLDER: keycard-access
   GIT_SUBMODULE_STRATEGY: normal
-  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PIO_PROJ_FOLDER}/${CI_COMMIT_TAG}"
-  #                                                                    Release name: ^^^^^^^^^^^^^^^^^^
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
 
 .pio-cache: &pio-cache
   cache:
@@ -123,18 +122,24 @@ test hardware:
     - <<: *rules-changes-cicd
 
 
+.release-tags-only: &release-tags-only
+  rules:
+    # Match all release-* tags, and use everything after it as the release version
+    - if: $CI_COMMIT_TAG =~ /^release-/
+  before_script:
+    - export VERSION="${CI_COMMIT_TAG##release-}"
+
 .upload-template: &upload-template
+  <<: *release-tags-only
   stage: upload
   image: curlimages/curl:latest
-  rules:
-    - if: '$CI_COMMIT_TAG && $CI_COMMIT_BRANCH == "master"'
   script:
     # The package will be releases as Release-PioEnvironment-Tag.Extension, e.g. keycard-access-esp32-1.0.4-beta1.elf
     - >
       for EXTENSION in bin elf; do
         curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
           --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.${EXTENSION}" \
-          "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-${PIO_ENV}-${CI_COMMIT_TAG}.${EXTENSION}"
+          "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-${PIO_ENV}-${VERSION}.${EXTENSION}"
       done
 
 
@@ -147,16 +152,16 @@ upload esp32 app firmware:
 
 
 release:
+  <<: *release-tags-only
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   dependencies:
     # NOTE: explicitly list all environments here for which to create a release
     - upload esp32 app firmware
-  rules:
-    - if: '$CI_COMMIT_TAG && $CI_COMMIT_BRANCH == "master"'
   script:
     # NOTE: explicitly list all environments here for which to create a release, both elf and bin
+    # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
     - |
-      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
-        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.elf\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.elf\"}" \
-        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.bin\"}"
+      release-cli create --name "Release $VERSION" --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${VERSION}.elf\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-esp32-${VERSION}.elf\"}" \
+        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-esp32-${VERSION}.bin\"}"
