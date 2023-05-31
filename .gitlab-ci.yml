@@ -127,8 +127,7 @@ test hardware:
   stage: upload
   image: curlimages/curl:latest
   rules:
-    - if: $CI_COMMIT_TAG
-    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_BRANCH == "master"'
   script:
     # The package will be releases as Release-PioEnvironment-Tag.Extension, e.g. keycard-access-esp32-1.0.4-beta1.elf
     - >
@@ -154,8 +153,7 @@ release:
     # NOTE: explicitly list all environments here for which to create a release
     - upload esp32 app firmware
   rules:
-    - if: $CI_COMMIT_TAG
-    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_TAG && $CI_COMMIT_BRANCH == "master"'
   script:
     # NOTE: explicitly list all environments here for which to create a release, both elf and bin
     - |
