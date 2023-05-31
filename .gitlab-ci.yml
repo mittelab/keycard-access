@@ -6,12 +6,15 @@ stages:
   - check
   - build
   - test
+  - upload
+  - release
 
 
 variables:
   PIO_PROJ_FOLDER: keycard-access
   GIT_SUBMODULE_STRATEGY: normal
-
+  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${PIO_PROJ_FOLDER}/${CI_COMMIT_TAG}"
+  #                                                                    Release name: ^^^^^^^^^^^^^^^^^^
 
 .pio-cache: &pio-cache
   cache:
@@ -62,26 +65,41 @@ check format:
     # Run always, on merge request too
     - when: always
 
-
-build test firmware:
+.build-template: &build-template
   stage: build
   image: ${CI_REGISTRY}/proj/testinator/esp32:latest
   <<: *pio-cache
   before_script:
     - cd "${PIO_PROJ_FOLDER}"
-  script:
     # Remove the cached firmwares to ensure we will rebuild
-    - rm -f .pio/**/firmware.{bin,elf}
-    - pio test -e cicdmachine -vv --without-uploading --without-testing
+    - rm -f .pio/build/${PIO_ENV}/firmware.{bin,elf}
   artifacts:
     paths:
-      - "${PIO_PROJ_FOLDER}/.pio/**/*.checksum"  # Without this, `pio run` deletes the firmware
-      - "${PIO_PROJ_FOLDER}/.pio/**/firmware.bin"
-      - "${PIO_PROJ_FOLDER}/.pio/**/firmware.elf"
+      - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.bin"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.elf"
+
+
+build test firmware:
+  <<: *build-template
+  script:
+    - pio test -e ${PIO_ENV} -vv --without-uploading --without-testing
   rules:
     - when: always
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
+    PIO_ENV: cicdmachine
+
+
+build esp32 app firmware:
+  <<: *build-template
+  script:
+    - pio run -e ${PIO_ENV}
+  rules:
+    - when: always
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+    PIO_ENV: esp32
 
 
 test hardware:
@@ -103,3 +121,44 @@ test hardware:
     # But skip by default if the sources did not change
     - <<: *rules-changes-sources
     - <<: *rules-changes-cicd
+
+
+.upload-template: &upload-template
+  stage: upload
+  image: curlimages/curl:latest
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  script:
+    # The package will be releases as Release-PioEnvironment-Tag.Extension, e.g. keycard-access-esp32-1.0.4-beta1.elf
+    - >
+      for EXTENSION in bin elf; do
+        curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+          --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.${EXTENSION}" \
+          "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-${PIO_ENV}-${CI_COMMIT_TAG}.${EXTENSION}"
+      done
+
+
+upload esp32 app firmware:
+  <<: *upload-template
+  dependencies:
+    - build esp32 app firmware
+  variables:
+    PIO_ENV: esp32
+
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  dependencies:
+    # NOTE: explicitly list all environments here for which to create a release
+    - upload esp32 app firmware
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  script:
+    # NOTE: explicitly list all environments here for which to create a release, both elf and bin
+    - |
+      release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.elf\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.elf\"}" \
+        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}-esp32-${CI_COMMIT_TAG}.bin\"}"
