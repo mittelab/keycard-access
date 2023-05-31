@@ -161,7 +161,7 @@ struct keymaker_responder final : public ka::member_token_responder {
     std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
         // Allow both DEP targets (gates to be configured) and Mifare targets
         return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
-                   pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
+                pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
     }
 
     pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override {

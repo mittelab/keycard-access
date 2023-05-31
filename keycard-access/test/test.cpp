@@ -152,10 +152,13 @@ namespace ut {
         }
         const auto r_info = instance.tag->get_info();
         const desfire::any_key default_k{desfire::cipher_type::des};
-        const std::array<desfire::any_key, 10> keys_to_test{
+        const ka::key_pair demo_key_pair{ka::pwhash, "foobar"};
+
+        const std::array<desfire::any_key, 11> keys_to_test{
                 default_k,
                 bundle.kp.derive_token_root_key(instance.nfc_id),
                 r_info ? bundle.kp.derive_token_root_key(token_id{r_info->serial_no}) : default_k,
+                r_info ? demo_key_pair.derive_token_root_key(token_id{r_info->serial_no}) : default_k,
                 desfire::any_key{desfire::cipher_type::des3_2k},
                 desfire::any_key{desfire::cipher_type::des3_3k},
                 desfire::any_key{desfire::cipher_type::aes128},
@@ -510,7 +513,7 @@ namespace ut {
          * Test different files with invalid settings.
          */
         {
-            using desfire::access_rights;
+            using desfire::file_access_rights;
             using desfire::file_security;
             using desfire::file_type;
             using desfire::no_key;
@@ -518,20 +521,20 @@ namespace ut {
             using val_settings = desfire::file_settings<file_type::value>;
 
             const std::array<desfire::any_file_settings, 6> invalid_master_settings = {
-                    std_settings{file_security::authenticated, access_rights{no_key, no_key, 0_b, no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{0_b, no_key, 0_b, no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, 0_b, 0_b, no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, no_key, no_key, no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, no_key, 0_b, 0_b}, 1},
-                    val_settings{file_security::encrypted, access_rights{no_key, no_key, 0_b, no_key}, 0, 0, 0, false}};
+                    std_settings{file_security::authenticated, file_access_rights{no_key, no_key, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{0_b, no_key, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, 0_b, 0_b, no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, no_key, no_key, no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, no_key, 0_b, 0_b}, 1},
+                    val_settings{file_security::encrypted, file_access_rights{no_key, no_key, 0_b, no_key}, 0, 0, 0, false}};
 
             const std::array<desfire::any_file_settings, 6> invalid_gate_settings = {
-                    std_settings{file_security::authenticated, access_rights{no_key, no_key, gid.key_no(), no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{0_b, no_key, gid.key_no(), no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, 0_b, gid.key_no(), no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, no_key, no_key, no_key}, 1},
-                    std_settings{file_security::encrypted, access_rights{no_key, no_key, gid.key_no(), 0_b}, 1},
-                    val_settings{file_security::encrypted, access_rights{no_key, no_key, gid.key_no(), no_key}, 0, 0, 0, false}};
+                    std_settings{file_security::authenticated, file_access_rights{no_key, no_key, gid.key_no(), no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{0_b, no_key, gid.key_no(), no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, 0_b, gid.key_no(), no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, no_key, no_key, no_key}, 1},
+                    std_settings{file_security::encrypted, file_access_rights{no_key, no_key, gid.key_no(), 0_b}, 1},
+                    val_settings{file_security::encrypted, file_access_rights{no_key, no_key, gid.key_no(), no_key}, 0, 0, 0, false}};
 
             const auto [aid, fid] = gid.app_and_file();
 
@@ -539,11 +542,11 @@ namespace ut {
                 if (settings.type() == file_type::standard) {
                     ESP_LOGI("TEST", "Testing invalid master std file settings: "
                                      "sec=%s, rw=%c, chg=%c, r=%c, w=%c",
-                             desfire::to_string(settings.generic_settings().security),
-                             settings.generic_settings().rights.read_write.describe(),
-                             settings.generic_settings().rights.change.describe(),
-                             settings.generic_settings().rights.read.describe(),
-                             settings.generic_settings().rights.write.describe());
+                             desfire::to_string(settings.common_settings().security),
+                             settings.common_settings().rights.read_write.describe(),
+                             settings.common_settings().rights.change.describe(),
+                             settings.common_settings().rights.read.describe(),
+                             settings.common_settings().rights.write.describe());
                 } else {
                     ESP_LOGI("TEST", "Testing invalid master file type.");
                 }
@@ -555,8 +558,8 @@ namespace ut {
                 TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_master_file(mkey, false, true)));
                 TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_master_file(bundle.km, false, true)));
 
-                if (settings.generic_settings().security != file_security::encrypted or
-                    settings.generic_settings().rights.read != 0_b or
+                if (settings.common_settings().security != file_security::encrypted or
+                    settings.common_settings().rights.read != 0_b or
                     settings.type() != file_type::standard) {
                     TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_master_file(mkey, false, false)));
                     TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_master_file(bundle.km, false, false)));
@@ -590,11 +593,11 @@ namespace ut {
                 if (settings.type() == file_type::standard) {
                     ESP_LOGI("TEST", "Testing invalid std file settings: "
                                      "sec=%s, rw=%c, chg=%c, r=%c, w=%c",
-                             desfire::to_string(settings.generic_settings().security),
-                             settings.generic_settings().rights.read_write.describe(),
-                             settings.generic_settings().rights.change.describe(),
-                             settings.generic_settings().rights.read.describe(),
-                             settings.generic_settings().rights.write.describe());
+                             desfire::to_string(settings.common_settings().security),
+                             settings.common_settings().rights.read_write.describe(),
+                             settings.common_settings().rights.change.describe(),
+                             settings.common_settings().rights.read.describe(),
+                             settings.common_settings().rights.write.describe());
                 } else {
                     ESP_LOGI("TEST", "Testing invalid file type.");
                 }
@@ -606,8 +609,8 @@ namespace ut {
                 TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_gate_file(gid, key, false, true)));
                 TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_gate_file(g, false, true)));
 
-                if (settings.generic_settings().security != file_security::encrypted or
-                    settings.generic_settings().rights.read != gid.key_no() or
+                if (settings.common_settings().security != file_security::encrypted or
+                    settings.common_settings().rights.read != gid.key_no() or
                     settings.type() != file_type::standard) {
                     TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_gate_file(gid, key, false, false)));
                     TEST_ASSERT(is_err<desfire::error::file_integrity_error>(token.read_encrypted_gate_file(g, false, false)));
@@ -844,8 +847,8 @@ extern "C" void app_main() {
         if (r_scan) {
             for (auto const &target : *r_scan) {
                 ESP_LOGI("TEST", "Logical index %u; NFC ID:", target.logical_index);
-                ESP_LOG_BUFFER_HEX_LEVEL("TEST", target.info.nfcid.data(), target.info.nfcid.size(), ESP_LOG_INFO);
-                std::copy_n(std::begin(target.info.nfcid), ut::instance.nfc_id.size(), std::begin(ut::instance.nfc_id));
+                ESP_LOG_BUFFER_HEX_LEVEL("TEST", target.nfcid.data(), target.nfcid.size(), ESP_LOG_INFO);
+                std::copy_n(std::begin(target.nfcid), ut::instance.nfc_id.size(), std::begin(ut::instance.nfc_id));
                 ut::instance.tag = std::make_unique<desfire::tag>(
                         desfire::tag::make<desfire::esp32::default_cipher_provider>(*ut::instance.controller, target.logical_index));
                 // We only need one

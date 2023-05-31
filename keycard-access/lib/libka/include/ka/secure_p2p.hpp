@@ -14,8 +14,8 @@
 namespace ka::p2p {
     using ms = std::chrono::milliseconds;
     using namespace std::chrono_literals;
-    using pn532::p2p::initiator;
     using pn532::result;
+    using pn532::p2p::initiator;
     using pn532::p2p::target;
 
     struct tx_tag {};
