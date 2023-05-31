@@ -21,7 +21,7 @@
     "-std=gnu++17"
   ],
   "dependencies": {
-    "libSpookyAction": "*",
-    "mittelab/mitteLib": "^1.0.3"
+    "mittelab/libSpookyAction": "^1.0.2",
+    "mittelab/mitteLib": "^1.0.4"
   }
 }
