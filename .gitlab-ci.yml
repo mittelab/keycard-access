@@ -48,7 +48,7 @@ check format:
   script:
     - cd "${PIO_PROJ_FOLDER}"
     - >
-      find . -not -path '*/\.*' -and -not -path './components/*' -and -not -path './lib/_*' -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
+      find . \( -path './lib/libka/*' -or -path './test/*' -or -path './src/*' \) -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
           echo "Formatting $FILE"
           clang-format --style file -i "$FILE"
       done
@@ -124,10 +124,11 @@ test hardware:
 
 .release-tags-only: &release-tags-only
   rules:
-    # Match all release-* tags, and use everything after it as the release version
-    - if: $CI_COMMIT_TAG =~ /^release-/
+    # Match all v<semantic_version> tags, and use everything after it as the release version
+    # Regex just copied from semver.org
+    - if: $CI_COMMIT_TAG =~ /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
   before_script:
-    - export VERSION="${CI_COMMIT_TAG##release-}"
+    - export VERSION="${CI_COMMIT_TAG##v}"
 
 .upload-template: &upload-template
   <<: *release-tags-only
