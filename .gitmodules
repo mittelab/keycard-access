@@ -7,3 +7,9 @@
 [submodule "keycard-access/lib/_mittelib"]
 	path = keycard-access/lib/_mittelib
 	url = https://git.mittelab.org/proj/mittelib.git
+[submodule "keycard-access/lib/_json"]
+	path = keycard-access/lib/_json
+	url = https://github.com/nlohmann/json.git
+[submodule "keycard-access/lib/_semver"]
+	path = keycard-access/lib/_semver
+	url = https://github.com/Neargye/semver.git

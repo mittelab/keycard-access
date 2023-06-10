@@ -4,7 +4,9 @@
 #include <freertos/task.h>
 #include <ka/config.hpp>
 #include <ka/gate.hpp>
+#include <ka/ota.hpp>
 #include <ka/p2p_ops.hpp>
+#include <ka/wifi.hpp>
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>
@@ -16,34 +18,6 @@
 #include <desfire/fs.hpp>
 
 using namespace std::chrono_literals;
-
-void gate_main() {
-    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
-    pn532::controller controller{hsu_chn};
-    pn532::scanner scanner{controller};
-
-    ESP_LOGI(LOG_PFX, "Reconfiguring as a new demo gate.");
-    ka::gate gate;
-
-    if (not scanner.init_and_test_controller()) {
-        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
-        return;
-    }
-
-    ESP_LOGI(LOG_PFX, "Self-test passed.");
-
-    if (not gate.is_configured()) {
-        ESP_LOGW(LOG_PFX, "Gate is not configured, entering target mode.");
-        ka::p2p::configure_gate_loop(controller, gate);
-        gate.config_store();
-        ESP_LOGI(LOG_PFX, "Gate configured.");
-    }
-
-    gate.log_public_gate_info();
-
-    ka::gate_responder responder{gate};
-    scanner.loop(responder, false /* already performed */);
-}
 
 struct format_mcformatface final : public desfire::tag_responder<desfire::esp32::default_cipher_provider> {
     ka::token_id current_id{};
@@ -150,7 +124,6 @@ struct format_mcformatface final : public desfire::tag_responder<desfire::esp32:
     }
 };
 
-
 struct keymaker_responder final : public ka::member_token_responder {
     ka::keymaker km;
 
@@ -228,42 +201,76 @@ struct keymaker_responder final : public ka::member_token_responder {
     }
 };
 
-void keymaker_main() {
-    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
-    pn532::controller controller{hsu_chn};
-    pn532::scanner scanner{controller};
+void gate_main(pn532::controller &controller, pn532::scanner &scanner) {
+    ESP_LOGI(LOG_PFX, "Reconfiguring as a new demo gate.");
+    ka::gate gate;
 
-    keymaker_responder responder{};
-
-    if (not scanner.init_and_test_controller()) {
-        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
-        return;
+    if (not gate.is_configured()) {
+        ESP_LOGW(LOG_PFX, "Gate is not configured, entering target mode.");
+        ka::p2p::configure_gate_loop(controller, gate);
+        gate.config_store();
+        ESP_LOGI(LOG_PFX, "Gate configured.");
     }
 
-    ESP_LOGI(LOG_PFX, "Self-test passed.");
+    gate.log_public_gate_info();
+
+    ka::gate_responder responder{gate};
     scanner.loop(responder, false /* already performed */);
 }
 
-void format_mcformatface_main() {
-    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
-    pn532::controller controller{hsu_chn};
-    pn532::scanner scanner{controller};
+void keymaker_main(pn532::scanner &scanner) {
+    keymaker_responder responder{};
+    scanner.loop(responder, false /* already performed */);
+}
 
+void format_mcformatface_main(pn532::scanner &scanner) {
     format_mcformatface responder{};
-
-    if (not scanner.init_and_test_controller()) {
-        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
-        return;
-    }
-
-    ESP_LOGI(LOG_PFX, "Self-test passed.");
     scanner.loop(responder, false /* already performed */);
 }
 
 extern "C" void app_main() {
+    // In case someone forgets to disable logging root keys...
     desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
+
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    std::this_thread::sleep_for(2s);
+
+    // Create WiFi
+    std::shared_ptr<ka::wifi> wf = std::make_shared<ka::wifi>();
+
+    // Create pn532, scanner and controller
+    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
+    pn532::controller controller{hsu_chn};
+    pn532::scanner scanner{controller};
+
+    // Do initial setup of the PN532
+    if (not scanner.init_and_test_controller()) {
+        // Is this a new fw? Roll back
+        if (ka::firmware_version::is_running_fw_pending_verification()) {
+            ESP_LOGE(LOG_PFX, "Could not start the PN532 with the new firmware. Will roll back in 5s.");
+            std::this_thread::sleep_for(5s);
+            ka::firmware_version::running_fw_rollback();
+        }
+        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
+        return;
+    }
+
+    ESP_LOGI(LOG_PFX, "Self-test passed.");
+
+    // Is this a new fw? Mark as viable
+    if (ka::firmware_version::is_running_fw_pending_verification()) {
+        ka::firmware_version::running_fw_mark_verified();
+        const auto v = ka::firmware_version::get_current();
+        const auto v_s = v.to_string();
+        ESP_LOGI(LOG_PFX, "Updated to version %s.", v_s.c_str());
+    }
+
+    // Now we are ready to set up the automated updates.
+    /// @todo Increase to 1h or so
+    ka::update_watch ota{wf, 5min};
+    ota.start();
+
+    // Enter main.
     int choice = 0;
     while (choice == 0) {
         std::printf("Select operation mode of the demo:\n");
@@ -283,15 +290,15 @@ extern "C" void app_main() {
     switch (choice) {
         case 1:
             std::printf("Acting as gate.\n");
-            gate_main();
+            gate_main(controller, scanner);
             break;
         case 2:
             std::printf("Acting as keymaker.\n");
-            keymaker_main();
+            keymaker_main(scanner);
             break;
         case 3:
             std::printf("Enter... Format McFormatface\n");
-            format_mcformatface_main();
+            format_mcformatface_main(scanner);
             break;
         default:
             break;
