@@ -48,6 +48,8 @@ namespace ka {
         [[nodiscard]] static firmware_version get_current();
         [[nodiscard]] static std::string get_platform_code();
 
+        [[nodiscard]] std::string get_fw_bin_prefix() const;
+
         /**
          * Returns true if and only if an OTA update has just occurred and the firmware was not verified yet.
          * @see
@@ -83,13 +85,7 @@ namespace ka {
          * Gets the list of releases from the default channel.
          * @note Assumes that the network is accessible.
          */
-        [[nodiscard]] static std::optional<std::vector<firmware_release>> get_from_default_update_channel();
-
-        /**
-         * Gets the list of releases from a custom channel.
-         * @note Assumes that the network is accessible.
-         */
-        [[nodiscard]] static std::optional<std::vector<firmware_release>> get_from_update_channel(std::string const &update_channel);
+        [[nodiscard]] static std::optional<std::vector<firmware_release>> get_from_default_update_channel(std::string const &fw_bin_prefix);
 
         /**
          * Gets the list of releases from a custom channel with the given binary prefix.

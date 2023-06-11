@@ -51,6 +51,13 @@ namespace ka {
         ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_mark_app_invalid_rollback_and_reboot());
     }
 
+    std::string firmware_version::get_fw_bin_prefix() const {
+        std::string pfx = app_name;
+        pfx.append("-");
+        pfx += get_platform_code();
+        return pfx;
+    }
+
     std::string firmware_version::get_platform_code() {
         esp_chip_info_t chip_info{};
         esp_chip_info(&chip_info);
@@ -104,12 +111,8 @@ namespace ka {
         return retval;
     }
 
-    std::optional<std::vector<firmware_release>> firmware_release::get_from_default_update_channel() {
-        return get_from_update_channel(default_update_channel, firmware_version::get_platform_code());
-    }
-
-    std::optional<std::vector<firmware_release>> firmware_release::get_from_update_channel(std::string const &update_channel) {
-        return get_from_update_channel(update_channel, firmware_version::get_platform_code());
+    std::optional<std::vector<firmware_release>> firmware_release::get_from_default_update_channel(std::string const &fw_bin_prefix) {
+        return get_from_update_channel(default_update_channel, fw_bin_prefix);
     }
 
     std::optional<std::vector<firmware_release>> firmware_release::get_from_update_channel(std::string const &update_channel, std::string const &fw_bin_prefix) {
@@ -209,7 +212,7 @@ namespace ka {
             return;
         }
 
-        const auto releases = firmware_release::get_from_default_update_channel();
+        const auto releases = firmware_release::get_from_default_update_channel(fw_version.get_fw_bin_prefix());
         if (not releases) {
             return;
         }
