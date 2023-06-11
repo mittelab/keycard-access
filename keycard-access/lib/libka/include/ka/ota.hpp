@@ -39,15 +39,27 @@ namespace ka {
     using datetime = std::chrono::time_point<std::chrono::system_clock>;
 
     struct firmware_version {
-        std::optional<semver::version> semantic_version{};
-        std::string string_version{};
-        datetime release_date{};
+        semver::version semantic_version{};
+        std::string commit_info{};
+        datetime build_date{};
         std::string app_name{};
         std::string platform_code{};
 
         [[nodiscard]] static firmware_version get_current();
+
+        /**
+         * Parses a version of the form v0.0.0, v0.0.0-alpha, v0.0.0-alpha.0, with an optional -0-afafafa-dirty suffix.
+         */
+        [[nodiscard]] static std::optional<std::pair<semver::version, std::string>> parse_git_describe_version(std::string_view v);
+
+        /**
+         * Returns a string representing the current running platform
+         */
         [[nodiscard]] static std::string get_platform_code();
 
+        /**
+         * Returns a string that prefixes every version of this firmware, given by "app_name-platform"
+         */
         [[nodiscard]] std::string get_fw_bin_prefix() const;
 
         /**

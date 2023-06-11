@@ -79,33 +79,76 @@ namespace ka {
         }
     }
 
+    std::optional<std::pair<semver::version, std::string>> firmware_version::parse_git_describe_version(std::string_view v) {
+        namespace sv_detail = semver::detail;
+        auto next = std::begin(v);
+        auto last = std::end(v);
+        if (*next == 'v') {
+            ++next;
+        }
+        semver::version sv{};
+        if (next = sv_detail::from_chars(next, last, sv.major); sv_detail::check_delimiter(next, last, '.')) {
+            if (next = sv_detail::from_chars(++next, last, sv.minor); sv_detail::check_delimiter(next, last, '.')) {
+                if (next = sv_detail::from_chars(++next, last, sv.patch); next == last) {
+                    // Parsed version without anything else
+                    return std::make_pair(sv, "");
+                } else if (sv_detail::check_delimiter(next, last, '-')) {
+
+                    if (const auto next_after_prerelease = sv_detail::from_chars(++next, last, sv.prerelease_type); next_after_prerelease == nullptr) {
+                        // Not a prerelease, it's git stuff
+                        return std::make_pair(sv, std::string{next, last});
+                    } else if (next = next_after_prerelease; next == last) {
+                        // We did parse till the end the prerelease
+                        return std::make_pair(sv, "");
+                    } else if (sv_detail::check_delimiter(next, last, '.')) {
+                        // There is a dot which might identify the prerelease number
+                        if (next = sv_detail::from_chars(++next, last, sv.prerelease_number); next == last) {
+                            // Reached the end of parsing with the prerelease number
+                            return std::make_pair(sv, "");
+                        } else if (next == nullptr) {
+                            // Could not parse this as a number.
+                            return std::nullopt;
+                        }
+                    }
+                    assert(next != last and next != nullptr);
+                    // next != last and there is no dot, so it must be git stuff
+                    if (sv_detail::check_delimiter(next, last, '-')) {
+                        // Skip the hyphen
+                        return std::make_pair(sv, std::string{std::next(next), last});
+                    }
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
     firmware_version firmware_version::get_current() {
-        if (const auto *app_desc = esp_app_get_description(); app_desc != nullptr) {
+        if (const auto *app_desc = esp_app_get_description(); app_desc == nullptr) {
+            return {};
+        } else {
             firmware_version retval{};
-            retval.string_version = app_desc->version;
-            if (retval.string_version.starts_with('v')) {
-                retval.string_version = retval.string_version.substr(1);
+            if (const auto sv_commit = parse_git_describe_version(app_desc->version); sv_commit) {
+                std::tie(retval.semantic_version, retval.commit_info) = *sv_commit;
+            } else {
+                ESP_LOGE(TAG, "Invalid version %s.", app_desc->version);
+                return {};
             }
-            if (semver::version v{}; v.from_string_noexcept(retval.string_version)) {
-                retval.semantic_version = v;
-            }
-            retval.release_date = release_date_from_app_desc(*app_desc);
+            retval.build_date = release_date_from_app_desc(*app_desc);
             retval.app_name = app_desc->project_name;
             retval.platform_code = get_platform_code();
             return retval;
         }
-        return {};
     }
 
     std::string firmware_version::to_string() const {
         std::string retval;
-        retval.resize(app_name.size() + 64);
-        const std::string release_date_s = strftime(release_date, "%Y-%m-%d %H:%M:%S");
-        if (semantic_version) {
-            const std::string semver_s = semantic_version->to_string();
+        retval.resize(app_name.size() + 128);
+        const std::string release_date_s = strftime(build_date, "%Y-%m-%d %H:%M:%S");
+        const std::string semver_s = semantic_version.to_string();
+        if (commit_info.empty()) {
             std::snprintf(retval.data(), retval.capacity(), "%s-%s %s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), release_date_s.c_str());
         } else {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s build %s (%s)", app_name.c_str(), platform_code.c_str(), string_version.c_str(), release_date_s.c_str());
+            std::snprintf(retval.data(), retval.capacity(), "%s-%s %s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str(), release_date_s.c_str());
         }
         retval.shrink_to_fit();
         return retval;
@@ -219,21 +262,11 @@ namespace ka {
             return;
         }
 
-        // Filter those that are older than the current firmware version
-        const auto filter = [&](firmware_release const &r) -> bool {
-            if (fw_version.semantic_version) {
-                // Use semantic version for comparison
-                return r.semantic_version > *fw_version.semantic_version;
-            } else {
-                // Use relase date
-                return r.release_date > fw_version.release_date;
-            }
-        };
-
         // Would like to use ranges but probably since we also need to take the min, it's best like this
         firmware_release const *next_release = nullptr;
         for (firmware_release const &release : *releases) {
-            if (not filter(release)) {
+            // Filter those that are older than the current firmware version
+            if (release.semantic_version <= fw_version.semantic_version) {
                 continue;
             }
             // Select the *immediate best* release
