@@ -266,8 +266,7 @@ extern "C" void app_main() {
     }
 
     // Now we are ready to set up the automated updates.
-    /// @todo Increase to 1h or so
-    ka::update_watch ota{wf, 5min};
+    ka::update_watch ota{wf, 1h};
     ota.start();
 
     // Enter main.
