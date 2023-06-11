@@ -212,6 +212,7 @@ namespace ka {
         std::recursive_mutex _mutex;
         std::condition_variable _status_change;
         std::mutex _status_change_mutex;
+        bool _is_started;
 
         static void _wifi_event_handler_cbk(void *context, esp_event_base_t event_base, std::int32_t event_id, void *event_data);
 
@@ -349,7 +350,8 @@ namespace ka {
           _status{wifi_status::idle},
           _mutex{},
           _status_change{},
-          _status_change_mutex{} {
+          _status_change_mutex{},
+          _is_started{false} {
 
         // Must be initialized in order to register instance handlers
         if (not ensure_wifi_initialized()) {
@@ -367,7 +369,11 @@ namespace ka {
         if (_status == wifi_status::idle) {
             _status = wifi_status::connecting;
             _status_change.notify_all();
-            ESP_ERROR_CHECK(esp_wifi_start());
+            if (not _is_started) {
+                _is_started = true;
+                ESP_ERROR_CHECK(esp_wifi_start());
+            }
+            ESP_ERROR_CHECK(esp_wifi_connect());
         } else if (_status == wifi_status::failure) {
             _attempts = 0;
             _status = wifi_status::connecting;
@@ -408,6 +414,7 @@ namespace ka {
     wifi::wifi_impl::~wifi_impl() {
         disconnect();
         ESP_ERROR_CHECK(esp_wifi_stop());
+        _is_started = false;
         // The event will not be processed after unregister
         if (_instance_any_id != nullptr) {
             ESP_ERROR_CHECK(esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, _instance_any_id));
