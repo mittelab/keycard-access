@@ -163,7 +163,9 @@ namespace ka {
                 }
             }
             // Is it a valid release date?
-            if (const auto d = strptime(entry["released_at"].get<std::string>(), "%Y-%m-%dT%H:%M:%S"); not d) {
+            if (const auto d = strptime(entry["released_at"].get<std::string>(), "%Y-%m-%dT%H:%M:%S"); d) {
+                release.release_date = *d;
+            } else {
                 const auto d_s = entry["released_at"].get<std::string>();
                 const auto v_s = release.semantic_version.to_string();
                 ESP_LOGW(TAG, "Unable to parse release date %s for version %s.", d_s.c_str(), v_s.c_str());
