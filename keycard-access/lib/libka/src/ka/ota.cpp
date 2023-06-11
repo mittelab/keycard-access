@@ -145,7 +145,10 @@ namespace ka {
             if (not entry.contains("released_at") or not entry["released_at"].is_string()) {
                 continue;
             }
-            if (not entry.contains("links") or not entry["links"].is_array()) {
+            if (not entry.contains("assets") or not entry["assets"].is_object()) {
+                continue;
+            }
+            if (not entry["assets"].contains("links") or not entry["assets"]["links"].is_array()) {
                 continue;
             }
             firmware_release release{};
@@ -165,7 +168,7 @@ namespace ka {
             }
             // Does it have the correct firmware version?
             const auto fw_name = release.get_expected_firmware_bin_name(fw_bin_prefix);
-            for (auto const &link : entry["links"]) {
+            for (auto const &link : entry["assets"]["links"]) {
                 if (link.contains("name") and link.contains("url") and link["url"].is_string() and link["name"] == fw_name) {
                     // Found the correct firmware
                     release.firmware_url = link["url"].get<std::string>();
