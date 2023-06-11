@@ -112,7 +112,7 @@ namespace ka {
             } break;
             case HTTP_EVENT_ON_CONNECTED: {
                 const auto url = this->url();
-                ESP_LOGI(TAG, "Connected to %s.", url.c_str());
+                ESP_LOGD(TAG, "Connected to %s.", url.c_str());
             } break;
             case HTTP_EVENT_HEADER_SENT:
                 ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
@@ -121,7 +121,7 @@ namespace ka {
                 ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER %s: %s", evt.header_key, evt.header_value);
                 break;
             case HTTP_EVENT_ON_DATA:
-                ESP_LOGI(TAG, "Receiving %d bytes.", evt.data_len);
+                ESP_LOGD(TAG, "Receiving %d bytes.", evt.data_len);
                 _buffer << mlab::make_range(static_cast<std::uint8_t *>(evt.data), static_cast<std::uint8_t *>(evt.data) + evt.data_len);
                 break;
             case HTTP_EVENT_ON_FINISH:
@@ -129,7 +129,7 @@ namespace ka {
                 break;
             case HTTP_EVENT_DISCONNECTED: {
                 const auto url = this->url();
-                ESP_LOGI(TAG, "Disconnecting from %s.", url.c_str());
+                ESP_LOGD(TAG, "Disconnecting from %s.", url.c_str());
             } break;
             case HTTP_EVENT_REDIRECT:
                 ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");

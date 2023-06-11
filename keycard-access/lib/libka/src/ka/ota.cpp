@@ -146,9 +146,9 @@ namespace ka {
         const std::string release_date_s = strftime(build_date, "%Y-%m-%d %H:%M:%S");
         const std::string semver_s = semantic_version.to_string();
         if (commit_info.empty()) {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s %s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), release_date_s.c_str());
+            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), release_date_s.c_str());
         } else {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s %s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str(), release_date_s.c_str());
+            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str(), release_date_s.c_str());
         }
         retval.shrink_to_fit();
         return retval;
@@ -280,7 +280,10 @@ namespace ka {
             return;
         }
 
-        ESP_LOGW(TAG, "There is a new version: %s", next_release->firmware_url.c_str());
+        {
+            const auto v_s = next_release->semantic_version.to_string();
+            ESP_LOGW(TAG, "There is a new version: %s", v_s.c_str());
+        }
 
         if (not wf.ensure_connected()) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
@@ -295,7 +298,7 @@ namespace ka {
                 .partial_http_download = false,
                 .max_http_request_size = 0};
 
-        ESP_LOGW(TAG, "Kicking off update...");
+        ESP_LOGW(TAG, "Kicking off update from %s", next_release->firmware_url.c_str());
         if (esp_https_ota(&ota_cfg) == ESP_OK) {
             ESP_LOGW(TAG, "Update successful. Restarting in 5s.");
             std::this_thread::sleep_for(5s);
