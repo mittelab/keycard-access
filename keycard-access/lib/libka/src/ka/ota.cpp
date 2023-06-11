@@ -241,7 +241,7 @@ namespace ka {
 
         ESP_LOGW(TAG, "There is a new version: %s", next_release->firmware_url.c_str());
 
-        if (not wf.ensure_connected(5s)) {
+        if (not wf.ensure_connected()) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
         }
