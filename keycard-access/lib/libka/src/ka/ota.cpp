@@ -253,8 +253,8 @@ namespace ka {
             ESP_LOGI(TAG, "Checking for updates on firwmare %s...", fw_version_s.c_str());
         }
 
-        wifi::connect_and_keep_awake wf_guard{wf};
-        if (not wf_guard) {
+        wifi_session session{wf};
+        if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
         }

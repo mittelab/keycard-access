@@ -497,18 +497,22 @@ namespace ka {
         _pimpl->set_max_attempts(n);
     }
 
-
-    wifi::connect_and_keep_awake::connect_and_keep_awake(wifi &wf, std::chrono::milliseconds timeout) : _wf{wf} {
-        if (_wf.ensure_connected(timeout)) {
+    wifi_session::wifi_session(wifi &wf, bool disconnect_when_done, std::chrono::milliseconds timeout) : _wf{&wf}, _disconnect_when_done{disconnect_when_done} {
+        if (_wf->ensure_connected(timeout)) {
             esp_wifi_set_ps(WIFI_PS_NONE);
         }
     }
 
-    wifi::connect_and_keep_awake::operator bool() const {
-        return _wf.status() == wifi_status::ready;
+    wifi_session::wifi_session(ka::wifi &wf, std::chrono::milliseconds timeout) : wifi_session{wf, not wifi_status_is_on(wf.status()), timeout} {}
+
+    wifi_session::operator bool() const {
+        return _wf != nullptr and _wf->status() == wifi_status::ready;
     }
 
-    wifi::connect_and_keep_awake::~connect_and_keep_awake() {
+    wifi_session::~wifi_session() {
         esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+        if (_wf != nullptr and disconnect_when_done()) {
+            _wf->disconnect();
+        }
     }
 }// namespace ka

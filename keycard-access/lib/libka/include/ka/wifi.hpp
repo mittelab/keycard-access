@@ -33,7 +33,6 @@ namespace ka {
         std::unique_ptr<wifi_impl, void (*)(wifi_impl *)> _pimpl;
 
     public:
-        class connect_and_keep_awake;
 
         wifi();
 
@@ -60,18 +59,29 @@ namespace ka {
         void set_max_attempts(unsigned n);
     };
 
-    class wifi::connect_and_keep_awake {
-        wifi &_wf;
-
+    class wifi_session {
+        wifi *_wf = nullptr;
+        bool _disconnect_when_done = true;
     public:
-        explicit connect_and_keep_awake(wifi &wf, std::chrono::milliseconds timeout = 30s);
+        wifi_session() = default;
+        explicit wifi_session(wifi &wf, std::chrono::milliseconds timeout = 30s);
+        wifi_session(wifi &wf, bool disconnect_when_done, std::chrono::milliseconds timeout = 30s);
+
+        wifi_session(wifi_session const &) = delete;
+        wifi_session &operator=(wifi_session const &) = delete;
+
+        wifi_session(wifi_session &&) = default;
+        wifi_session &operator=(wifi_session &&) = default;
 
         /**
          * True if connected.
          */
-        explicit operator bool() const;
+        inline explicit operator bool() const;
 
-        ~connect_and_keep_awake();
+        [[nodiscard]] inline bool disconnect_when_done() const;
+        inline void set_disconnect_when_done(bool v);
+
+        ~wifi_session();
     };
 
 }// namespace ka
@@ -86,6 +96,13 @@ namespace ka {
             default:
                 return true;
         }
+    }
+
+    bool wifi_session::disconnect_when_done() const {
+        return _disconnect_when_done;
+    }
+    void wifi_session::set_disconnect_when_done(bool v) {
+        _disconnect_when_done = v;
     }
 }// namespace ka
 
