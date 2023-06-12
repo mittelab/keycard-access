@@ -305,28 +305,38 @@ namespace ka {
         }
     }
 
-    update_watch::update_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval) : _refresh_interval{refresh_interval}, _wifi{std::move(wifi)} {}
+    update_watch::update_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval) : _t{nullptr}, _refresh_interval{refresh_interval}, _wifi{std::move(wifi)} {}
 
     void update_watch::start() {
         if (not is_running()) {
-            _t = std::thread{&update_watch::thread_body, this};
+            /**
+             * @note CONFIG_ESP32_WIFI_TASK_PINNED_TO_CORE_0 set to 1 implies that core 1 is free!
+             */
+            const unsigned update_thread_core = CONFIG_ESP32_WIFI_TASK_PINNED_TO_CORE_0;
+            xTaskCreatePinnedToCore(&_thread_body, "update_watch", CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT, this, 2, &_t, update_thread_core);
         }
     }
 
     void update_watch::stop() {
         if (is_running()) {
             _stop.notify_one();
-            _t->join();
-            _t = std::nullopt;
+            _t = nullptr;
         }
     }
 
     bool update_watch::is_running() {
-        return _t != std::nullopt;
+        return _t != nullptr;
+    }
+
+    void update_watch::_thread_body(void *user_data) {
+        if (user_data != nullptr) {
+            static_cast<update_watch *>(user_data)->thread_body();
+        }
     }
 
     void update_watch::thread_body() {
         std::unique_lock<std::mutex> lock{_stop_mutex};
+        ESP_LOGI(TAG, "Update watch thread running on core %d", xPortGetCoreID());
         std::this_thread::sleep_for(5s);
         while (_stop.wait_for(lock, _refresh_interval) == std::cv_status::timeout) {
             if (auto pwifi = _wifi.lock(); pwifi != nullptr) {

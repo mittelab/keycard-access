@@ -20,13 +20,14 @@ namespace ka {
     void check_for_updates(wifi &wf);
 
     class update_watch {
-        std::optional<std::thread> _t;
+        TaskHandle_t _t = nullptr;
         std::chrono::minutes _refresh_interval;
         std::condition_variable _stop;
         std::mutex _stop_mutex;
         std::weak_ptr<wifi> _wifi;
 
         void thread_body();
+        static void _thread_body(void *user_data);
 
     public:
         update_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval);
