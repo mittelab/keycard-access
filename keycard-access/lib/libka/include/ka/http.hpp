@@ -32,7 +32,7 @@ namespace ka {
 
         [[nodiscard]] static std::pair<http_status, mlab::bin_data> get(std::string const &url, std::chrono::milliseconds timeout = 5s);
 
-        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, void *user_data, std::chrono::milliseconds timeout = 5s);
+        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, std::chrono::milliseconds timeout = 5s);
     };
 }// namespace ka
 

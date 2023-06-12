@@ -290,7 +290,7 @@ namespace ka {
             return;
         }
 
-        const auto http_cfg = http_client::get_default_config(next_release->firmware_url, nullptr);
+        const auto http_cfg = http_client::get_default_config(next_release->firmware_url, 30s);
         const esp_https_ota_config_t ota_cfg{
                 .http_config = &http_cfg,
                 .http_client_init_cb = nullptr,

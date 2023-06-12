@@ -37,7 +37,7 @@ namespace ka {
         http_client_impl &operator=(http_client_impl const &) = delete;
         http_client_impl &operator=(http_client_impl &&) = delete;
 
-        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, void *user_data, std::chrono::milliseconds timeout = 5s) {
+        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, std::chrono::milliseconds timeout = 5s) {
             return {
                     .url = url.c_str(),
                     .host = nullptr,
@@ -61,11 +61,11 @@ namespace ka {
                     .disable_auto_redirect = false,
                     .max_redirection_count = 0,
                     .max_authorization_retries = 0,
-                    .event_handler = &_http_event_handler,
+                    .event_handler = nullptr,
                     .transport_type = HTTP_TRANSPORT_UNKNOWN,
                     .buffer_size = 0,
                     .buffer_size_tx = 0,
-                    .user_data = user_data,
+                    .user_data = nullptr,
                     .is_async = false,
                     .use_global_ca_store = false,
                     .skip_cert_common_name_check = false,
@@ -78,7 +78,9 @@ namespace ka {
         }
 
         explicit http_client_impl(std::string const &url, std::chrono::milliseconds timeout = 5s) : http_client_impl() {
-            const esp_http_client_config_t cfg = get_default_config(url, this, timeout);
+            esp_http_client_config_t cfg = get_default_config(url, timeout);
+            cfg.event_handler = &_http_event_handler;
+            cfg.user_data = this;
             _hdl = esp_http_client_init(&cfg);
         }
 
@@ -155,8 +157,8 @@ namespace ka {
         return c.get();
     }
 
-    esp_http_client_config_t http_client::get_default_config(std::string const &url, void *user_data, std::chrono::milliseconds timeout) {
-        return http_client_impl::get_default_config(url, user_data, timeout);
+    esp_http_client_config_t http_client::get_default_config(std::string const &url, std::chrono::milliseconds timeout) {
+        return http_client_impl::get_default_config(url, timeout);
     }
 
 }// namespace ka
