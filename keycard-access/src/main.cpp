@@ -258,11 +258,13 @@ extern "C" void app_main() {
     ESP_LOGI(LOG_PFX, "Self-test passed.");
 
     // Is this a new fw? Mark as viable
-    if (ka::firmware_version::is_running_fw_pending_verification()) {
+    if (const auto v = ka::firmware_version::get_current(); ka::firmware_version::is_running_fw_pending_verification()) {
         ka::firmware_version::running_fw_mark_verified();
-        const auto v = ka::firmware_version::get_current();
         const auto v_s = v.to_string();
         ESP_LOGI(LOG_PFX, "Updated to version %s.", v_s.c_str());
+    } else {
+        const auto v_s = v.to_string();
+        ESP_LOGI(LOG_PFX, "Running version %s.", v_s.c_str());
     }
 
     // Now we are ready to set up the automated updates.
