@@ -4,10 +4,15 @@ import os
 import shutil
 import sys
 
+try:
+    Import('env')
+    PROJECT_DIR = env['PROJECT_DIR']
+except NameError:
+    PROJECT_DIR = os.path.dirname(os.path.realpath(__file__))
+
 
 def main():
-    proj_dir = os.path.dirname(sys.argv[0])
-    version_txt = os.path.join(proj_dir, 'version.txt')
+    version_txt = os.path.join(PROJECT_DIR, 'version.txt')
     git = shutil.which('git')
     version_content = 'unknown'
     if git is None:
