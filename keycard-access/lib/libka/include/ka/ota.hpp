@@ -14,23 +14,31 @@
 namespace ka {
     class wifi;
 
-    /**
-     * Main entry point for update checking. Will download the next releases and trigger the update if needed.
-     */
-    void check_for_updates(wifi &wf);
-
-    class update_watch {
+    class ota_watch {
         TaskHandle_t _t = nullptr;
         std::chrono::minutes _refresh_interval;
         std::condition_variable _stop;
         std::mutex _stop_mutex;
         std::weak_ptr<wifi> _wifi;
 
+        static void thread_body_cbk(void *user_data);
         void thread_body();
-        static void _thread_body(void *user_data);
 
     public:
-        update_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval);
+        static constexpr auto default_update_channel = "https://git.mittelab.org/api/v4/projects/31/releases";
+
+        ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval);
+
+        /**
+         * Main entry point for update checking. Will download the next releases and trigger the update if needed.
+         */
+        void check_now(std::string_view update_channel = default_update_channel);
+
+        /**
+         * Triggers update from a specific url.
+         * @param url
+         */
+        void update_from(std::string_view url);
 
         void start();
         [[nodiscard]] bool is_running();
@@ -39,24 +47,14 @@ namespace ka {
 
     using datetime = std::chrono::time_point<std::chrono::system_clock>;
 
-    struct firmware_version {
+    struct fw_info {
         semver::version semantic_version{};
         std::string commit_info{};
         datetime build_date{};
         std::string app_name{};
         std::string platform_code{};
 
-        [[nodiscard]] static firmware_version get_current();
-
-        /**
-         * Parses a version of the form v0.0.0, v0.0.0-alpha, v0.0.0-alpha.0, with an optional -0-afafafa-dirty suffix.
-         */
-        [[nodiscard]] static std::optional<std::pair<semver::version, std::string>> parse_git_describe_version(std::string_view v);
-
-        /**
-         * Returns a string representing the current running platform
-         */
-        [[nodiscard]] static std::string get_platform_code();
+        [[nodiscard]] static fw_info get_running_fw();
 
         /**
          * Returns a string that prefixes every version of this firmware, given by "app_name-platform"
@@ -84,43 +82,34 @@ namespace ka {
         [[nodiscard]] std::string to_string() const;
     };
 
-    struct firmware_release {
+    struct release_info {
         semver::version semantic_version{};
         datetime release_date{};
         std::string firmware_url{};
 
         /**
-         * Just @p fw_bin_prefix + "-" + @ref semantic_version + ".bin".
-         */
-        [[nodiscard]] std::string get_expected_firmware_bin_name(std::string fw_bin_prefix) const;
-
-        /**
-         * Gets the list of releases from the default channel.
-         * @note Assumes that the network is accessible.
-         */
-        [[nodiscard]] static std::optional<std::vector<firmware_release>> get_from_default_update_channel(std::string const &fw_bin_prefix);
-
-        /**
          * Gets the list of releases from a custom channel with the given binary prefix.
          * @note Assumes that the network is accessible.
          */
-        [[nodiscard]] static std::optional<std::vector<firmware_release>> get_from_update_channel(std::string const &update_channel, std::string const &fw_bin_prefix);
+        [[nodiscard]] static std::optional<std::vector<release_info>> from_update_channel(std::string_view update_channel, std::string_view fw_bin_prefix);
 
         /**
          * Converts the JSON list of releases into a list of @ref firmware_release for the given binary prefix.
          */
-        [[nodiscard]] static std::vector<firmware_release> get_from_update_channel_data(nlohmann::json const &releases_json, std::string const &fw_bin_prefix);
+        [[nodiscard]] static std::vector<release_info> from_update_channel(const nlohmann::json &releases_json, std::string_view fw_bin_prefix);
     };
 
-    /**
-     * Parse C++ dates using C's strptime.
-     */
-    [[nodiscard]] std::optional<datetime> strptime(std::string_view s, std::string_view fmt);
+    namespace utils {
+        /**
+         * Parse C++ dates using C's strptime.
+         */
+        [[nodiscard]] std::optional<datetime> strptime(std::string_view s, std::string_view fmt);
 
-    /**
-     * Formats C++ dates using C's strftime.
-     */
-    [[nodiscard]] std::string strftime(datetime const &dt, std::string_view fmt);
+        /**
+         * Formats C++ dates using C's strftime.
+         */
+        [[nodiscard]] std::string strftime(datetime const &dt, std::string_view fmt);
+    }// namespace utils
 
 }// namespace ka
 #endif//KEYCARD_ACCESS_OTA_HPP

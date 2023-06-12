@@ -246,10 +246,10 @@ extern "C" void app_main() {
     // Do initial setup of the PN532
     if (not scanner.init_and_test_controller()) {
         // Is this a new fw? Roll back
-        if (ka::firmware_version::is_running_fw_pending_verification()) {
+        if (ka::fw_info::is_running_fw_pending_verification()) {
             ESP_LOGE(LOG_PFX, "Could not start the PN532 with the new firmware. Will roll back in 5s.");
             std::this_thread::sleep_for(5s);
-            ka::firmware_version::running_fw_rollback();
+            ka::fw_info::running_fw_rollback();
         }
         ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
         return;
@@ -258,8 +258,8 @@ extern "C" void app_main() {
     ESP_LOGI(LOG_PFX, "Self-test passed.");
 
     // Is this a new fw? Mark as viable
-    if (const auto v = ka::firmware_version::get_current(); ka::firmware_version::is_running_fw_pending_verification()) {
-        ka::firmware_version::running_fw_mark_verified();
+    if (const auto v = ka::fw_info::get_running_fw(); ka::fw_info::is_running_fw_pending_verification()) {
+        ka::fw_info::running_fw_mark_verified();
         const auto v_s = v.to_string();
         ESP_LOGI(LOG_PFX, "Updated to version %s.", v_s.c_str());
     } else {
@@ -268,7 +268,7 @@ extern "C" void app_main() {
     }
 
     // Now we are ready to set up the automated updates.
-    ka::update_watch ota{wf, 1h};
+    ka::ota_watch ota{wf, 1h};
     ota.start();
 
     // Enter main.
