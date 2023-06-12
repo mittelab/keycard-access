@@ -496,4 +496,19 @@ namespace ka {
     void wifi::set_max_attempts(unsigned n) {
         _pimpl->set_max_attempts(n);
     }
+
+
+    wifi::connect_and_keep_awake::connect_and_keep_awake(wifi &wf, std::chrono::milliseconds timeout) : _wf{wf} {
+        if (_wf.ensure_connected(timeout)) {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+        }
+    }
+
+    wifi::connect_and_keep_awake::operator bool() const {
+        return _wf.status() == wifi_status::ready;
+    }
+
+    wifi::connect_and_keep_awake::~connect_and_keep_awake() {
+        esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+    }
 }// namespace ka

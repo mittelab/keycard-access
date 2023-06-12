@@ -33,6 +33,8 @@ namespace ka {
         std::unique_ptr<wifi_impl, void (*)(wifi_impl *)> _pimpl;
 
     public:
+        class connect_and_keep_awake;
+
         wifi();
 
         wifi(std::string const &ssid, std::string const &pass, bool auto_connect = true);
@@ -57,6 +59,20 @@ namespace ka {
 
         void set_max_attempts(unsigned n);
     };
+
+    class wifi::connect_and_keep_awake {
+        wifi &_wf;
+    public:
+        explicit connect_and_keep_awake(wifi &wf, std::chrono::milliseconds timeout = 30s);
+
+        /**
+         * True if connected.
+         */
+        explicit operator bool() const;
+
+        ~connect_and_keep_awake();
+    };
+
 }// namespace ka
 
 namespace ka {

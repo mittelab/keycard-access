@@ -252,7 +252,9 @@ namespace ka {
             const auto fw_version_s = fw_version.to_string();
             ESP_LOGI(TAG, "Checking for updates on firwmare %s...", fw_version_s.c_str());
         }
-        if (not wf.ensure_connected()) {
+
+        wifi::connect_and_keep_awake wf_guard{wf};
+        if (not wf_guard) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
         }
@@ -283,11 +285,6 @@ namespace ka {
         {
             const auto v_s = next_release->semantic_version.to_string();
             ESP_LOGW(TAG, "There is a new version: %s", v_s.c_str());
-        }
-
-        if (not wf.ensure_connected()) {
-            ESP_LOGW(TAG, "Unable to activate wifi.");
-            return;
         }
 
         const auto http_cfg = http_client::get_default_config(next_release->firmware_url, 30s);
