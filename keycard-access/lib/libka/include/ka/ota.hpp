@@ -48,7 +48,7 @@ namespace ka {
     using datetime = std::chrono::time_point<std::chrono::system_clock>;
 
     struct fw_info {
-        semver::version semantic_version{};
+        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
         std::string commit_info{};
         std::string app_name{};
         std::string platform_code{};
@@ -82,7 +82,7 @@ namespace ka {
     };
 
     struct release_info {
-        semver::version semantic_version{};
+        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
         std::string firmware_url{};
 
         /**
