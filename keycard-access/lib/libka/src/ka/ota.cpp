@@ -15,19 +15,6 @@
 namespace ka {
 
     namespace {
-        [[nodiscard]] datetime release_date_from_app_desc(esp_app_desc_t const &app_desc) {
-            std::string date_str;
-            date_str.resize(std::strlen(app_desc.date) + std::strlen(app_desc.time) + 2);
-            std::snprintf(date_str.data(), date_str.capacity(), "%s %s", app_desc.date, app_desc.time);
-            date_str.shrink_to_fit();
-            if (auto d = utils::strptime(date_str, "%b %d %Y %H:%M:%S"); d) {
-                return *d;
-            } else {
-                ESP_LOGE(TAG, "Unparseable date format %s", date_str.c_str());
-                return {};
-            }
-        }
-
         [[nodiscard]] std::optional<std::pair<semver::version, std::string>> parse_git_describe_version(std::string_view v) {
             namespace sv_detail = semver::detail;
             auto next = std::begin(v);
@@ -119,11 +106,11 @@ namespace ka {
     }
 
     std::string fw_info::get_fw_bin_prefix() const {
-        std::string pfx;
-        pfx.resize(app_name.size() + platform_code.size() + 2);
-        std::snprintf(pfx.data(), pfx.capacity(), "%s-%s", app_name.c_str(), platform_code.c_str());
-        pfx.shrink_to_fit();
-        return pfx;
+        std::string retval;
+        retval.resize(app_name.size() + platform_code.size() + 2);
+        std::snprintf(retval.data(), retval.capacity(), "%s-%s", app_name.c_str(), platform_code.c_str());
+        retval.shrink_to_fit();
+        return retval;
     }
 
     fw_info fw_info::get_running_fw() {
@@ -137,7 +124,6 @@ namespace ka {
                 ESP_LOGE(TAG, "Invalid version %s.", app_desc->version);
                 return {};
             }
-            retval.build_date = release_date_from_app_desc(*app_desc);
             retval.app_name = app_desc->project_name;
             retval.platform_code = get_platform_code();
             return retval;
@@ -147,12 +133,11 @@ namespace ka {
     std::string fw_info::to_string() const {
         std::string retval;
         retval.resize(app_name.size() + 128);
-        const std::string release_date_s = utils::strftime(build_date, "%Y-%m-%d %H:%M:%S");
         const std::string semver_s = semantic_version.to_string();
         if (commit_info.empty()) {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), release_date_s.c_str());
+            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s", app_name.c_str(), platform_code.c_str(), semver_s.c_str());
         } else {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s-%s (%s)", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str(), release_date_s.c_str());
+            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s-%s", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str());
         }
         retval.shrink_to_fit();
         return retval;
@@ -180,9 +165,6 @@ namespace ka {
             if (not entry.contains("tag_name") or not entry["tag_name"].is_string()) {
                 continue;
             }
-            if (not entry.contains("released_at") or not entry["released_at"].is_string()) {
-                continue;
-            }
             if (not entry.contains("assets") or not entry["assets"].is_object()) {
                 continue;
             }
@@ -196,15 +178,6 @@ namespace ka {
                     ESP_LOGW(TAG, "Invalid released semantic version %s", s.c_str());
                     continue;
                 }
-            }
-            // Is it a valid release date?
-            if (const auto d = utils::strptime(entry["released_at"].get<std::string>(), "%Y-%m-%dT%H:%M:%S"); d) {
-                release.release_date = *d;
-            } else {
-                const auto d_s = entry["released_at"].get<std::string>();
-                const auto v_s = release.semantic_version.to_string();
-                ESP_LOGW(TAG, "Unable to parse release date %s for version %s.", d_s.c_str(), v_s.c_str());
-                continue;
             }
 
             // What is the expected firmware name for this version?
@@ -329,9 +302,7 @@ namespace ka {
         if (next_release == nullptr) {
             ESP_LOGI(TAG, "You are up to date.");
             return;
-        }
-
-        {
+        } else {
             const auto v_s = next_release->semantic_version.to_string();
             ESP_LOGW(TAG, "There is a new version: %s", v_s.c_str());
         }

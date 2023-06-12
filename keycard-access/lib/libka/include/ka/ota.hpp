@@ -50,7 +50,6 @@ namespace ka {
     struct fw_info {
         semver::version semantic_version{};
         std::string commit_info{};
-        datetime build_date{};
         std::string app_name{};
         std::string platform_code{};
 
@@ -84,7 +83,6 @@ namespace ka {
 
     struct release_info {
         semver::version semantic_version{};
-        datetime release_date{};
         std::string firmware_url{};
 
         /**
