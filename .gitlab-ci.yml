@@ -69,6 +69,9 @@ check format:
   image: ${CI_REGISTRY}/proj/testinator/esp32:latest
   <<: *pio-cache
   before_script:
+    # This is needed to work around https://gitlab.com/gitlab-org/gitlab-runner/-/issues/29022
+    # We must be able to run `git describe` in the folder to obtain the proper version
+    - git config --global --add safe.directory $CI_PROJECT_DIR
     - cd "${PIO_PROJ_FOLDER}"
     # Remove the cached firmwares to ensure we will rebuild
     - rm -f .pio/build/${PIO_ENV}/firmware.{bin,elf}

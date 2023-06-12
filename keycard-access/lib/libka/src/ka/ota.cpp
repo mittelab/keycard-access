@@ -24,7 +24,7 @@ namespace ka {
             std::string retval;
             retval.resize(tot_len);
             auto it = std::begin(retval);
-            for (auto const &s: strs) {
+            for (auto const &s : strs) {
                 it = std::copy(std::begin(s), std::end(s), it);
             }
             return retval;
