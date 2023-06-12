@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <esp_wifi_types.h>
 
 namespace ka {
     namespace {
@@ -33,7 +34,6 @@ namespace ka {
         std::unique_ptr<wifi_impl, void (*)(wifi_impl *)> _pimpl;
 
     public:
-
         wifi();
 
         wifi(std::string const &ssid, std::string const &pass, bool auto_connect = true);
@@ -62,6 +62,8 @@ namespace ka {
     class wifi_session {
         wifi *_wf = nullptr;
         bool _disconnect_when_done = true;
+        wifi_ps_type_t _orig_ps_mode = WIFI_PS_MIN_MODEM;
+
     public:
         wifi_session() = default;
         explicit wifi_session(wifi &wf, std::chrono::milliseconds timeout = 30s);
@@ -97,10 +99,14 @@ namespace ka {
                 return true;
         }
     }
+    wifi_session::operator bool() const {
+        return _wf != nullptr and _wf->status() == wifi_status::ready;
+    }
 
     bool wifi_session::disconnect_when_done() const {
         return _disconnect_when_done;
     }
+
     void wifi_session::set_disconnect_when_done(bool v) {
         _disconnect_when_done = v;
     }

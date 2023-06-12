@@ -498,6 +498,7 @@ namespace ka {
     }
 
     wifi_session::wifi_session(wifi &wf, bool disconnect_when_done, std::chrono::milliseconds timeout) : _wf{&wf}, _disconnect_when_done{disconnect_when_done} {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_get_ps(&_orig_ps_mode));
         if (_wf->ensure_connected(timeout)) {
             esp_wifi_set_ps(WIFI_PS_NONE);
         }
@@ -505,14 +506,12 @@ namespace ka {
 
     wifi_session::wifi_session(ka::wifi &wf, std::chrono::milliseconds timeout) : wifi_session{wf, not wifi_status_is_on(wf.status()), timeout} {}
 
-    wifi_session::operator bool() const {
-        return _wf != nullptr and _wf->status() == wifi_status::ready;
-    }
-
     wifi_session::~wifi_session() {
-        esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
-        if (_wf != nullptr and disconnect_when_done()) {
-            _wf->disconnect();
+        if (_wf != nullptr) {
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_ps(_orig_ps_mode));
+            if (disconnect_when_done()) {
+                _wf->disconnect();
+            }
         }
     }
 }// namespace ka
