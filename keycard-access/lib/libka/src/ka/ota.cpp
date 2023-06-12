@@ -15,6 +15,21 @@
 namespace ka {
 
     namespace {
+
+        [[nodiscard]] std::string concatenate(std::initializer_list<std::string_view> strs) {
+            std::size_t tot_len = 0;
+            for (auto const &s : strs) {
+                tot_len += s.size();
+            }
+            std::string retval;
+            retval.resize(tot_len);
+            auto it = std::begin(retval);
+            for (auto const &s: strs) {
+                it = std::copy(std::begin(s), std::end(s), it);
+            }
+            return retval;
+        }
+
         [[nodiscard]] std::optional<std::pair<semver::version, std::string>> parse_git_describe_version(std::string_view v) {
             namespace sv_detail = semver::detail;
             auto next = std::begin(v);
@@ -106,11 +121,7 @@ namespace ka {
     }
 
     std::string fw_info::get_fw_bin_prefix() const {
-        std::string retval;
-        retval.resize(app_name.size() + platform_code.size() + 2);
-        std::snprintf(retval.data(), retval.capacity(), "%s-%s", app_name.c_str(), platform_code.c_str());
-        retval.shrink_to_fit();
-        return retval;
+        return concatenate({app_name, "-", platform_code});
     }
 
     fw_info fw_info::get_running_fw() {
@@ -131,16 +142,11 @@ namespace ka {
     }
 
     std::string fw_info::to_string() const {
-        std::string retval;
-        retval.resize(app_name.size() + 128);
-        const std::string semver_s = semantic_version.to_string();
         if (commit_info.empty()) {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s", app_name.c_str(), platform_code.c_str(), semver_s.c_str());
+            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string()});
         } else {
-            std::snprintf(retval.data(), retval.capacity(), "%s-%s-%s-%s", app_name.c_str(), platform_code.c_str(), semver_s.c_str(), commit_info.c_str());
+            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
         }
-        retval.shrink_to_fit();
-        return retval;
     }
 
     std::optional<std::vector<release_info>> release_info::from_update_channel(std::string_view update_channel, std::string_view fw_bin_prefix) {
@@ -181,14 +187,7 @@ namespace ka {
             }
 
             // What is the expected firmware name for this version?
-            const auto fw_name = [&]() -> std::string {
-                const auto v_s = release.semantic_version.to_string();
-                std::string retval;
-                retval.resize(fw_bin_prefix.size() + v_s.size() + 6);
-                std::snprintf(retval.data(), retval.capacity(), "%s-%s.bin", fw_bin_prefix.data(), v_s.c_str());
-                retval.shrink_to_fit();
-                return retval;
-            }();
+            const auto fw_name = concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
 
             // Does it have the correct firmware version?
             for (auto const &link : entry["assets"]["links"]) {
