@@ -62,6 +62,7 @@ namespace ka {
 
     class wifi::connect_and_keep_awake {
         wifi &_wf;
+
     public:
         explicit connect_and_keep_awake(wifi &wf, std::chrono::milliseconds timeout = 30s);
 
