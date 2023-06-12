@@ -37,9 +37,9 @@ namespace ka {
         http_client_impl &operator=(http_client_impl const &) = delete;
         http_client_impl &operator=(http_client_impl &&) = delete;
 
-        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, std::chrono::milliseconds timeout = 5s) {
+        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string_view url, std::chrono::milliseconds timeout = 5s) {
             return {
-                    .url = url.c_str(),
+                    .url = url.data(),
                     .host = nullptr,
                     .port = 0,
                     .username = nullptr,
@@ -77,7 +77,7 @@ namespace ka {
                     .if_name = nullptr};
         }
 
-        explicit http_client_impl(std::string const &url, std::chrono::milliseconds timeout = 5s) : http_client_impl() {
+        explicit http_client_impl(std::string_view url, std::chrono::milliseconds timeout = 5s) : http_client_impl() {
             esp_http_client_config_t cfg = get_default_config(url, timeout);
             cfg.event_handler = &_http_event_handler;
             cfg.user_data = this;
@@ -140,7 +140,7 @@ namespace ka {
         return ESP_OK;
     }
 
-    http_client::http_client(const std::string &url, std::chrono::milliseconds timeout)
+    http_client::http_client(std::string_view url, std::chrono::milliseconds timeout)
         : _pimpl{new http_client_impl(url, timeout), &http_client_deleter} {}
 
 
@@ -152,12 +152,12 @@ namespace ka {
         return _pimpl->get();
     }
 
-    std::pair<http_status, mlab::bin_data> http_client::get(std::string const &url, std::chrono::milliseconds timeout) {
+    std::pair<http_status, mlab::bin_data> http_client::get(std::string_view url, std::chrono::milliseconds timeout) {
         http_client c{url, timeout};
         return c.get();
     }
 
-    esp_http_client_config_t http_client::get_default_config(std::string const &url, std::chrono::milliseconds timeout) {
+    esp_http_client_config_t http_client::get_default_config(std::string_view url, std::chrono::milliseconds timeout) {
         return http_client_impl::get_default_config(url, timeout);
     }
 

@@ -26,13 +26,13 @@ namespace ka {
         std::unique_ptr<http_client_impl, void (*)(http_client_impl *)> _pimpl;
 
     public:
-        explicit http_client(std::string const &url, std::chrono::milliseconds timeout = 5s);
+        explicit http_client(std::string_view url, std::chrono::milliseconds timeout = 5s);
 
         [[nodiscard]] std::pair<http_status, mlab::bin_data> get();
 
-        [[nodiscard]] static std::pair<http_status, mlab::bin_data> get(std::string const &url, std::chrono::milliseconds timeout = 5s);
+        [[nodiscard]] static std::pair<http_status, mlab::bin_data> get(std::string_view url, std::chrono::milliseconds timeout = 5s);
 
-        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string const &url, std::chrono::milliseconds timeout = 5s);
+        [[nodiscard]] static esp_http_client_config_t get_default_config(std::string_view url, std::chrono::milliseconds timeout = 5s);
     };
 }// namespace ka
 
