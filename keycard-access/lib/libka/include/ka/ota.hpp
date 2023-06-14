@@ -19,6 +19,22 @@ namespace ka {
     }
     class wifi;
 
+    struct release_info {
+        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
+        std::string firmware_url{};
+
+        /**
+         * Gets the list of releases from a custom channel with the given binary prefix.
+         * @note Assumes that the network is accessible.
+         */
+        [[nodiscard]] static std::optional<std::vector<release_info>> from_update_channel(std::string_view update_channel, std::string_view fw_bin_prefix);
+
+        /**
+         * Converts the JSON list of releases into a list of @ref firmware_release for the given binary prefix.
+         */
+        [[nodiscard]] static std::vector<release_info> from_update_channel(const nlohmann::json &releases_json, std::string_view fw_bin_prefix);
+    };
+
     class ota_watch {
         TaskHandle_t _t = nullptr;
         std::chrono::minutes _refresh_interval;
@@ -41,10 +57,11 @@ namespace ka {
         inline void set_update_channel(std::string_view update_channel);
 
         /**
-         * Main entry point for update checking. Will download the next releases and trigger the update if needed.
+         * Main entry point for update checking.
+         * Will return the next release.
          */
-        void check_now();
-        void check_now(std::string_view update_channel);
+        [[nodiscard]] std::optional<release_info> check_now() const;
+        [[nodiscard]] std::optional<release_info> check_now(std::string_view update_channel) const;
 
         /**
          * Triggers update from a specific url.
@@ -93,22 +110,6 @@ namespace ka {
         static void running_fw_rollback();
 
         [[nodiscard]] std::string to_string() const;
-    };
-
-    struct release_info {
-        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
-        std::string firmware_url{};
-
-        /**
-         * Gets the list of releases from a custom channel with the given binary prefix.
-         * @note Assumes that the network is accessible.
-         */
-        [[nodiscard]] static std::optional<std::vector<release_info>> from_update_channel(std::string_view update_channel, std::string_view fw_bin_prefix);
-
-        /**
-         * Converts the JSON list of releases into a list of @ref firmware_release for the given binary prefix.
-         */
-        [[nodiscard]] static std::vector<release_info> from_update_channel(const nlohmann::json &releases_json, std::string_view fw_bin_prefix);
     };
 
     namespace utils {

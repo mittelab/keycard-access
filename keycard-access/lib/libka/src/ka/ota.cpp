@@ -280,11 +280,11 @@ namespace ka {
         }
     }
 
-    void ota_watch::check_now() {
-        check_now(update_channel());
+    std::optional<release_info> ota_watch::check_now() const {
+        return check_now(update_channel());
     }
 
-    void ota_watch::check_now(std::string_view update_channel) {
+    std::optional<release_info> ota_watch::check_now(std::string_view update_channel) const {
         const auto fw_version = fw_info::get_running_fw();
         {
             const auto fw_version_s = fw_version.to_string();
@@ -294,12 +294,12 @@ namespace ka {
         wifi_session session{_wifi};
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
-            return;
+            return std::nullopt;
         }
 
         const auto releases = release_info::from_update_channel(update_channel, fw_version.get_fw_bin_prefix());
         if (not releases) {
-            return;
+            return std::nullopt;
         }
 
         // Would like to use ranges but probably since we also need to take the min, it's best like this
@@ -317,13 +317,13 @@ namespace ka {
 
         if (next_release == nullptr) {
             ESP_LOGI(TAG, "You are up to date.");
-            return;
+            return std::nullopt;
         } else {
             const auto v_s = next_release->semantic_version.to_string();
             ESP_LOGW(TAG, "There is a new version: %s", v_s.c_str());
         }
 
-        update_from(next_release->firmware_url);
+        return *next_release;
     }
 
     void ota_watch::thread_body() {
@@ -331,7 +331,9 @@ namespace ka {
         ESP_LOGI(TAG, "Update watch thread running on core %d", xPortGetCoreID());
         std::this_thread::sleep_for(5s);
         while (_stop.wait_for(lock, _refresh_interval) == std::cv_status::timeout) {
-            check_now();
+            if (const auto release = check_now(); release) {
+                update_from(release->firmware_url);
+            }
         }
     }
 
