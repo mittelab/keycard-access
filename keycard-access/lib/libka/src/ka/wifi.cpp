@@ -15,6 +15,9 @@
 
 namespace ka {
     namespace {
+        /**
+         * @todo Use some shared NVS instance
+         */
         [[nodiscard]] bool initialize_flash() {
             auto r = nvs_flash_init();
             if (r == ESP_ERR_NVS_NO_FREE_PAGES or r == ESP_ERR_NVS_NEW_VERSION_FOUND) {

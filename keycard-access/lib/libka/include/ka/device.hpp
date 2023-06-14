@@ -20,6 +20,12 @@ namespace ka {
         [[nodiscard]] virtual nvs::r<> save_settings(nvs::partition &partition) const;
         [[nodiscard]] virtual nvs::r<> load_settings(nvs::partition const &partition);
     public:
+        /**
+         * @todo Decide how to handle the configuration
+         * @todo Decide how to handle saving settings
+         * @todo Decide how to handle NVS (shared instance?)
+         * @todo Decide how it interacts with keymaker and gate (might not do at all)
+         */
         device();
 
         [[nodiscard]] bool is_configured() const;
