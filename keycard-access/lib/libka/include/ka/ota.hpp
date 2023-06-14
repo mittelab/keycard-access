@@ -7,6 +7,8 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <neargye/semver.hpp>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -51,7 +53,7 @@ namespace ka {
         void update_from(std::string_view url);
 
         void start();
-        [[nodiscard]] bool is_running();
+        [[nodiscard]] inline bool is_running() const;
         void stop();
     };
 
@@ -123,18 +125,22 @@ namespace ka {
 
 namespace ka {
 
-        std::chrono::minutes ota_watch::refresh_interval() const {
-            return _refresh_interval;
-        }
-        void ota_watch::set_refresh_interval(std::chrono::minutes refresh_interval) {
-            _refresh_interval = std::max(1min, refresh_interval);
-        }
-        std::string_view ota_watch::update_channel() const {
-            return _update_channel;
-        }
-        void ota_watch::set_update_channel(std::string_view update_channel) {
-            _update_channel = update_channel;
-        }
+    std::chrono::minutes ota_watch::refresh_interval() const {
+        return _refresh_interval;
+    }
+    void ota_watch::set_refresh_interval(std::chrono::minutes refresh_interval) {
+        _refresh_interval = std::max(1min, refresh_interval);
+    }
+    std::string_view ota_watch::update_channel() const {
+        return _update_channel;
+    }
+    void ota_watch::set_update_channel(std::string_view update_channel) {
+        _update_channel = update_channel;
+    }
 
-}
+    bool ota_watch::is_running() const {
+        return _t != nullptr;
+    }
+
+}// namespace ka
 #endif//KEYCARD_ACCESS_OTA_HPP

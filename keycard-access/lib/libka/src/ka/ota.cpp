@@ -16,6 +16,11 @@ namespace ka {
 
     namespace {
 
+        [[nodiscard]] std::mutex &update_mutex() {
+            static std::mutex _mtx;
+            return _mtx;
+        }
+
         [[nodiscard]] std::string concatenate(std::initializer_list<std::string_view> strs) {
             std::size_t tot_len = 0;
             for (auto const &s : strs) {
@@ -206,8 +211,7 @@ namespace ka {
         : _t{nullptr},
           _refresh_interval{refresh_interval},
           _wifi{std::move(wifi)},
-          _update_channel{update_channel}
-    {}
+          _update_channel{update_channel} {}
 
     void ota_watch::start() {
         if (not is_running()) {
@@ -226,10 +230,6 @@ namespace ka {
         }
     }
 
-    bool ota_watch::is_running() {
-        return _t != nullptr;
-    }
-
     void ota_watch::thread_body_cbk(void *user_data) {
         if (user_data != nullptr) {
             static_cast<ota_watch *>(user_data)->thread_body();
@@ -237,6 +237,11 @@ namespace ka {
     }
 
     void ota_watch::update_from(std::string_view url) {
+        std::unique_lock<std::mutex> lock{update_mutex(), std::try_to_lock};
+        if (not lock.owns_lock()) {
+            ESP_LOGW(TAG, "Another update operation is in progress.");
+            return;
+        }
         auto pwifi = _wifi.lock();
         if (pwifi == nullptr) {
             return;
