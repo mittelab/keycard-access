@@ -54,13 +54,70 @@ namespace ka {
         return nvs::error::fail;
     }
 
-    nvs::r<> device::clear_settings(nvs::partition &partition) const {
-        if (const auto ns = partition.open_namespc("ka-device"); ns != nullptr) {
-            TRY(ns->erase("secret-key"));
-            TRY(ns->erase("update-channel"));
-            TRY(ns->erase("update-enabled"));
-            return mlab::result_success;
-        }
-        return nvs::error::fail;
+    bool device::is_configured() const {
+        return _kp.is_valid();
     }
+
+    bool device::updates_automatically() const {
+        return _ota.is_running();
+    }
+
+    void device::set_update_automatically(bool v) {
+        if (v) {
+            _ota.start();
+        } else {
+            _ota.stop();
+        }
+        // TODO save settings
+    }
+
+    std::string_view device::update_channel() const {
+        return _ota.update_channel();
+    }
+
+    bool device::set_update_channel(std::string_view channel, bool test_before) {
+        if (test_before) {
+            if (not _ota.test_update_channel(channel)) {
+                return false;
+            }
+        }
+        _ota.set_update_channel(channel);
+        return true;
+    }
+
+    std::optional<release_info> device::check_for_updates() const {
+        return _ota.check_now();
+    }
+
+    fw_info device::get_firmware_info() const {
+        return fw_info::get_running_fw();
+    }
+
+    void device::update_firmware() {
+        if (const auto ri = _ota.check_now(); ri) {
+            _ota.update_from(ri->firmware_url);
+        }
+    }
+
+    void device::update_firmware(std::string_view fw_url) {
+        _ota.update_from(fw_url);
+    }
+
+    bool device::is_wifi_configured() const {
+        return get_wifi_ssid() != std::nullopt;
+    }
+
+    std::optional<std::string> device::get_wifi_ssid() const {
+        return _wf->get_ssid();
+    }
+
+    bool device::test_wifi() {
+        return _wf->ensure_connected();
+    }
+
+    bool device::connect_wifi(std::string_view ssid, std::string_view password) {
+        _wf->reconfigure(ssid, password);
+        return _wf->ensure_connected();
+    }
+
 }// namespace ka
