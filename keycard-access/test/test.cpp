@@ -5,6 +5,7 @@
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/key_pair.hpp>
+#include <ka/keymaker.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
 #include <ka/p2p_ops.hpp>
