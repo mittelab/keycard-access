@@ -202,7 +202,12 @@ namespace ka {
         return retval;
     }
 
-    ota_watch::ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval) : _t{nullptr}, _refresh_interval{refresh_interval}, _wifi{std::move(wifi)} {}
+    ota_watch::ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval, std::string_view update_channel)
+        : _t{nullptr},
+          _refresh_interval{refresh_interval},
+          _wifi{std::move(wifi)},
+          _update_channel{update_channel}
+    {}
 
     void ota_watch::start() {
         if (not is_running()) {
@@ -260,6 +265,10 @@ namespace ka {
         } else {
             ESP_LOGE(TAG, "Update failed.");
         }
+    }
+
+    void ota_watch::check_now() {
+        check_now(update_channel());
     }
 
     void ota_watch::check_now(std::string_view update_channel) {

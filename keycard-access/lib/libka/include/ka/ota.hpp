@@ -12,6 +12,9 @@
 #include <thread>
 
 namespace ka {
+    namespace {
+        using namespace std::chrono_literals;
+    }
     class wifi;
 
     class ota_watch {
@@ -20,6 +23,7 @@ namespace ka {
         std::condition_variable _stop;
         std::mutex _stop_mutex;
         std::weak_ptr<wifi> _wifi;
+        std::string _update_channel;
 
         static void thread_body_cbk(void *user_data);
         void thread_body();
@@ -27,12 +31,18 @@ namespace ka {
     public:
         static constexpr auto default_update_channel = "https://git.mittelab.org/api/v4/projects/31/releases";
 
-        ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval);
+        explicit ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval = 1h, std::string_view update_channel = default_update_channel);
+
+        [[nodiscard]] inline std::chrono::minutes refresh_interval() const;
+        inline void set_refresh_interval(std::chrono::minutes refresh_interval);
+        [[nodiscard]] inline std::string_view update_channel() const;
+        inline void set_update_channel(std::string_view update_channel);
 
         /**
          * Main entry point for update checking. Will download the next releases and trigger the update if needed.
          */
-        void check_now(std::string_view update_channel = default_update_channel);
+        void check_now();
+        void check_now(std::string_view update_channel);
 
         /**
          * Triggers update from a specific url.
@@ -110,4 +120,21 @@ namespace ka {
     }// namespace utils
 
 }// namespace ka
+
+namespace ka {
+
+        std::chrono::minutes ota_watch::refresh_interval() const {
+            return _refresh_interval;
+        }
+        void ota_watch::set_refresh_interval(std::chrono::minutes refresh_interval) {
+            _refresh_interval = std::max(1min, refresh_interval);
+        }
+        std::string_view ota_watch::update_channel() const {
+            return _update_channel;
+        }
+        void ota_watch::set_update_channel(std::string_view update_channel) {
+            _update_channel = update_channel;
+        }
+
+}
 #endif//KEYCARD_ACCESS_OTA_HPP
