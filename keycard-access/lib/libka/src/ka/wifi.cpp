@@ -225,7 +225,7 @@ namespace ka {
 
         void disconnect();
 
-        void configure(std::string const &ssid, std::string const &pass);
+        void configure(std::string_view ssid, std::string_view pass);
 
         [[nodiscard]] wifi_status status() const;
 
@@ -303,7 +303,7 @@ namespace ka {
         }
     }
 
-    void wifi::wifi_impl::configure(std::string const &ssid, std::string const &pass) {
+    void wifi::wifi_impl::configure(std::string_view ssid, std::string_view pass) {
         if (not ensure_wifi_initialized()) {
             return;
         }
@@ -438,7 +438,7 @@ namespace ka {
         reconfigure(ssid, pass, auto_connect);
     }
 
-    void wifi::reconfigure(std::string const &ssid, std::string const &pass, bool auto_connect) {
+    void wifi::reconfigure(std::string_view ssid, std::string_view pass, bool auto_connect) {
         if (const auto s = status(); s != wifi_status::idle and s != wifi_status::failure) {
             disconnect();
             await_status_change(s, 20ms);

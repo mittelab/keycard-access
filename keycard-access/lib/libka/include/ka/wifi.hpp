@@ -39,7 +39,7 @@ namespace ka {
 
         wifi(std::string const &ssid, std::string const &pass, bool auto_connect = true);
 
-        void reconfigure(std::string const &ssid, std::string const &pass, bool auto_connect = true);
+        void reconfigure(std::string_view ssid, std::string_view pass, bool auto_connect = true);
 
         void connect();
 
