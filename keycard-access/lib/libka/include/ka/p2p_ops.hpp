@@ -5,6 +5,8 @@
 #ifndef KEYCARD_ACCESS_P2P_OPS_HPP
 #define KEYCARD_ACCESS_P2P_OPS_HPP
 
+#include <ka/key_pair.hpp>
+#include <ka/gate.hpp>
 #include <pn532/p2p.hpp>
 
 namespace ka {
