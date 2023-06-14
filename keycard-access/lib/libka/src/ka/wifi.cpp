@@ -239,6 +239,8 @@ namespace ka {
 
         [[nodiscard]] bool await_connection_attempt(std::chrono::milliseconds timeout);
 
+        [[nodiscard]] std::optional<std::string> get_ssid() const;
+
         ~wifi_impl();
     };
 
@@ -503,8 +505,7 @@ namespace ka {
     wifi_session::wifi_session(std::shared_ptr<wifi> wf, std::chrono::milliseconds timeout, wifi_session_usage usage)
         : _wf{std::move(wf)},
           _disconnect_when_done{false},
-          _orig_ps_mode{WIFI_PS_MIN_MODEM}
-    {
+          _orig_ps_mode{WIFI_PS_MIN_MODEM} {
         if (_wf) {
             if (usage == wifi_session_usage::as_found) {
                 _disconnect_when_done = not wifi_status_is_on(_wf->status());
@@ -521,7 +522,26 @@ namespace ka {
     }
 
     wifi_session::operator bool() const {
-        return _wf and  _wf->status() == wifi_status::ready;
+        return _wf and _wf->status() == wifi_status::ready;
+    }
+
+    std::optional<std::string> wifi::get_ssid() const {
+        return _pimpl->get_ssid();
+    }
+
+    std::optional<std::string> wifi::wifi_impl::get_ssid() const {
+        wifi_config_t cfg{};
+        if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK) {
+            auto begin = reinterpret_cast<char const *>(cfg.sta.ssid);
+            static_assert(std::is_same_v<decltype(wifi_sta_config_t::ssid), std::uint8_t[32]>);
+            auto end = begin + sizeof(cfg.sta.ssid);
+            std::string retval{begin, end};
+            retval.shrink_to_fit();
+            if (not retval.empty()) {
+                return retval;
+            }
+        }
+        return std::nullopt;
     }
 
     wifi_session::~wifi_session() {

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <esp_wifi_types.h>
+#include <optional>
 
 namespace ka {
     namespace {
@@ -55,6 +56,8 @@ namespace ka {
         [[nodiscard]] unsigned attempts() const;
 
         [[nodiscard]] unsigned max_attempts() const;
+
+        [[nodiscard]] std::optional<std::string> get_ssid() const;
 
         void set_max_attempts(unsigned n);
     };
