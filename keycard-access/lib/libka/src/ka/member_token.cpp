@@ -7,8 +7,8 @@
 #include <desfire/kdf.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
+#include <ka/keymaker.hpp>
 #include <ka/member_token.hpp>
-#include <ka/p2p_ops.hpp>
 
 namespace ka {
     using namespace mlab_literals;

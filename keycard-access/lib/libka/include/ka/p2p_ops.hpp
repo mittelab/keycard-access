@@ -5,31 +5,14 @@
 #ifndef KEYCARD_ACCESS_P2P_OPS_HPP
 #define KEYCARD_ACCESS_P2P_OPS_HPP
 
-#include <ka/key_pair.hpp>
 #include <ka/gate.hpp>
+#include <ka/key_pair.hpp>
 #include <pn532/p2p.hpp>
 
 namespace ka {
     class gate;
     class secure_target;
     class secure_initiator;
-
-    class keymaker {
-    public:
-        key_pair _kp{randomize};
-        std::vector<gate_config> _gates;
-
-        [[nodiscard]] key_pair const &keys() const { return _kp; }
-        [[nodiscard]] gate_id allocate_gate_id() { return gate_id{_gates.size()}; }
-        void register_gate(gate_config cfg) {
-            if (cfg.id == _gates.size()) {
-                _gates.emplace_back(cfg);
-            } else {
-                ESP_LOGE("KA", "Invalid gate.");
-            }
-        }
-    };
-
 }// namespace ka
 namespace ka::p2p {
 

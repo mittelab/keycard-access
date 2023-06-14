@@ -5,6 +5,7 @@
 #include <desfire/esp32/utils.hpp>
 #include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
+#include <ka/keymaker.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
 #include <mlab/strutils.hpp>

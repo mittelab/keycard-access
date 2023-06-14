@@ -4,11 +4,12 @@
 
 #include "keymaker_main.hpp"
 
+#include <desfire/fs.hpp>
+#include <desfire/tag_responder.hpp>
+#include <ka/keymaker.hpp>
 #include <ka/member_token.hpp>
 #include <ka/p2p_ops.hpp>
-#include <desfire/tag_responder.hpp>
 #include <mlab/strutils.hpp>
-#include <desfire/fs.hpp>
 
 #define LOG_PFX "KA-KM"
 
