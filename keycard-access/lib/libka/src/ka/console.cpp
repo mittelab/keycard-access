@@ -6,8 +6,8 @@
 #include <esp_console.h>
 #include <esp_log.h>
 #include <esp_vfs_dev.h>
-#include <linenoise/linenoise.h>
 #include <ka/console.hpp>
+#include <linenoise/linenoise.h>
 
 namespace ka {
 
@@ -41,6 +41,8 @@ namespace ka {
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+            .rx_flow_ctrl_thresh = 0,
 #if SOC_UART_SUPPORT_REF_TICK
             .source_clk = UART_SCLK_REF_TICK,
 #elif SOC_UART_SUPPORT_XTAL_CLK
@@ -61,7 +63,8 @@ namespace ka {
             .max_cmdline_length = 256,
             .max_cmdline_args = 8,
 #if CONFIG_LOG_COLORS
-            .hint_color = 36 /* cyan */
+            .hint_color = 36 /* cyan */,
+            .hint_bold = 0
 #endif
         };
         ESP_ERROR_CHECK(esp_console_init(&console_config));
