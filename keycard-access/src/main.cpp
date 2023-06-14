@@ -1,21 +1,24 @@
-#include <desfire/esp32/utils.hpp>
-#include <esp_log.h>
-#include <chrono>
-#include <thread>
-#include <memory>
-#include <ka/config.hpp>
-#include <pn532/esp32/hsu.hpp>
-#include <pn532/controller.hpp>
-#include <pn532/scanner.hpp>
-#include <ka/ota.hpp>
-#include <ka/wifi.hpp>
+#include "formatter_main.hpp"
 #include "gate_main.hpp"
 #include "keymaker_main.hpp"
-#include "formatter_main.hpp"
+#include <chrono>
+#include <desfire/esp32/utils.hpp>
+#include <esp_console.h>
+#include <esp_log.h>
+#include <esp_vfs_dev.h>
+#include <ka/config.hpp>
+#include <ka/console.hpp>
+#include <ka/ota.hpp>
+#include <ka/wifi.hpp>
+#include <linenoise/linenoise.h>
+#include <memory>
+#include <pn532/controller.hpp>
+#include <pn532/esp32/hsu.hpp>
+#include <pn532/scanner.hpp>
+#include <thread>
 
 // Override the log prefix
 #define LOG_PFX "KA"
-
 
 using namespace std::chrono_literals;
 
@@ -63,38 +66,29 @@ extern "C" void app_main() {
     ka::ota_watch ota{wf, 1h};
     ota.start();
 
+    ka::console console;
+
     // Enter main.
-    int choice = 0;
-    while (choice == 0) {
+    while (true) {
         std::printf("Select operation mode of the demo:\n");
         std::printf("\t1. Gate\n");
         std::printf("\t2. Keymaker\n");
         std::printf("\t3. FormatMcFormatface\n");
-        std::printf("> ");
-        while (std::scanf("%d", &choice) != 1) {
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-        if (choice < 1 or choice > 3) {
-            std::printf("Insert '1' or '2' or '3'.");
-            choice = 0;
-        }
-    }
-    std::printf("\n");
-    switch (choice) {
-        case 1:
+        const auto choice = console.read_line();
+        if (choice == "1" or choice == "gate") {
             std::printf("Acting as gate.\n");
             ka::gate_main(controller, scanner);
-            break;
-        case 2:
+        } else if (choice == "2" or choice == "keymaker") {
             std::printf("Acting as keymaker.\n");
             ka::keymaker_main(scanner);
-            break;
-        case 3:
+        } else if (choice == "3" or choice == "format") {
             std::printf("Enter... Format McFormatface\n");
             ka::format_mcformatface_main(scanner);
-            break;
-        default:
-            break;
+        } else {
+            std::printf("Please insert 1, 2 or 3.\n");
+            continue;
+        }
+        break;
     }
     vTaskSuspend(nullptr);
 }
