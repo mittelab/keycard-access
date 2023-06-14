@@ -24,7 +24,7 @@ namespace ka {
 
     [[nodiscard]] constexpr bool wifi_status_is_on(wifi_status ws);
 
-    class wifi {
+    class wifi : public std::enable_shared_from_this<wifi> {
         class wifi_impl;
         static void wifi_impl_deleter(wifi_impl *wi);
 
@@ -59,15 +59,21 @@ namespace ka {
         void set_max_attempts(unsigned n);
     };
 
+    enum wifi_session_usage {
+        as_found,
+        leave_on,
+        disconnect
+    };
+
     class wifi_session {
-        wifi *_wf = nullptr;
+        std::shared_ptr<wifi> _wf = nullptr;
         bool _disconnect_when_done = true;
         wifi_ps_type_t _orig_ps_mode = WIFI_PS_MIN_MODEM;
 
     public:
         wifi_session() = default;
-        explicit wifi_session(wifi &wf, std::chrono::milliseconds timeout = 30s);
-        wifi_session(wifi &wf, bool disconnect_when_done, std::chrono::milliseconds timeout = 30s);
+        explicit wifi_session(wifi &wf, std::chrono::milliseconds timeout = 30s, wifi_session_usage usage = wifi_session_usage::as_found);
+        explicit wifi_session(std::shared_ptr<wifi> wf, std::chrono::milliseconds timeout = 30s, wifi_session_usage usage = wifi_session_usage::as_found);
 
         wifi_session(wifi_session const &) = delete;
         wifi_session &operator=(wifi_session const &) = delete;
@@ -78,10 +84,7 @@ namespace ka {
         /**
          * True if connected.
          */
-        inline explicit operator bool() const;
-
-        [[nodiscard]] inline bool disconnect_when_done() const;
-        inline void set_disconnect_when_done(bool v);
+        explicit operator bool() const;
 
         ~wifi_session();
     };
@@ -98,17 +101,6 @@ namespace ka {
             default:
                 return true;
         }
-    }
-    wifi_session::operator bool() const {
-        return _wf != nullptr and _wf->status() == wifi_status::ready;
-    }
-
-    bool wifi_session::disconnect_when_done() const {
-        return _disconnect_when_done;
-    }
-
-    void wifi_session::set_disconnect_when_done(bool v) {
-        _disconnect_when_done = v;
     }
 }// namespace ka
 

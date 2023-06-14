@@ -497,19 +497,41 @@ namespace ka {
         _pimpl->set_max_attempts(n);
     }
 
-    wifi_session::wifi_session(wifi &wf, bool disconnect_when_done, std::chrono::milliseconds timeout) : _wf{&wf}, _disconnect_when_done{disconnect_when_done} {
-        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_get_ps(&_orig_ps_mode));
-        if (_wf->ensure_connected(timeout)) {
-            esp_wifi_set_ps(WIFI_PS_NONE);
+    wifi_session::wifi_session(wifi &wf, std::chrono::milliseconds timeout, wifi_session_usage usage)
+        : wifi_session{wf.shared_from_this(), timeout, usage} {}
+
+    wifi_session::wifi_session(std::shared_ptr<wifi> wf, std::chrono::milliseconds timeout, wifi_session_usage usage)
+        : _wf{std::move(wf)},
+          _disconnect_when_done{false},
+          _orig_ps_mode{WIFI_PS_MIN_MODEM}
+    {
+        if (_wf) {
+            if (usage == wifi_session_usage::as_found) {
+                _disconnect_when_done = not wifi_status_is_on(_wf->status());
+            } else if (usage == wifi_session_usage::disconnect) {
+                _disconnect_when_done = true;
+            }
+            if (_wf->ensure_connected(timeout)) {
+                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_get_ps(&_orig_ps_mode));
+                if (_orig_ps_mode != WIFI_PS_NONE) {
+                    esp_wifi_set_ps(WIFI_PS_NONE);
+                }
+            }
         }
     }
 
-    wifi_session::wifi_session(ka::wifi &wf, std::chrono::milliseconds timeout) : wifi_session{wf, not wifi_status_is_on(wf.status()), timeout} {}
+    wifi_session::operator bool() const {
+        return _wf and  _wf->status() == wifi_status::ready;
+    }
 
     wifi_session::~wifi_session() {
-        if (_wf != nullptr) {
-            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_ps(_orig_ps_mode));
-            if (disconnect_when_done()) {
+        if (_wf) {
+            wifi_ps_type_t current_ps = WIFI_PS_NONE;
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_get_ps(&_orig_ps_mode));
+            if (current_ps != _orig_ps_mode) {
+                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_ps(_orig_ps_mode));
+            }
+            if (_disconnect_when_done) {
                 _wf->disconnect();
             }
         }

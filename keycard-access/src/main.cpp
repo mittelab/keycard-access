@@ -5,12 +5,10 @@
 #include <desfire/esp32/utils.hpp>
 #include <esp_console.h>
 #include <esp_log.h>
-#include <esp_vfs_dev.h>
 #include <ka/config.hpp>
 #include <ka/console.hpp>
 #include <ka/ota.hpp>
 #include <ka/wifi.hpp>
-#include <linenoise/linenoise.h>
 #include <memory>
 #include <pn532/controller.hpp>
 #include <pn532/esp32/hsu.hpp>

@@ -207,7 +207,7 @@ namespace ka {
         return retval;
     }
 
-    ota_watch::ota_watch(std::weak_ptr<wifi> wifi, std::chrono::minutes refresh_interval, std::string_view update_channel)
+    ota_watch::ota_watch(std::shared_ptr<wifi> wifi, std::chrono::minutes refresh_interval, std::string_view update_channel)
         : _t{nullptr},
           _refresh_interval{refresh_interval},
           _wifi{std::move(wifi)},
@@ -236,18 +236,26 @@ namespace ka {
         }
     }
 
+
+    bool ota_watch::test_update_channel(std::string_view update_channel) const {
+        wifi_session session{_wifi};
+        if (not session) {
+            ESP_LOGW(TAG, "Unable to activate wifi.");
+            return false;
+        }
+        const auto fw_version = fw_info::get_running_fw();
+        const auto releases = release_info::from_update_channel(update_channel, fw_version.get_fw_bin_prefix());
+        return releases != std::nullopt;
+    }
+
     void ota_watch::update_from(std::string_view url) {
         std::unique_lock<std::mutex> lock{update_mutex(), std::try_to_lock};
         if (not lock.owns_lock()) {
             ESP_LOGW(TAG, "Another update operation is in progress.");
             return;
         }
-        auto pwifi = _wifi.lock();
-        if (pwifi == nullptr) {
-            return;
-        }
 
-        wifi_session session{*pwifi};
+        wifi_session session{_wifi};
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
@@ -277,18 +285,13 @@ namespace ka {
     }
 
     void ota_watch::check_now(std::string_view update_channel) {
-        auto pwifi = _wifi.lock();
-        if (pwifi == nullptr) {
-            return;
-        }
-
         const auto fw_version = fw_info::get_running_fw();
         {
             const auto fw_version_s = fw_version.to_string();
             ESP_LOGI(TAG, "Checking for updates on firwmare %s...", fw_version_s.c_str());
         }
 
-        wifi_session session{*pwifi};
+        wifi_session session{_wifi};
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
