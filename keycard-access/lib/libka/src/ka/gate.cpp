@@ -142,7 +142,7 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
         ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-        nvs::nvs nvs{};
+        auto &nvs = nvs::nvs::instance();
         if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
         } else {
@@ -153,7 +153,7 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
         ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-        nvs::nvs nvs{};
+        auto &nvs = nvs::nvs::instance();
         if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
             return false;
@@ -165,7 +165,7 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
         ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-        nvs::nvs nvs{};
+        auto &nvs = nvs::nvs::instance();
         if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
         } else {
@@ -177,7 +177,7 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
         ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-        nvs::nvs nvs{};
+        auto &nvs = nvs::nvs::instance();
         if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
             ESP_LOGE("KA", "NVS partition is not available.");
             return gate{};

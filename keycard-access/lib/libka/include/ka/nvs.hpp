@@ -39,13 +39,16 @@ namespace ka::nvs {
     class nvs {
         std::map<std::string, std::weak_ptr<partition>> _open_partitions;
 
-    public:
         nvs();
+
+    public:
         nvs(nvs const &) = delete;
         nvs(nvs &&) = delete;
         nvs &operator=(nvs const &) = delete;
         nvs &operator=(nvs &&) = delete;
         ~nvs();
+
+        [[nodiscard]] static nvs &instance();
 
         [[nodiscard]] std::shared_ptr<partition> open_partition(const char *label, bool secure);
     };
@@ -55,8 +58,10 @@ namespace ka::nvs {
         mutable std::map<std::string, std::weak_ptr<const_namespc>> _open_cns;
         std::map<std::string, std::weak_ptr<namespc>> _open_ns;
 
-    public:
+        friend std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure);
+
         explicit partition(esp_partition_t const &part, bool secure);
+    public:
         ~partition();
 
         partition(partition const &) = delete;

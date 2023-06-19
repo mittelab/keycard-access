@@ -25,6 +25,12 @@ namespace ka::nvs {
         ESP_ERROR_CHECK(nvs_flash_deinit());
     }
 
+
+    nvs &nvs::instance() {
+        static nvs _instance{};
+        return _instance;
+    }
+
     std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure) {
         auto &part_wptr = _open_partitions[std::string(label)];
         if (part_wptr.expired()) {
@@ -32,7 +38,7 @@ namespace ka::nvs {
             esp_partition_t const *part = esp_partition_find_first(
                     ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, label);
             if (part != nullptr) {
-                auto part_sptr = std::make_shared<partition>(*part, secure);
+                auto part_sptr = std::shared_ptr<partition>{new partition{*part, secure}};
                 part_wptr = part_sptr;
                 return part_sptr;
             } else {
@@ -253,8 +259,7 @@ namespace ka::nvs {
             // Attempt at finding the namespace
             nvs_handle_t hdl{};
             if (const auto e = nvs_open_from_partition(_part->label, nsname, NVS_READWRITE, &hdl); e == ESP_OK) {
-                auto ns_sptr = std::make_shared<namespc>();
-                *ns_sptr = namespc{shared_from_this(), hdl};
+                auto ns_sptr = std::shared_ptr<namespc>{new namespc{shared_from_this(), hdl}};
                 ns_wptr = ns_sptr;
                 return ns_sptr;
             } else {
@@ -279,8 +284,7 @@ namespace ka::nvs {
             // Attempt at finding the namespace
             nvs_handle_t hdl{};
             if (const auto e = nvs_open_from_partition(_part->label, nsname, NVS_READONLY, &hdl); e == ESP_OK) {
-                auto ns_sptr = std::make_shared<const_namespc>();
-                *ns_sptr = const_namespc{shared_from_this(), hdl};
+                auto ns_sptr = std::shared_ptr<const_namespc>{new const_namespc{shared_from_this(), hdl}};
                 ns_wptr = ns_sptr;
                 return ns_sptr;
             } else {
