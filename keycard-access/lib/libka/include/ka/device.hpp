@@ -13,7 +13,6 @@
 namespace ka {
     class device {
         key_pair _kp;
-        std::shared_ptr<wifi> _wf;
         ota_watch _ota;
 
     protected:

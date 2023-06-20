@@ -15,7 +15,7 @@
 #define TRY_RESULT(EXPR) TRY(EXPR) else
 
 namespace ka {
-    device::device() : _kp{}, _wf{std::make_shared<ka::wifi>()}, _ota{_wf} {
+    device::device() : _kp{}, _ota{} {
         _ota.start();
     }
 
@@ -108,16 +108,19 @@ namespace ka {
     }
 
     std::optional<std::string> device::get_wifi_ssid() const {
-        return _wf->get_ssid();
+        auto &wf = wifi::instance();
+        return wf.get_ssid();
     }
 
     bool device::test_wifi() {
-        return _wf->ensure_connected();
+        auto &wf = wifi::instance();
+        return wf.ensure_connected();
     }
 
     bool device::connect_wifi(std::string_view ssid, std::string_view password) {
-        _wf->reconfigure(ssid, password);
-        return _wf->ensure_connected();
+        auto &wf = wifi::instance();
+        wf.reconfigure(ssid, password);
+        return wf.ensure_connected();
     }
 
 }// namespace ka
