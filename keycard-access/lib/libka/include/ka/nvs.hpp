@@ -10,6 +10,7 @@
 #include <memory>
 #include <mlab/bin_data.hpp>
 #include <mlab/result.hpp>
+#include <mutex>
 #include <nvs_flash.h>
 
 namespace ka::nvs {
@@ -36,8 +37,12 @@ namespace ka::nvs {
 
     [[nodiscard]] error from_esp_error(esp_err_t esp_err);
 
+    /**
+     * @note Opening a partition is thread-safe.
+     */
     class nvs {
         std::map<std::string, std::weak_ptr<partition>> _open_partitions;
+        std::mutex _partitions_mutex;
 
         nvs();
 
@@ -53,14 +58,20 @@ namespace ka::nvs {
         [[nodiscard]] std::shared_ptr<partition> open_partition(const char *label, bool secure);
     };
 
+    /**
+     * @note Opening a namespace is thread-safe.
+     */
     class partition : public std::enable_shared_from_this<partition> {
         esp_partition_t const *_part;
         mutable std::map<std::string, std::weak_ptr<const_namespc>> _open_cns;
         std::map<std::string, std::weak_ptr<namespc>> _open_ns;
+        std::mutex _ns_mutex;
+        mutable std::mutex _cns_mutex;
 
         friend std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure);
 
         explicit partition(esp_partition_t const &part, bool secure);
+
     public:
         ~partition();
 
@@ -122,6 +133,10 @@ namespace ka::nvs {
         ~const_namespc();
     };
 
+    /**
+     * @note This class is not necessarily thread-safe: it will call
+     *  ESP's nvs_set_* functions without locking.
+     */
     class namespc : public const_namespc {
         template <class T>
         using nvs_setter_t = esp_err_t (*)(nvs_handle_t, const char *, T);

@@ -32,6 +32,7 @@ namespace ka::nvs {
     }
 
     std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure) {
+        std::unique_lock<std::mutex> lock{_partitions_mutex};
         auto &part_wptr = _open_partitions[std::string(label)];
         if (part_wptr.expired()) {
             // Attempt at finding the partition
@@ -254,6 +255,7 @@ namespace ka::nvs {
     }
 
     std::shared_ptr<namespc> partition::open_namespc(const char *nsname) {
+        std::unique_lock<std::mutex> lock{_ns_mutex};
         auto &ns_wptr = _open_ns[std::string(nsname)];
         if (ns_wptr.expired()) {
             // Attempt at finding the namespace
@@ -273,6 +275,7 @@ namespace ka::nvs {
 
 
     std::shared_ptr<const_namespc> partition::open_const_namespc(const char *nsname) const {
+        std::unique_lock<std::mutex> lock{_cns_mutex};
         auto &ns_wptr = _open_cns[std::string(nsname)];
         if (ns_wptr.expired()) {
             // Do we have it in read-write?
