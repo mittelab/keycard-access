@@ -29,7 +29,7 @@ extern "C" void app_main() {
     std::this_thread::sleep_for(2s);
 
     // Create WiFi
-    std::shared_ptr<ka::wifi> wf = std::make_shared<ka::wifi>();
+    auto &wf = ka::wifi::instance();
 
     // Create pn532, scanner and controller
     pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
@@ -61,7 +61,7 @@ extern "C" void app_main() {
     }
 
     // Now we are ready to set up the automated updates.
-    ka::ota_watch ota{wf, 1h};
+    ka::ota_watch ota{1h};
     ota.start();
 
     ka::console console;

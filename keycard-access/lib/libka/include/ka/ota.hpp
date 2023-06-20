@@ -40,7 +40,6 @@ namespace ka {
         std::chrono::minutes _refresh_interval;
         std::condition_variable _stop;
         std::mutex _stop_mutex;
-        std::shared_ptr<wifi> _wifi;
         std::string _update_channel;
 
         static void thread_body_cbk(void *user_data);
@@ -49,7 +48,7 @@ namespace ka {
     public:
         static constexpr auto default_update_channel = "https://git.mittelab.org/api/v4/projects/31/releases";
 
-        explicit ota_watch(std::shared_ptr<wifi> wifi, std::chrono::minutes refresh_interval = 1h, std::string_view update_channel = default_update_channel);
+        explicit ota_watch(std::chrono::minutes refresh_interval = 1h, std::string_view update_channel = default_update_channel);
 
         [[nodiscard]] inline std::chrono::minutes refresh_interval() const;
         inline void set_refresh_interval(std::chrono::minutes refresh_interval);

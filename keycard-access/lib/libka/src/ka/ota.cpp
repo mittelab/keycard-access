@@ -207,10 +207,9 @@ namespace ka {
         return retval;
     }
 
-    ota_watch::ota_watch(std::shared_ptr<wifi> wifi, std::chrono::minutes refresh_interval, std::string_view update_channel)
+    ota_watch::ota_watch(std::chrono::minutes refresh_interval, std::string_view update_channel)
         : _t{nullptr},
           _refresh_interval{refresh_interval},
-          _wifi{std::move(wifi)},
           _update_channel{update_channel} {}
 
     void ota_watch::start() {
@@ -238,7 +237,7 @@ namespace ka {
 
 
     bool ota_watch::test_update_channel(std::string_view update_channel) const {
-        wifi_session session{_wifi};
+        wifi_session session;
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return false;
@@ -255,7 +254,7 @@ namespace ka {
             return;
         }
 
-        wifi_session session{_wifi};
+        wifi_session session;
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return;
@@ -291,7 +290,7 @@ namespace ka {
             ESP_LOGI(TAG, "Checking for updates on firwmare %s...", fw_version_s.c_str());
         }
 
-        wifi_session session{_wifi};
+        wifi_session session;
         if (not session) {
             ESP_LOGW(TAG, "Unable to activate wifi.");
             return std::nullopt;
