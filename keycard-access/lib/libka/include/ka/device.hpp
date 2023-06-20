@@ -14,20 +14,17 @@ namespace ka {
     class device {
         key_pair _kp;
         ota_watch _ota;
+        std::shared_ptr<nvs::namespc> _device_ns;
 
-    protected:
-        [[nodiscard]] virtual nvs::r<> save_settings(nvs::partition &partition) const;
-        [[nodiscard]] virtual nvs::r<> load_settings(nvs::partition const &partition);
+        void configure();
+
     public:
-        /**
-         * @todo Decide how to handle the configuration
-         * @todo Decide how to handle saving settings
-         * @todo Decide how to handle NVS (shared instance?)
-         * @todo Decide how it interacts with keymaker and gate (might not do at all)
-         */
         device();
 
-        [[nodiscard]] bool is_configured() const;
+        device(device const &) = delete;
+        device(device &&) = delete;
+        device & operator=(device const &) = delete;
+        device & operator=(device &&) = delete;
 
         [[nodiscard]] bool updates_automatically() const;
         void set_update_automatically(bool v);

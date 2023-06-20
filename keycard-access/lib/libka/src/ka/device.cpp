@@ -4,58 +4,45 @@
 
 #include <ka/device.hpp>
 
-#define TRY(EXPR)                                                    \
-    if (const auto r = (EXPR); not r) {                              \
-        ESP_LOGE("KA", "Failed: %s at %s:%d, %s",                    \
-                 esp_err_to_name(static_cast<esp_err_t>(r.error())), \
-                 __FILE__, __LINE__, #EXPR);                         \
-        return r.error();                                            \
-    }
-
-#define TRY_RESULT(EXPR) TRY(EXPR) else
-
 namespace ka {
-    device::device() : _kp{}, _ota{} {
-        _ota.start();
-    }
-
-    nvs::r<> device::save_settings(nvs::partition &partition) const {
-        if (not _kp.is_valid()) {
-            ESP_LOGE("KA", "Will not save settings for a device that was not configured.");
-            return nvs::error::fail;
-        }
-        if (const auto ns = partition.open_namespc("ka-device"); ns != nullptr) {
-            TRY(ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk())));
-            TRY(ns->set_str("update-channel", std::string{_ota.update_channel()}));
-            TRY(ns->set_u8("update-enabled", _ota.is_running() ? 0 : 1));
-            // WiFi saves and restores itself
-            return mlab::result_success;
-        }
-        return nvs::error::fail;
-    }
-
-    nvs::r<> device::load_settings(nvs::partition const &partition) {
-        if (const auto ns = partition.open_const_namespc("ka-device"); ns != nullptr) {
-            TRY_RESULT(ns->get_blob("secret-key")) {
-                _kp = key_pair{sec_key{r->data_view()}};
+    device::device() : _kp{}, _ota{}, _device_ns{} {
+        if (auto part = nvs::instance().open_default_partition(); part) {
+            _device_ns = part->open_namespc("ka-device");
+            if (not _device_ns) {
+                ESP_LOGE("KA", "Unable to open NVS namespace.");
             }
-            TRY_RESULT(ns->get_str("update-channel")) {
+        } else {
+            ESP_LOGE("KA", "Unable to open NVS partition.");
+        }
+        if (_device_ns) {
+            if (const auto r = _device_ns->get_str("update-channel"); r) {
                 _ota.set_update_channel(*r);
             }
-            TRY_RESULT(ns->get_u8("update-enabled")) {
-                if (*r == 0) {
-                    _ota.stop();
-                } else {
-                    _ota.start();
-                }
+            if (const auto r = _device_ns->get_u8("update-enabled"); r and *r != 0) {
+                _ota.start();
             }
-            return mlab::result_success;
+            if (const auto r = _device_ns->get_blob("secret-key"); r) {
+                _kp = key_pair{r->data_view()};
+            } else {
+                configure();
+            }
+        } else {
+            configure();
         }
-        return nvs::error::fail;
     }
 
-    bool device::is_configured() const {
-        return _kp.is_valid();
+    void device::configure() {
+        _kp.generate_random();
+        ESP_LOGI("KA", "Generated random key pair; public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
+        if (_device_ns) {
+            if (_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk()))) {
+                if (_device_ns->commit()) {
+                    return;
+                }
+            }
+        }
+        ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
     }
 
     bool device::updates_automatically() const {
@@ -68,7 +55,10 @@ namespace ka {
         } else {
             _ota.stop();
         }
-        // TODO save settings
+        if (_device_ns) {
+            _device_ns->set_u8("update-enabled", v ? 1 : 0);
+            _device_ns->commit();
+        }
     }
 
     std::string_view device::update_channel() const {
@@ -82,6 +72,10 @@ namespace ka {
             }
         }
         _ota.set_update_channel(channel);
+        if (_device_ns) {
+            _device_ns->set_str("update-channel", std::string{channel});
+            _device_ns->commit();
+        }
         return true;
     }
 
