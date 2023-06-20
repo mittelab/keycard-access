@@ -13,6 +13,10 @@
 #include <mutex>
 #include <nvs_flash.h>
 
+namespace ut {
+    void test_nvs();
+}
+
 namespace ka::nvs {
 
     class nvs;
