@@ -6,83 +6,15 @@
 #include <esp_event_base.h>
 #include <esp_log.h>
 #include <esp_wifi.h>
+#include <ka/nvs.hpp>
 #include <ka/wifi.hpp>
 #include <mlab/time.hpp>
 #include <mutex>
-#include <nvs_flash.h>
 
 #define TAG "KA-WIFI"
 
 namespace ka {
     namespace {
-        /**
-         * @todo Use some shared NVS instance
-         */
-        [[nodiscard]] bool initialize_flash() {
-            auto r = nvs_flash_init();
-            if (r == ESP_ERR_NVS_NO_FREE_PAGES or r == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-                // Erase and retry
-                ESP_LOGW(TAG, "Erasing NVS flash memory, %s.",
-                         r == ESP_ERR_NVS_NO_FREE_PAGES ? "no free pages" : "new version found");
-
-                if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = nvs_flash_erase()); r != ESP_OK) {
-                    return false;
-                }
-
-                // Retry
-                r = nvs_flash_init();
-            }
-            if (r != ESP_OK) {
-                ESP_LOGE(TAG, "Could not initialize flash, error %s", esp_err_to_name(r));
-                return false;
-            }
-            return true;
-        }
-
-        [[nodiscard]] bool initialize_flash_and_wifi() {
-            if (not initialize_flash()) {
-                return false;
-            }
-
-            esp_err_t r = ESP_OK;
-            if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = esp_netif_init()); r != ESP_OK) {
-                return false;
-            }
-
-            if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = esp_event_loop_create_default()); r != ESP_OK) {
-                // Gracefully exit
-                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_deinit());
-                return false;
-            }
-
-            // We cannot catch this gracefully because it aborts...
-            esp_netif_create_default_wifi_sta();
-
-            wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-
-            if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = esp_wifi_init(&cfg)); r != ESP_OK) {
-                // Gracefully exit
-                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_loop_delete_default());
-                ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_deinit());
-                return false;
-            }
-
-            return true;
-        }
-
-        /**
-         * Thread-safe.
-         */
-        [[nodiscard]] bool ensure_wifi_initialized() {
-            static std::mutex _mutex{};
-            static bool did_initialize = false;
-            std::lock_guard<std::mutex> guard{_mutex};
-            if (not did_initialize) {
-                did_initialize = initialize_flash_and_wifi();
-            }
-            return did_initialize;
-        }
-
         [[nodiscard]] constexpr const char *reason_to_string(std::uint8_t reason) {
             switch (reason) {
                 case WIFI_REASON_UNSPECIFIED:
@@ -205,75 +137,32 @@ namespace ka {
         }
     }// namespace
 
-    class wifi::wifi_impl {
-        //// FreeRTOS event group to signal when we are connected
-        esp_event_handler_instance_t _instance_any_id;
-        esp_event_handler_instance_t _instance_got_ip;
-        std::atomic<unsigned> _attempts;
-        std::atomic<unsigned> _max_attempts;
-        std::atomic<wifi_status> _status;
-        std::recursive_mutex _mutex;
-        std::condition_variable _status_change;
-        std::mutex _status_change_mutex;
-        bool _is_started;
-
-        static void _wifi_event_handler_cbk(void *context, esp_event_base_t event_base, std::int32_t event_id, void *event_data);
-
-        void handle_wifi_event(esp_event_base_t event_base, std::int32_t event_id, void *event_data);
-
-    public:
-        wifi_impl();
-
-        void connect();
-
-        void disconnect();
-
-        void configure(std::string_view ssid, std::string_view pass);
-
-        [[nodiscard]] wifi_status status() const;
-
-        [[nodiscard]] unsigned attempts() const;
-
-        [[nodiscard]] unsigned max_attempts() const;
-
-        void set_max_attempts(unsigned n);
-
-        wifi_status await_status_change(wifi_status old, std::chrono::milliseconds timeout);
-
-        [[nodiscard]] bool await_connection_attempt(std::chrono::milliseconds timeout);
-
-        [[nodiscard]] std::optional<std::string> get_ssid() const;
-
-        ~wifi_impl();
-    };
-
-
-    wifi_status wifi::wifi_impl::status() const {
+    wifi_status wifi::status() const {
         return _status;
     }
 
-    unsigned wifi::wifi_impl::attempts() const {
+    unsigned wifi::attempts() const {
         return _attempts;
     }
 
-    unsigned wifi::wifi_impl::max_attempts() const {
+    unsigned wifi::max_attempts() const {
         return _max_attempts;
     }
 
-    void wifi::wifi_impl::set_max_attempts(unsigned n) {
+    void wifi::set_max_attempts(unsigned n) {
         _max_attempts = n;
     }
 
 
-    void wifi::wifi_impl::_wifi_event_handler_cbk(void *context, esp_event_base_t event_base, std::int32_t event_id, void *event_data) {
-        if (auto *impl_ptr = static_cast<wifi_impl *>(context); impl_ptr != nullptr) {
+    void wifi::wifi_event_handler(void *context, esp_event_base_t event_base, std::int32_t event_id, void *event_data) {
+        if (auto *impl_ptr = static_cast<wifi *>(context); impl_ptr != nullptr) {
             impl_ptr->handle_wifi_event(event_base, event_id, event_data);
         } else {
             ESP_LOGE(TAG, "Could not track Wifi object.");
         }
     }
 
-    void wifi::wifi_impl::handle_wifi_event(esp_event_base_t event_base, std::int32_t event_id, void *event_data) {
+    void wifi::handle_wifi_event(esp_event_base_t event_base, std::int32_t event_id, void *event_data) {
         if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
             ESP_LOGI(TAG, "Wifi running on core %d.", xPortGetCoreID());
             esp_wifi_connect();
@@ -306,11 +195,12 @@ namespace ka {
         }
     }
 
-    void wifi::wifi_impl::configure(std::string_view ssid, std::string_view pass) {
-        if (not ensure_wifi_initialized()) {
-            return;
-        }
+    wifi &wifi::instance() {
+        static wifi _instance{};
+        return _instance;
+    }
 
+    void wifi::configure_internal(std::string_view ssid, std::string_view pass) {
         wifi_config_t wifi_config = {
                 .sta = {
                         .ssid = {/* fill later */},
@@ -347,7 +237,7 @@ namespace ka {
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     }
 
-    wifi::wifi_impl::wifi_impl()
+    wifi::wifi()
         : _instance_any_id{nullptr},
           _instance_got_ip{nullptr},
           _attempts{0},
@@ -357,19 +247,37 @@ namespace ka {
           _status_change{},
           _status_change_mutex{},
           _is_started{false} {
+        // Initialize flash through a NVS instance
+        (void) nvs::nvs::instance();
+        ESP_ERROR_CHECK(esp_netif_init());
 
-        // Must be initialized in order to register instance handlers
-        if (not ensure_wifi_initialized()) {
-            return;
+        esp_err_t r = ESP_OK;
+
+        if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = esp_event_loop_create_default()); r != ESP_OK) {
+            // Gracefully exit
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_deinit());
+            std::abort();
+        }
+
+        // We cannot catch this gracefully because it aborts...
+        esp_netif_create_default_wifi_sta();
+
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+
+        if (ESP_ERROR_CHECK_WITHOUT_ABORT(r = esp_wifi_init(&cfg)); r != ESP_OK) {
+            // Gracefully exit
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_event_loop_delete_default());
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_deinit());
+            std::abort();
         }
 
         ESP_ERROR_CHECK(esp_event_handler_instance_register(
-                WIFI_EVENT, ESP_EVENT_ANY_ID, &_wifi_event_handler_cbk, this, &_instance_any_id));
+                WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, this, &_instance_any_id));
         ESP_ERROR_CHECK(esp_event_handler_instance_register(
-                IP_EVENT, IP_EVENT_STA_GOT_IP, &_wifi_event_handler_cbk, this, &_instance_got_ip));
+                IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, this, &_instance_got_ip));
     }
 
-    void wifi::wifi_impl::connect() {
+    void wifi::connect() {
         std::lock_guard<std::recursive_mutex> guard{_mutex};
         if (_status == wifi_status::idle) {
             _status = wifi_status::connecting;
@@ -387,7 +295,7 @@ namespace ka {
         }
     }
 
-    void wifi::wifi_impl::disconnect() {
+    void wifi::disconnect() {
         std::lock_guard<std::recursive_mutex> guard{_mutex};
         if (wifi_status_is_on(_status)) {
             ESP_ERROR_CHECK(esp_wifi_disconnect());
@@ -395,7 +303,7 @@ namespace ka {
     }
 
 
-    wifi_status wifi::wifi_impl::await_status_change(wifi_status old, std::chrono::milliseconds timeout) {
+    wifi_status wifi::await_status_change(wifi_status old, std::chrono::milliseconds timeout) {
         /**
          * @note We need to use a _status_change_mutex for locking a condition_variable here because atomics have only
          * a `wait` method and not a `wait_for` method, which we need.
@@ -409,14 +317,14 @@ namespace ka {
         return retval;
     }
 
-    bool wifi::wifi_impl::await_connection_attempt(std::chrono::milliseconds timeout) {
+    bool wifi::await_connection_attempt(std::chrono::milliseconds timeout) {
         mlab::reduce_timeout rt{timeout.count() > 0 ? timeout : std::numeric_limits<std::chrono::milliseconds>::max()};
         wifi_status s = status();
         for (; rt and (s == wifi_status::connecting or s == wifi_status::getting_ip); s = await_status_change(s, rt.remaining())) {}
         return s == wifi_status::ready;
     }
 
-    wifi::wifi_impl::~wifi_impl() {
+    wifi::~wifi() {
         disconnect();
         ESP_ERROR_CHECK(esp_wifi_stop());
         _is_started = false;
@@ -431,46 +339,15 @@ namespace ka {
         }
     }
 
-    void wifi::wifi_impl_deleter(ka::wifi::wifi_impl *wi) {
-        std::default_delete<wifi_impl>{}(wi);
-    }
-
-    wifi::wifi() : _pimpl{new wifi_impl(), &wifi_impl_deleter} {}
-
-    wifi::wifi(const std::string &ssid, const std::string &pass, bool auto_connect) : wifi{} {
-        reconfigure(ssid, pass, auto_connect);
-    }
-
     void wifi::reconfigure(std::string_view ssid, std::string_view pass, bool auto_connect) {
         if (const auto s = status(); s != wifi_status::idle and s != wifi_status::failure) {
             disconnect();
             await_status_change(s, 20ms);
         }
-        _pimpl->configure(ssid, pass);
+        configure_internal(ssid, pass);
         if (auto_connect) {
             connect();
         }
-    }
-
-    void wifi::connect() {
-        _pimpl->connect();
-    }
-
-    void wifi::disconnect() {
-        _pimpl->disconnect();
-    }
-
-    wifi_status wifi::status() const {
-        return _pimpl->status();
-    }
-
-
-    wifi_status wifi::await_status_change(wifi_status old, std::chrono::milliseconds timeout) {
-        return _pimpl->await_status_change(old, timeout);
-    }
-
-    bool wifi::await_connection_attempt(std::chrono::milliseconds timeout) {
-        return _pimpl->await_connection_attempt(timeout);
     }
 
     bool wifi::ensure_connected(std::chrono::milliseconds timeout) {
@@ -488,18 +365,6 @@ namespace ka {
                 return true;
         }
         return false;
-    }
-
-    unsigned wifi::attempts() const {
-        return _pimpl->attempts();
-    }
-
-    unsigned wifi::max_attempts() const {
-        return _pimpl->max_attempts();
-    }
-
-    void wifi::set_max_attempts(unsigned n) {
-        _pimpl->set_max_attempts(n);
     }
 
     wifi_session::wifi_session(wifi &wf, std::chrono::milliseconds timeout, wifi_session_usage usage)
@@ -529,10 +394,6 @@ namespace ka {
     }
 
     std::optional<std::string> wifi::get_ssid() const {
-        return _pimpl->get_ssid();
-    }
-
-    std::optional<std::string> wifi::wifi_impl::get_ssid() const {
         wifi_config_t cfg{};
         if (esp_wifi_get_config(WIFI_IF_STA, &cfg) == ESP_OK) {
             auto begin = reinterpret_cast<char const *>(cfg.sta.ssid);

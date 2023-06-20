@@ -8,6 +8,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <esp_wifi_types.h>
+#include <mutex>
 #include <optional>
 
 namespace ka {
@@ -25,19 +26,33 @@ namespace ka {
 
     [[nodiscard]] constexpr bool wifi_status_is_on(wifi_status ws);
 
-    class wifi : public std::enable_shared_from_this<wifi> {
-        class wifi_impl;
-        static void wifi_impl_deleter(wifi_impl *wi);
+    class wifi {
+        //// FreeRTOS event group to signal when we are connected
+        esp_event_handler_instance_t _instance_any_id;
+        esp_event_handler_instance_t _instance_got_ip;
+        std::atomic<unsigned> _attempts;
+        std::atomic<unsigned> _max_attempts;
+        std::atomic<wifi_status> _status;
+        std::recursive_mutex _mutex;
+        std::condition_variable _status_change;
+        std::mutex _status_change_mutex;
+        bool _is_started;
 
-        /**
-         * @note An opaque pointer, with a custom deleter so that the size of @ref wifi_impl needs not to be known.
-         */
-        std::unique_ptr<wifi_impl, void (*)(wifi_impl *)> _pimpl;
+        static void wifi_event_handler(void *context, esp_event_base_t event_base, std::int32_t event_id, void *event_data);
 
-    public:
+        void handle_wifi_event(esp_event_base_t event_base, std::int32_t event_id, void *event_data);
+
+        void configure_internal(std::string_view ssid, std::string_view pass);
+
         wifi();
 
-        wifi(std::string const &ssid, std::string const &pass, bool auto_connect = true);
+    public:
+        wifi(wifi const &) = delete;
+        wifi(wifi &&) = delete;
+        wifi &operator=(wifi const &) = delete;
+        wifi &operator=(wifi &&) = delete;
+
+        ~wifi();
 
         void reconfigure(std::string_view ssid, std::string_view pass, bool auto_connect = true);
 
@@ -60,6 +75,8 @@ namespace ka {
         [[nodiscard]] std::optional<std::string> get_ssid() const;
 
         void set_max_attempts(unsigned n);
+
+        [[nodiscard]] static wifi &instance();
     };
 
     enum wifi_session_usage {
@@ -69,7 +86,6 @@ namespace ka {
     };
 
     class wifi_session {
-        std::shared_ptr<wifi> _wf = nullptr;
         bool _disconnect_when_done = true;
         wifi_ps_type_t _orig_ps_mode = WIFI_PS_MIN_MODEM;
 
