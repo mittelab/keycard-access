@@ -60,6 +60,7 @@ namespace ka::nvs {
         ~nvs();
 
         [[nodiscard]] std::shared_ptr<partition> open_partition(const char *label, bool secure);
+        [[nodiscard]] std::shared_ptr<partition> open_default_partition();
     };
 
     /**

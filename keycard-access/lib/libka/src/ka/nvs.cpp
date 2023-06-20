@@ -31,6 +31,14 @@ namespace ka::nvs {
         return _instance;
     }
 
+    std::shared_ptr<partition> nvs::open_default_partition() {
+#ifdef CONFIG_NVS_ENCRYPTION
+        return open_partition(NVS_DEFAULT_PART_NAME, true);
+#else
+        return open_partition(NVS_DEFAULT_PART_NAME, false);
+#endif
+    }
+
     std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure) {
         std::unique_lock<std::mutex> lock{_partitions_mutex};
         auto &part_wptr = _open_partitions[std::string(label)];
