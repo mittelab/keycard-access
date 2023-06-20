@@ -3,13 +3,13 @@
 //
 
 #include "formatter_main.hpp"
+#include <desfire/esp32/utils.hpp>
+#include <desfire/fs.hpp>
 #include <desfire/tag_responder.hpp>
+#include <esp_log.h>
+#include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
 #include <mlab/strutils.hpp>
-#include <ka/key_pair.hpp>
-#include <esp_log.h>
-#include <desfire/fs.hpp>
-#include <desfire/esp32/utils.hpp>
 
 #define LOG_PFX "KA-FMT"
 

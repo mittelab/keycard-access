@@ -23,6 +23,6 @@ namespace ka {
 
         ~console();
     };
-}
+}// namespace ka
 
 #endif//KEYCARD_ACCESS_CONSOLE_HPP

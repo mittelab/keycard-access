@@ -3,8 +3,8 @@
 //
 
 #include "gate_main.hpp"
-#include <ka/gate.hpp>
 #include <esp_log.h>
+#include <ka/gate.hpp>
 #include <ka/p2p_ops.hpp>
 
 #define LOG_PFX "KA-GATE"
@@ -26,4 +26,4 @@ namespace ka {
         ka::gate_responder responder{gate};
         scanner.loop(responder, false /* already performed */);
     }
-}
+}// namespace ka

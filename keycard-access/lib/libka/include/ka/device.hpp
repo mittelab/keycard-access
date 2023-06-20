@@ -23,8 +23,8 @@ namespace ka {
 
         device(device const &) = delete;
         device(device &&) = delete;
-        device & operator=(device const &) = delete;
-        device & operator=(device &&) = delete;
+        device &operator=(device const &) = delete;
+        device &operator=(device &&) = delete;
 
         [[nodiscard]] bool updates_automatically() const;
         void set_update_automatically(bool v);

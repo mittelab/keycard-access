@@ -9,7 +9,7 @@ namespace pn532 {
     class controller;
     class scanner;
 
-}
+}// namespace pn532
 namespace ka {
     void gate_main(pn532::controller &controller, pn532::scanner &scanner);
 }
