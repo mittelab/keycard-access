@@ -15,6 +15,10 @@
 
 namespace ka::nvs {
 
+    class nvs;
+
+    [[nodiscard]] nvs &instance();
+
     class partition;
     class namespc;
     class const_namespc;
@@ -46,14 +50,14 @@ namespace ka::nvs {
 
         nvs();
 
+        friend nvs &instance();
+
     public:
         nvs(nvs const &) = delete;
         nvs(nvs &&) = delete;
         nvs &operator=(nvs const &) = delete;
         nvs &operator=(nvs &&) = delete;
         ~nvs();
-
-        [[nodiscard]] static nvs &instance();
 
         [[nodiscard]] std::shared_ptr<partition> open_partition(const char *label, bool secure);
     };

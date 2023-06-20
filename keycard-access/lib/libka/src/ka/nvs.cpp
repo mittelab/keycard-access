@@ -26,7 +26,7 @@ namespace ka::nvs {
     }
 
 
-    nvs &nvs::instance() {
+    nvs &instance() {
         static nvs _instance{};
         return _instance;
     }

@@ -248,7 +248,7 @@ namespace ka {
           _status_change_mutex{},
           _is_started{false} {
         // Initialize flash through a NVS instance
-        (void) nvs::nvs::instance();
+        (void) nvs::instance();
         ESP_ERROR_CHECK(esp_netif_init());
 
         esp_err_t r = ESP_OK;
