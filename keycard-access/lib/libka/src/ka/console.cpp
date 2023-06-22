@@ -75,4 +75,105 @@ namespace ka {
         esp_vfs_dev_uart_use_nonblocking(CONFIG_ESP_CONSOLE_UART_NUM);
         ESP_ERROR_CHECK_WITHOUT_ABORT(uart_driver_delete(CONFIG_ESP_CONSOLE_UART_NUM));
     }
+
+    namespace cmd {
+        value_argument_map argument::map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments) {
+            value_argument_map retval;
+            retval.reserve(arguments.size());
+            // Copy the argument
+            for (auto argref : arguments) {
+                retval.emplace_back(argref, std::nullopt);
+            }
+
+            std::vector<std::string_view> positional;
+            positional.reserve(values.size());
+
+            // Assign flags and regular arguments, and collect positionals
+            for (auto it = std::begin(values); it != std::end(values); ++it) {
+                // After "--", they are all positionals.
+                if (*it == "--") {
+                    std::copy(std::next(it), std::end(values), std::back_inserter(positional));
+                    break;
+                }
+                [&]() {
+                    // Is it a flag or a regular argument starting with "--"?
+                    if (it->starts_with("--")) {
+                        for (auto jt = std::begin(retval); jt != std::end(retval); ++jt) {
+                            argument const &a = jt->first.get();
+                            if (a.type == argument_type::positional) {
+                                continue;
+                            }
+                            if (it->substr(2) == a.token_main) {
+                                if (a.type == argument_type::regular) {
+                                    if (++it == std::end(values)) {
+                                        break;
+                                    }
+                                }
+                                jt->second = *it;
+                                return;
+                            } else if (a.type == argument_type::regular) {
+                                // It's not a match
+                                continue;
+                            }
+                            assert(a.type == argument_type::flag);
+                            if (it->starts_with("--no-") and it->substr(5) == a.token_main) {
+                                // It's a negative match
+                                jt->second = *it;
+                                return;
+                            }
+                        }
+                    } else if (it->starts_with("-")) {
+                        // Is it a flag or a regular argument starting with "-"?
+                        for (auto jt = std::begin(retval); jt != std::end(retval); ++jt) {
+                            argument const &a = jt->first.get();
+                            if (a.type == argument_type::positional or a.token_alternate.empty()) {
+                                continue;
+                            }
+                            if (it->substr(1) == a.token_alternate) {
+                                if (a.type == argument_type::regular) {
+                                    if (++it == std::end(values)) {
+                                        break;
+                                    }
+                                }
+                                jt->second = *it;
+                                return;
+                            } else if (a.type == argument_type::regular) {
+                                // It's not a match
+                                continue;
+                            }
+                            assert(a.type == argument_type::flag);
+                            if (it->starts_with("-n") and it->substr(2) == a.token_alternate) {
+                                // It's a negative match
+                                jt->second = *it;
+                                return;
+                            }
+                        }
+                    } else {
+                        // Definitely a positional
+                        positional.emplace_back(*it);
+                        return;
+                    }
+                    // If it gets here, either was not recognized, or we reached the end of the arguments
+                    if (it == std::end(values)) {
+                        --it;// Loop will stop
+                    } else {
+                        // Unrecognized arguments
+                        ESP_LOGE("KA", "Unprocessed or unrecognized argument %s.", it->data());
+                    }
+                }();
+            }
+
+            // Assign positionals
+            auto it = std::begin(positional);
+            for (auto jt = std::begin(retval); jt != std::end(retval) and it != std::end(positional); ++jt) {
+                argument const &a = jt->first.get();
+                if (a.type != argument_type::positional) {
+                    continue;
+                }
+                jt->second = *it++;
+            }
+
+            return retval;
+        }
+    }// namespace cmd
 }// namespace ka
