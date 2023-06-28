@@ -7,7 +7,6 @@
 #include <esp_log.h>
 #include <esp_vfs_dev.h>
 #include <ka/console.hpp>
-#include <ka/misc.hpp>
 #include <linenoise/linenoise.h>
 
 namespace ka {
@@ -181,6 +180,18 @@ namespace ka {
             return retval;
         }
 
+        std::string argument::signature_string(std::string_view value_marker) const {
+            if (type == argument_type::positional) {
+                return concatenate_views({"<", token_main, ">"});
+            }
+
+            if (type == argument_type::flag) {
+                return concatenate_views({"--[no-]", token_main});
+            }
+
+            return concatenate_views({"--", token_main, " <", value_marker.empty() ? "value" : value_marker, ">"});
+        }
+
         std::string argument::help_string(std::string_view type_info, std::string_view default_value) const {
             if (type == argument_type::positional) {
                 if (type_info.empty()) {
@@ -212,6 +223,33 @@ namespace ka {
             } else {
                 return concatenate_views({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <", default_value, " (", type_info, ")>", rwrap});
             }
+        }
+
+
+        void shell::linenoise_completion(const char *typed, linenoiseCompletions *lc) const {
+            for (auto const &cmd : _cmds) {
+                if (cmd->name.starts_with(typed)) {
+                    linenoiseAddCompletion(lc, cmd->name.data());
+                }
+            }
+        }
+
+        char *shell::linenoise_hints(const char *typed, int *color, int *bold) const {
+            const std::string typed_s = typed;
+            for (auto const &cmd : _cmds) {
+                if (typed_s.starts_with(cmd->name)) {
+                    auto s = cmd->signature();
+                    char *retval = new char[s.size()];
+                    std::copy(std::begin(s), std::end(s), retval);
+                    return retval;
+                }
+            }
+            return nullptr;
+        }
+
+        void shell::linenoise_free_hints(void *data) {
+            char *strdata = reinterpret_cast<char *>(data);
+            delete[] strdata;
         }
     }// namespace cmd
 }// namespace ka
