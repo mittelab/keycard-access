@@ -77,7 +77,7 @@ namespace ka {
     }
 
     namespace cmd {
-        value_argument_map argument::map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments) {
+        r<value_argument_map> argument::map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments) {
             value_argument_map retval;
             retval.reserve(arguments.size());
             // Copy the argument
@@ -90,6 +90,10 @@ namespace ka {
 
             // Assign flags and regular arguments, and collect positionals
             for (auto it = std::begin(values); it != std::end(values); ++it) {
+                // Is it invoking help?
+                if (*it == "-h" or *it == "--help") {
+                    return error::help_invoked;
+                }
                 // After "--", they are all positionals.
                 if (*it == "--") {
                     std::copy(std::next(it), std::end(values), std::back_inserter(positional));

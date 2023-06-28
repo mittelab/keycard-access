@@ -38,7 +38,8 @@ namespace ka {
         enum struct error {
             parse,
             missing,
-            unrecognized
+            unrecognized,
+            help_invoked
         };
 
         template <class... Args>
@@ -73,7 +74,7 @@ namespace ka {
              */
             std::string_view token_alternate;
 
-            [[nodiscard]] static value_argument_map map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments);
+            [[nodiscard]] static r<value_argument_map> map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments);
         };
 
         struct positional {
@@ -158,32 +159,32 @@ namespace ka {
             [[nodiscard]] static r<T> parse(std::string_view value);
         };
 
-        namespace util {
+        namespace traits {
             template <class T, class... Args>
-            struct to_result_tuple {
-                using type = decltype(std::tuple_cat(std::declval<std::tuple<r<T>>>(), std::declval<typename to_result_tuple<Args...>::type>()));
+            struct types_to_result_tuple {
+                using type = decltype(std::tuple_cat(std::declval<std::tuple<r<T>>>(), std::declval<typename types_to_result_tuple<Args...>::type>()));
             };
 
             template <class T>
-            struct to_result_tuple<T> {
+            struct types_to_result_tuple<T> {
                 using type = std::tuple<r<T>>;
             };
 
-            static_assert(std::is_same_v<to_result_tuple<int>::type, std::tuple<r<int>>>);
-            static_assert(std::is_same_v<to_result_tuple<int, float>::type, std::tuple<r<int>, r<float>>>);
+            static_assert(std::is_same_v<types_to_result_tuple<int>::type, std::tuple<r<int>>>);
+            static_assert(std::is_same_v<types_to_result_tuple<int, float>::type, std::tuple<r<int>, r<float>>>);
 
             template <class T, class... Args>
-            struct to_typed_argument_tuple {
-                using type = decltype(std::tuple_cat(std::declval<std::tuple<typed_argument<T>>>(), std::declval<typename to_typed_argument_tuple<Args...>::type>()));
+            struct types_to_typed_argument_tuple {
+                using type = decltype(std::tuple_cat(std::declval<std::tuple<typed_argument<T>>>(), std::declval<typename types_to_typed_argument_tuple<Args...>::type>()));
             };
 
             template <class T>
-            struct to_typed_argument_tuple<T> {
+            struct types_to_typed_argument_tuple<T> {
                 using type = std::tuple<typed_argument<T>>;
             };
 
-            static_assert(std::is_same_v<to_typed_argument_tuple<int>::type, std::tuple<typed_argument<int>>>);
-            static_assert(std::is_same_v<to_typed_argument_tuple<int, float>::type, std::tuple<typed_argument<int>, typed_argument<float>>>);
+            static_assert(std::is_same_v<types_to_typed_argument_tuple<int>::type, std::tuple<typed_argument<int>>>);
+            static_assert(std::is_same_v<types_to_typed_argument_tuple<int, float>::type, std::tuple<typed_argument<int>, typed_argument<float>>>);
 
             template <class T>
             struct is_typed_argument : std::false_type {};
@@ -191,10 +192,25 @@ namespace ka {
             template <class T>
             struct is_typed_argument<typed_argument<T>> : std::true_type {};
 
-        }// namespace util
+        }// namespace traits
 
         template <class T>
-        concept is_typed_argument = util::is_typed_argument<T>::value;
+        concept is_typed_argument_v = traits::is_typed_argument<T>::value;
+
+        namespace util {
+            template <ka::cmd::is_typed_argument_v T, ka::cmd::is_typed_argument_v... Args>
+            struct typed_args_to_result_tuple {
+                using type = typename mlab::concat_result_t<r<typename T::value_type>, typename typed_args_to_result_tuple<Args...>::type>;
+            };
+
+            template <ka::cmd::is_typed_argument_v T>
+            struct typed_args_to_result_tuple<T> {
+                using type = r<typename T::value_type>;
+            };
+
+            static_assert(std::is_same_v<typed_args_to_result_tuple<typed_argument<int>>::type, r<int>>);
+            static_assert(std::is_same_v<typed_args_to_result_tuple<typed_argument<int>, typed_argument<float>>::type, r<int, float>>);
+        }// namespace util
 
         /**
          * @tparam TArgs
@@ -202,8 +218,8 @@ namespace ka {
          * @param values
          * @return Given TArgs = typed_argument<T1>, ..., typed_argument<Tn>, returns r<T1, ..., Tn>.
          */
-        template <is_typed_argument... TArgs>
-        [[nodiscard]] auto parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values);
+        template <is_typed_argument_v... TArgs>
+        [[nodiscard]] util::typed_args_to_result_tuple<TArgs...>::type parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values);
 
         namespace util {
             struct void_struct {
@@ -252,20 +268,20 @@ namespace ka {
         }// namespace util
 
         template <class R, class T = util::void_struct, class... Args>
-        struct command : util::to_typed_argument_tuple<Args...>::type {
+        struct command : traits::types_to_typed_argument_tuple<Args...>::type {
             util::target_method<R, T, Args...> tm;
 
-            using util::to_typed_argument_tuple<Args...>::type::type;
+            using traits::types_to_typed_argument_tuple<Args...>::type::type;
 
             using result_t = std::conditional_t<std::is_void_v<R>, r<>, r<R>>;
 
-            explicit command(T *obj_, R (T::*fn_)(Args...), util::to_typed_argument_tuple<Args...>::type arg_seq)
-                : util::to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
+            explicit command(T *obj_, R (T::*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq)
+                : traits::types_to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
                   tm{obj_, fn_} {}
 
 
-            explicit command(R (*fn_)(Args...), util::to_typed_argument_tuple<Args...>::type arg_seq)
-                : util::to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
+            explicit command(R (*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq)
+                : traits::types_to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
                   tm{fn_} {}
 
 
@@ -400,7 +416,7 @@ namespace ka::cmd {
         static_assert(std::is_same_v<decltype(concat_results_from_tuple(std::declval<std::tuple<r<int>, r<float>>>())), r<int, float>>);
         static_assert(std::is_same_v<decltype(concat_results_from_tuple(std::declval<std::tuple<r<int>, r<float>, r<std::string>>>())), r<int, float, std::string>>);
 
-        template <std::size_t StartIdx = 0, ka::cmd::is_typed_argument... TArgs>
+        template <std::size_t StartIdx = 0, ka::cmd::is_typed_argument_v... TArgs>
         constexpr auto parse_tail(std::tuple<TArgs...> const &targs, value_argument_map const &vmap) {
             auto ith_tuple = std::make_tuple(std::get<StartIdx>(targs).parse(vmap[StartIdx].second));
             if constexpr (StartIdx >= sizeof...(TArgs) - 1) {
@@ -419,13 +435,17 @@ namespace ka::cmd {
 
     }// namespace util
 
-    template <is_typed_argument... TArgs>
-    auto parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values) {
+    template <is_typed_argument_v... TArgs>
+    util::typed_args_to_result_tuple<TArgs...>::type parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values) {
         std::vector<std::reference_wrapper<const argument>> argrefs;
         argrefs.reserve(sizeof...(TArgs));
         // Use apply with a generic lambda to downclass all arguments to their common base reference.
         std::apply([&](auto const &...arg) { (argrefs.push_back(std::cref(arg)), ...); }, targs);
-        return util::concat_results_from_tuple(util::parse_tail<0, TArgs...>(targs, argument::map_values(values, argrefs)));
+        if (auto r_map = argument::map_values(values, argrefs); r_map) {
+            return util::concat_results_from_tuple(util::parse_tail<0, TArgs...>(targs, std::move(*r_map)));
+        } else {
+            return r_map.error();
+        };
     }
 
     static_assert(std::is_same_v<
