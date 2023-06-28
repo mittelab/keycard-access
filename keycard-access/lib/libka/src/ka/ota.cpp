@@ -7,9 +7,9 @@
 #include <esp_https_ota.h>
 #include <esp_ota_ops.h>
 #include <ka/http.hpp>
+#include <ka/misc.hpp>
 #include <ka/ota.hpp>
 #include <ka/wifi.hpp>
-#include <ka/misc.hpp>
 
 #define TAG "KA-UPDATE"
 
@@ -113,7 +113,7 @@ namespace ka {
     }
 
     std::string fw_info::get_fw_bin_prefix() const {
-        return concatenate({app_name, "-", platform_code});
+        return concatenate_views({app_name, "-", platform_code});
     }
 
     fw_info fw_info::get_running_fw() {
@@ -135,9 +135,9 @@ namespace ka {
 
     std::string fw_info::to_string() const {
         if (commit_info.empty()) {
-            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string()});
+            return concatenate_views({app_name, "-", platform_code, "-", semantic_version.to_string()});
         } else {
-            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
+            return concatenate_views({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
         }
     }
 
@@ -179,7 +179,7 @@ namespace ka {
             }
 
             // What is the expected firmware name for this version?
-            const auto fw_name = concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
+            const auto fw_name = concatenate_views({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
 
             // Does it have the correct firmware version?
             for (auto const &link : entry["assets"]["links"]) {

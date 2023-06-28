@@ -184,9 +184,9 @@ namespace ka {
         std::string argument::help_string(std::string_view type_info, std::string_view default_value) const {
             if (type == argument_type::positional) {
                 if (type_info.empty()) {
-                    return concatenate({"<", token_main, ">"});
+                    return concatenate_views({"<", token_main, ">"});
                 } else {
-                    return concatenate({"<", token_main, ": ", type_info, ">"});
+                    return concatenate_views({"<", token_main, ": ", type_info, ">"});
                 }
             }
 
@@ -195,22 +195,22 @@ namespace ka {
 
             if (type == argument_type::flag) {
                 if (token_alternate.empty()) {
-                    return concatenate({lwrap, "--[no-]", token_main, rwrap});
+                    return concatenate_views({lwrap, "--[no-]", token_main, rwrap});
                 } else {
-                    return concatenate({lwrap, "--[no-]", token_main, "|-[n]", token_alternate, rwrap});
+                    return concatenate_views({lwrap, "--[no-]", token_main, "|-[n]", token_alternate, rwrap});
                 }
             }
 
             // type is regular
             const std::string_view token_alternate_prefix = token_alternate.empty() ? "" : " | -";
             if (default_value.empty() and type_info.empty()) {
-                return concatenate({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <value>", rwrap});
+                return concatenate_views({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <value>", rwrap});
             } else if (default_value.empty()) {
-                return concatenate({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <(", type_info, ")>", rwrap});
+                return concatenate_views({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <(", type_info, ")>", rwrap});
             } else if (type_info.empty()) {
-                return concatenate({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <", default_value, ">", rwrap});
+                return concatenate_views({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <", default_value, ">", rwrap});
             } else {
-                return concatenate({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <", default_value, " (", type_info, ")>", rwrap});
+                return concatenate_views({lwrap, "--", token_main, token_alternate_prefix, token_alternate, " <", default_value, " (", type_info, ")>", rwrap});
             }
         }
     }// namespace cmd
