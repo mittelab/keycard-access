@@ -75,6 +75,8 @@ namespace ka {
             std::string_view token_alternate;
 
             [[nodiscard]] static r<value_argument_map> map_values(std::vector<std::string_view> const &values, std::vector<std::reference_wrapper<const argument>> const &arguments);
+
+            [[nodiscard]] std::string help_string(std::string_view type_info, std::string_view default_value) const;
         };
 
         struct positional {
@@ -152,6 +154,8 @@ namespace ka {
 
             typed_argument(std::string_view token_main_, std::string_view token_alternate_, T default_value_)
                 : argument{argument_type::regular, token_main_, token_alternate_}, default_value{default_value_} {}
+
+            [[nodiscard]] std::string help_string() const;
         };
 
         template <class T>
@@ -236,7 +240,7 @@ namespace ka {
                 }
             };
 
-            template<class T, std::size_t BufSize = 256>
+            template <class T, std::size_t BufSize = 256>
             [[nodiscard]] constexpr auto type_name() {
                 constexpr auto method_name = fixed_size_string<BufSize>{__PRETTY_FUNCTION__};
                 constexpr auto equal_pos = method_name.find('=');
@@ -509,6 +513,11 @@ namespace ka::cmd {
     static_assert(std::is_same_v<
                   decltype(parse_from_string(std::declval<std::tuple<typed_argument<int>, typed_argument<float>, typed_argument<std::string>>>(), std::declval<std::vector<std::string_view>>())),
                   r<int, float, std::string>>);
+
+    template <class T>
+    std::string typed_argument<T>::help_string() const {
+        return argument::help_string(traits::type_name<T>().data, default_value ? std::to_string(*default_value) : "");
+    }
 
 }// namespace ka::cmd
 
