@@ -192,6 +192,61 @@ namespace ka {
             template <class T>
             struct is_typed_argument<typed_argument<T>> : std::true_type {};
 
+            template <std::size_t N>
+            struct fixed_size_string {
+                char data[N];
+
+                [[nodiscard]] std::size_t constexpr size() const {
+                    return N;
+                }
+
+                /**
+                 * @note It's possible to automatically deduct the size when passing string literals as follows:
+                 * @code
+                 *  constexpr fixed_size_string(const char s[N]);
+                 * @endcode
+                 */
+                constexpr fixed_size_string(const char *s) {
+                    std::size_t i = 0;
+                    for (; i < N - 1; ++i) {
+                        if (s[i] == '\0') {
+                            break;
+                        }
+                        data[i] = s[i];
+                    }
+                    for (; i < N; ++i) {
+                        data[i] = '\0';
+                    }
+                }
+
+                [[nodiscard]] constexpr std::size_t find(char c) const {
+                    return std::find(std::begin(data), std::end(data), c) - std::begin(data);
+                }
+
+                [[nodiscard]] constexpr std::size_t find_any(std::initializer_list<char> cs) const {
+                    return std::find_first_of(std::begin(data), std::end(data), std::begin(cs), std::end(cs)) - std::begin(data);
+                }
+
+                template <std::size_t Start, std::size_t End>
+                [[nodiscard]] constexpr auto substr() const {
+                    static_assert(Start < End and End <= N);
+                    auto retval = fixed_size_string<End - Start + 1>{&data[Start]};
+                    retval.data[End - Start] = '\0';
+                    return retval;
+                }
+            };
+
+            template<class T, std::size_t BufSize = 256>
+            [[nodiscard]] constexpr auto type_name() {
+                constexpr auto method_name = fixed_size_string<BufSize>{__PRETTY_FUNCTION__};
+                constexpr auto equal_pos = method_name.find('=');
+                constexpr auto end_pos = method_name.find_any({';', ',', ']'});
+                if constexpr (end_pos > equal_pos + 2) {
+                    return method_name.template substr<equal_pos + 2, end_pos>();
+                } else {
+                    return fixed_size_string<1>{""};
+                }
+            }
         }// namespace traits
 
         template <class T>
