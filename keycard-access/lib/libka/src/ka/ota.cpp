@@ -9,6 +9,7 @@
 #include <ka/http.hpp>
 #include <ka/ota.hpp>
 #include <ka/wifi.hpp>
+#include <ka/misc.hpp>
 
 #define TAG "KA-UPDATE"
 
@@ -19,20 +20,6 @@ namespace ka {
         [[nodiscard]] std::mutex &update_mutex() {
             static std::mutex _mtx;
             return _mtx;
-        }
-
-        [[nodiscard]] std::string concatenate(std::initializer_list<std::string_view> strs) {
-            std::size_t tot_len = 0;
-            for (auto const &s : strs) {
-                tot_len += s.size();
-            }
-            std::string retval;
-            retval.resize(tot_len);
-            auto it = std::begin(retval);
-            for (auto const &s : strs) {
-                it = std::copy(std::begin(s), std::end(s), it);
-            }
-            return retval;
         }
 
         [[nodiscard]] std::optional<std::pair<semver::version, std::string>> parse_git_describe_version(std::string_view v) {
