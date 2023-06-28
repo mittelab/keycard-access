@@ -170,10 +170,11 @@ namespace ka {
 
             explicit command_base(std::string_view name_) : name{name_} {}
 
-            ~command_base() = default;
-
             [[nodiscard]] virtual r<> parse_and_invoke(std::vector<std::string_view> const &values) = 0;
             [[nodiscard]] virtual std::string signature() const = 0;
+            [[nodiscard]] virtual std::string help() const = 0;
+
+            ~command_base() = default;
         };
 
         namespace util {
@@ -201,14 +202,17 @@ namespace ka {
             [[nodiscard]] r<> parse_and_invoke(std::vector<std::string_view> const &values) override;
 
             [[nodiscard]] std::string signature() const override;
+            [[nodiscard]] std::string help() const override;
         };
 
         class shell {
             std::vector<std::unique_ptr<command_base>> _cmds;
 
-            void linenoise_completion(const char *typed, linenoiseCompletions *lc) const;
-            char *linenoise_hints(const char *typed, int *color, int *bold) const;
+            static void linenoise_completion(const char *typed, linenoiseCompletions *lc);
+            static char *linenoise_hints(const char *typed, int *color, int *bold);
             static void linenoise_free_hints(void *data);
+
+            shell() = default;
 
         public:
             template <class R, class... Args>
@@ -216,6 +220,10 @@ namespace ka {
 
             template <class R, class T, class... Args>
             void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq);
+
+            void repl(console &c) const;
+
+            static shell &instance();
         };
 
     }// namespace cmd
@@ -560,12 +568,8 @@ namespace ka::cmd {
     template <class R, class T, class... Args>
     r<> command<R, T, Args...>::parse_and_invoke(std::vector<std::string_view> const &values) {
         if (auto r_args = parse(values); r_args) {
-            if constexpr (std::is_void_v<R>) {
-                invoke_with_tuple(std::move(*r_args));
-                return mlab::result_success;
-            } else {
-                return invoke_with_tuple(std::move(*r_args));
-            }
+            invoke_with_tuple(std::move(*r_args));
+            return mlab::result_success;
         } else {
             return r_args.error();
         }
@@ -624,12 +628,24 @@ namespace ka::cmd {
     std::string command<R, T, Args...>::signature() const {
         std::vector<std::string> strs;
         strs.reserve(sizeof...(Args) + 1);
-        strs.push_back(std::string{name});
+        strs.emplace_back("");
         std::apply([&](auto const &...targs) {
             (strs.push_back(targs.signature_string()), ...);
         },
                    static_cast<traits::types_to_typed_argument_tuple<Args...>::type const &>(*this));
         return concatenate_strings(strs, " ");
+    }
+
+    template <class R, class T, class... Args>
+    std::string command<R, T, Args...>::help() const {
+        std::vector<std::string> strs;
+        strs.reserve(sizeof...(Args) + 1);
+        strs.push_back(std::string{name});
+        std::apply([&](auto const &...targs) {
+            (strs.push_back(targs.help_string()), ...);
+        },
+                   static_cast<traits::types_to_typed_argument_tuple<Args...>::type const &>(*this));
+        return concatenate_strings(strs, "\n    ");
     }
 
     template <class R, class... Args>

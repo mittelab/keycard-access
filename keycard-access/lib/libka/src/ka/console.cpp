@@ -226,21 +226,22 @@ namespace ka {
         }
 
 
-        void shell::linenoise_completion(const char *typed, linenoiseCompletions *lc) const {
-            for (auto const &cmd : _cmds) {
-                if (cmd->name.starts_with(typed)) {
-                    linenoiseAddCompletion(lc, cmd->name.data());
+        void shell::linenoise_completion(const char *typed, linenoiseCompletions *lc) {
+            for (auto const &pcmd : instance()._cmds) {
+                if (pcmd->name.starts_with(typed)) {
+                    linenoiseAddCompletion(lc, pcmd->name.data());
                 }
             }
         }
 
-        char *shell::linenoise_hints(const char *typed, int *color, int *bold) const {
+        char *shell::linenoise_hints(const char *typed, int *color, int *bold) {
             const std::string typed_s = typed;
-            for (auto const &cmd : _cmds) {
-                if (typed_s.starts_with(cmd->name)) {
-                    auto s = cmd->signature();
-                    char *retval = new char[s.size()];
+            for (auto const &pcmd : instance()._cmds) {
+                if (typed_s.starts_with(pcmd->name)) {
+                    auto s = pcmd->signature();
+                    char *retval = new char[s.size() + 1]{/* zero-initialize */};
                     std::copy(std::begin(s), std::end(s), retval);
+                    *color = 34 /* blue */;
                     return retval;
                 }
             }
@@ -250,6 +251,60 @@ namespace ka {
         void shell::linenoise_free_hints(void *data) {
             char *strdata = reinterpret_cast<char *>(data);
             delete[] strdata;
+        }
+
+        shell &shell::instance() {
+            static shell _shell{};
+            return _shell;
+        }
+
+        void shell::repl(console &c) const {
+            constexpr unsigned max_args = 10;
+
+            linenoiseSetCompletionCallback(&linenoise_completion);
+            linenoiseSetHintsCallback(&linenoise_hints);
+            linenoiseSetFreeHintsCallback(&linenoise_free_hints);
+
+            while (true) {
+                auto s = c.read_line();
+                auto pargv = std::make_unique<char *[]>(max_args);
+                const std::size_t argc = esp_console_split_argv(s.data(), pargv.get(), max_args);
+                if (argc == 0) {
+                    continue;
+                }
+                // Search for the command
+                command_base *called_cmd = nullptr;
+                for (auto const &pcmd : _cmds) {
+                    if (pcmd->name == pargv[0]) {
+                        called_cmd = pcmd.get();
+                        break;
+                    }
+                }
+                if (called_cmd == nullptr) {
+                    ESP_LOGE("KA", "Unknown command %s.", pargv[0]);
+                    continue;
+                }
+                // Copy values
+                std::vector<std::string_view> values;
+                values.reserve(argc - 1);
+                for (std::size_t i = 1; i < max_args; ++i) {
+                    if (pargv[i] == nullptr) {
+                        break;
+                    }
+                    values.emplace_back(pargv[i]);
+                }
+                // Try parsing
+                if (const auto r = called_cmd->parse_and_invoke(values); not r) {
+                    if (r.error() == error::help_invoked) {
+                        auto h = called_cmd->help();
+                        std::printf("%s\n\n", h.c_str());
+                    }
+                }
+            }
+
+            linenoiseSetFreeHintsCallback(nullptr);
+            linenoiseSetHintsCallback(nullptr);
+            linenoiseSetCompletionCallback(nullptr);
         }
     }// namespace cmd
 }// namespace ka
