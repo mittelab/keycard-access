@@ -49,6 +49,8 @@ namespace ka {
             help_invoked
         };
 
+        [[nodiscard]] const char *to_string(error e);
+
         template <class... Args>
         using r = mlab::result<error, Args...>;
 
@@ -131,12 +133,19 @@ namespace ka {
         };
 
         template <class T>
-        concept is_parsable = requires(T a) {
-            { parser<T>::parse(std::string_view{}) } -> std::same_as<r<T>>;
+        concept parse_can_output = requires { std::is_void_v<T>; } or requires(T a) {
             { parser<T>::to_string(std::declval<T>()) } -> std::convertible_to<std::string>;
         };
 
-        template <is_parsable T>
+        template <class T>
+        concept parse_can_input = requires(T a) {
+            { parser<T>::parse(std::string_view{}) } -> std::same_as<r<T>>;
+        };
+
+        template <class T>
+        concept parsable = parse_can_input<T> and parse_can_output<T>;
+
+        template <parsable T>
         struct typed_argument : argument {
             using value_type = T;
 
@@ -183,7 +192,7 @@ namespace ka {
 
             explicit command_base(std::string_view name_) : name{name_} {}
 
-            [[nodiscard]] virtual r<> parse_and_invoke(std::vector<std::string_view> const &values) = 0;
+            [[nodiscard]] virtual r<std::string> parse_and_invoke(std::vector<std::string_view> const &values) = 0;
             [[nodiscard]] virtual std::string signature() const = 0;
             [[nodiscard]] virtual std::string help() const = 0;
 
@@ -196,7 +205,7 @@ namespace ka {
             struct target_method;
         }// namespace util
 
-        template <class R, class T = util::void_struct, is_parsable... Args>
+        template <parse_can_output R, class T = util::void_struct, parsable... Args>
         struct command final : command_base, typed_arguments_tuple_t<Args...>, util::target_method<R, T, Args...> {
 
             explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
@@ -207,7 +216,7 @@ namespace ka {
 
             using util::target_method<R, T, Args...>::operator();
 
-            [[nodiscard]] r<> parse_and_invoke(std::vector<std::string_view> const &values) override;
+            [[nodiscard]] r<std::string> parse_and_invoke(std::vector<std::string_view> const &values) override;
 
             [[nodiscard]] std::string signature() const override;
 
@@ -237,10 +246,10 @@ namespace ka {
         public:
             shell() = default;
 
-            template <class R, is_parsable... Args>
+            template <class R, parsable... Args>
             void register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
-            template <class R, class T, is_parsable... Args>
+            template <class R, class T, parsable... Args>
             void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             void repl(console &c) const;
@@ -369,47 +378,47 @@ namespace ka {
         regular<void>::regular(std::string_view token_main_, std::string_view token_alternate_)
             : token_main{token_main_}, token_alternate{token_alternate_} {}
 
-        template <is_parsable T>
+        template <parsable T>
         template <class U>
         typed_argument<T>::typed_argument(std::enable_if_t<std::is_same_v<U, bool>, flag> flag_)
             : argument{argument_type::flag, flag_.token_main, flag_.token_alternate}, default_value{flag_.default_value} {}
 
-        template <is_parsable T>
+        template <parsable T>
         typed_argument<T>::typed_argument(positional pos_)
             : argument{argument_type::positional, pos_.name, {}}, default_value{} {}
 
-        template <is_parsable T>
+        template <parsable T>
         typed_argument<T>::typed_argument(regular<void> reg_)
             : argument{argument_type::regular, reg_.token_main, reg_.token_alternate}, default_value{} {}
 
-        template <is_parsable T>
+        template <parsable T>
         typed_argument<T>::typed_argument(regular<T> reg_)
             : argument{argument_type::regular, reg_.token_main, reg_.token_alternate}, default_value{reg_.default_value} {}
 
-        template <is_parsable T>
+        template <parsable T>
         typed_argument<T>::typed_argument(std::string_view token_main_)
             : argument{argument_type::regular, token_main_, {}}, default_value{std::nullopt} {}
 
-        template <is_parsable T>
+        template <parsable T>
         template <class U>
         typed_argument<T>::typed_argument(std::enable_if_t<not std::is_constructible_v<std::string_view, U>, std::string_view> token_main_, U default_value_)
             : argument{argument_type::regular, token_main_, {}}, default_value{default_value_} {}
 
-        template <is_parsable T>
+        template <parsable T>
         template <class U>
         typed_argument<T>::typed_argument(std::enable_if_t<not std::is_constructible_v<std::string_view, U>, std::string_view> token_main_, std::string_view token_alternate_)
             : argument{argument_type::regular, token_main_, token_alternate_}, default_value{std::nullopt} {}
 
-        template <is_parsable T>
+        template <parsable T>
         typed_argument<T>::typed_argument(std::string_view token_main_, std::string_view token_alternate_, T default_value_)
             : argument{argument_type::regular, token_main_, token_alternate_}, default_value{default_value_} {}
 
-        template <is_parsable T>
+        template <parsable T>
         std::string typed_argument<T>::help_string() const {
             return argument::help_string(traits::type_name<T>().data, default_value ? parser<T>::to_string(*default_value) : "");
         }
 
-        template <is_parsable T>
+        template <parsable T>
         std::string typed_argument<T>::signature_string() const {
             if (default_value) {
                 return argument::signature_string(parser<T>::to_string(*default_value));
@@ -418,7 +427,7 @@ namespace ka {
             }
         }
 
-        template <is_parsable T>
+        template <parsable T>
         r<T> typed_argument<T>::parse(std::optional<std::string_view> value) const {
             if (value == std::nullopt) {
                 if (type == argument_type::positional or default_value == std::nullopt) {
@@ -542,25 +551,25 @@ namespace ka {
             }
         }
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
               util::target_method<R, T, Args...>{obj_, fn_} {}
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         command<R, T, Args...>::command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
               util::target_method<R, T, Args...>{fn_} {}
 
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         r<Args...> command<R, T, Args...>::parse(std::vector<std::string_view> const &values) const {
             return parse(std::index_sequence_for<Args...>{}, values);
         }
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         template <std::size_t... Is>
         [[nodiscard]] r<Args...> command<R, T, Args...>::parse(std::index_sequence<Is...>, std::vector<std::string_view> const &values) const {
             if constexpr (sizeof...(Is) == 0) {
@@ -574,17 +583,21 @@ namespace ka {
             }
         }
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         template <std::size_t... Is>
         R command<R, T, Args...>::invoke(std::index_sequence<Is...>, r<Args...> args) {
             return (*this)(std::forward<Args>(std::get<Is>(*args))...);
         }
 
-        template <class R, class T, is_parsable... Args>
-        r<> command<R, T, Args...>::parse_and_invoke(std::vector<std::string_view> const &values) {
+        template <parse_can_output R, class T, parsable... Args>
+        r<std::string> command<R, T, Args...>::parse_and_invoke(std::vector<std::string_view> const &values) {
             if (auto r_args = parse(std::index_sequence_for<Args...>{}, values); r_args) {
-                invoke(std::index_sequence_for<Args...>{}, std::move(r_args));
-                return mlab::result_success;
+                if constexpr (std::is_void_v<R>) {
+                    invoke(std::index_sequence_for<Args...>{}, std::move(r_args));
+                    return {};
+                } else {
+                    return parser<R>::to_string(invoke(std::index_sequence_for<Args...>{}, std::move(r_args)));
+                }
             } else {
                 return r_args.error();
             }
@@ -601,22 +614,22 @@ namespace ka {
             }
         }// namespace util
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         std::string command<R, T, Args...>::signature() const {
             return util::signature_impl(std::index_sequence_for<Args...>{}, *this);
         }
 
-        template <class R, class T, is_parsable... Args>
+        template <parse_can_output R, class T, parsable... Args>
         std::string command<R, T, Args...>::help() const {
             return util::help_impl(std::index_sequence_for<Args...>{}, name, *this);
         }
 
-        template <class R, is_parsable... Args>
+        template <class R, parsable... Args>
         void shell::register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
             _cmds.push_back(std::make_unique<command<R, util::void_struct, Args...>>(name, fn, std::move(arg_seq)));
         }
 
-        template <class R, class T, is_parsable... Args>
+        template <class R, class T, parsable... Args>
         void shell::register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
             _cmds.push_back(std::make_unique<command<R, T, Args...>>(name, &obj, fn, std::move(arg_seq)));
         }

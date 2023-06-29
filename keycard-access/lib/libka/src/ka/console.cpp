@@ -331,12 +331,32 @@ namespace ka {
                     values.emplace_back(pargv[i]);
                 }
                 // Try parsing
-                if (const auto r = called_cmd->parse_and_invoke(values); not r) {
+                if (const auto r = called_cmd->parse_and_invoke(values); r) {
+                    ESP_LOGI("KA", "Completed with status: %s", r->c_str());
+                } else {
                     if (r.error() == error::help_invoked) {
                         auto h = called_cmd->help();
                         std::printf("%s\n\n", h.c_str());
+
+                    } else {
+                        ESP_LOGI("KA", "Failed with status: %s", to_string(r.error()));
                     }
                 }
+            }
+        }
+
+        const char *to_string(error e) {
+            switch (e) {
+                case error::parse:
+                    return "parsing error";
+                case error::help_invoked:
+                    return "requested help";
+                case error::unrecognized:
+                    return "unknown argument specified";
+                case error::missing:
+                    return "missing argument";
+                default:
+                    return nullptr;
             }
         }
     }// namespace cmd
