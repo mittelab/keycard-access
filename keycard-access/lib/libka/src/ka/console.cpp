@@ -12,10 +12,13 @@
 namespace ka {
 
     std::string console::read_line(std::string_view prompt) const {
-        auto reply = linenoise(prompt.data());
-        std::string retval{reply};
-        linenoiseFree(reply);
-        return retval;
+        if (auto reply = linenoise(prompt.data()); reply == nullptr) {
+            return {};
+        } else {
+            std::string retval{reply};
+            linenoiseFree(reply);
+            return retval;
+        }
     }
 
     console::console() {
