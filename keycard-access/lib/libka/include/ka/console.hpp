@@ -553,7 +553,10 @@ namespace ka {
         std::string parser<T>::to_string(T const &value) {
             static_assert(util::is_std_to_stringable<T> or std::is_same_v<T, std::string> or std::is_same_v<T, std::string_view>,
                           "You must implement a specialization of parser<T>::to_string for this type.");
-            if constexpr (util::is_std_to_stringable<T>) {
+            if constexpr (std::is_same_v<T, bool>) {
+                // Override 0/1
+                return value ? "true" : "false";
+            } else if constexpr (util::is_std_to_stringable<T>) {
                 return std::to_string(value);
             } else if constexpr (std::is_same_v<T, std::string_view>) {
                 // Requires explicit conversion
