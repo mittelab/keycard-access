@@ -2,7 +2,10 @@
 // Created by spak on 6/14/23.
 //
 
+#include <ka/console.hpp>
 #include <ka/device.hpp>
+
+using namespace ka::cmd_literals;
 
 namespace ka {
     device::device() : _kp{}, _ota{}, _device_ns{} {
@@ -115,6 +118,36 @@ namespace ka {
         auto &wf = wifi::instance();
         wf.reconfigure(ssid, password);
         return wf.ensure_connected();
+    }
+    namespace cmd {
+        template <>
+        struct parser<release_info> {
+            [[nodiscard]] static std::string to_string(release_info const &ri) {
+                return concatenate({"New release! ", ri.semantic_version.to_string(), ", url: ", ri.firmware_url});
+            }
+        };
+        template <>
+        struct parser<fw_info> {
+            [[nodiscard]] static std::string to_string(fw_info const &fi) {
+                return fi.to_string();
+            }
+        };
+    }
+
+    void device::register_commands(cmd::shell &sh) {
+        sh.register_command("wifi-connect", *this, &device::connect_wifi, {"ssid"_pos, "password"_pos});
+        sh.register_command("wifi-test", *this, &device::test_wifi, {});
+        sh.register_command("wifi-is-configured", *this, &device::is_wifi_configured, {});
+        sh.register_command("wifi-get-ssid", *this, &device::get_wifi_ssid, {});
+        sh.register_command("update-is-automated", *this, &device::updates_automatically, {});
+        sh.register_command("update-set-automated", *this, &device::set_update_automatically, {"toggle"_pos});
+        sh.register_command("update-get-channel", *this, &device::update_channel, {});
+        sh.register_command("update-set-channel", *this, &device::set_update_channel, {"channel"_pos, ka::cmd::flag{"test", true}});
+        // Weird overload situation, cast to disambiguate!!
+        sh.register_command("update-now", *this, static_cast<void (device::*)()>(&device::update_firmware), {});
+        sh.register_command("update-manually", *this, static_cast<void (device::*)(std::string_view)>(&device::update_firmware), {"firmware-url"_pos});
+        sh.register_command("update-check-only", *this, &device::check_for_updates, {});
+        sh.register_command("update-get-current-version", *this, &device::get_firmware_info, {});
     }
 
 }// namespace ka

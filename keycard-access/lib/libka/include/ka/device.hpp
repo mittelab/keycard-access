@@ -11,6 +11,10 @@
 #include <ka/wifi.hpp>
 
 namespace ka {
+    namespace cmd {
+        class shell;
+    }
+
     class device {
         key_pair _kp;
         ota_watch _ota;
@@ -41,6 +45,8 @@ namespace ka {
         [[nodiscard]] std::optional<std::string> get_wifi_ssid() const;
         [[nodiscard]] bool test_wifi();
         bool connect_wifi(std::string_view ssid, std::string_view password);
+
+        void register_commands(cmd::shell &sh);
     };
 }// namespace ka
 
