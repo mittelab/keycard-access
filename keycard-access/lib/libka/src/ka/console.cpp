@@ -332,7 +332,7 @@ namespace ka {
                 }
                 // Try parsing
                 if (const auto r = called_cmd->parse_and_invoke(values); r) {
-                    ESP_LOGI("KA", "Completed with status: %s", r->c_str());
+                    std::printf("%s\n", r->c_str());
                 } else {
                     if (r.error() == error::help_invoked) {
                         auto h = called_cmd->help();
