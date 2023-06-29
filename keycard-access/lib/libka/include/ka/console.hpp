@@ -145,6 +145,11 @@ namespace ka {
         template <class T>
         concept parsable = parse_can_input<T> and parse_can_output<T>;
 
+        template <class T>
+        struct parser<std::optional<T>> {
+            [[nodiscard]] static std::string to_string(std::optional<T> const &value);
+        };
+
         template <parsable T>
         struct typed_argument : argument {
             using value_type = T;
@@ -554,6 +559,15 @@ namespace ka {
             } else {
                 return value;
             }
+        }
+
+        template <class T>
+        std::string parser<std::optional<T>>::to_string(std::optional<T> const &value) {
+            if (value) {
+                static_assert(parse_can_output<T>);
+                return parser<T>::to_string(*value);
+            }
+            return "<no value>";
         }
 
         template <parse_can_output R, class T, parsable... Args>
