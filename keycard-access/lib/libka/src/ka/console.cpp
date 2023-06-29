@@ -8,13 +8,15 @@
 #include <esp_vfs_dev.h>
 #include <ka/console.hpp>
 #include <linenoise/linenoise.h>
+#include <mutex>
 
 namespace ka {
 
-    std::string console::read_line(std::string_view prompt) const {
+    std::optional<std::string> console::read_line(std::string_view prompt) const {
         if (auto reply = linenoise(prompt.data()); reply == nullptr) {
-            return {};
+            return std::nullopt;
         } else {
+            // We handle the memory from now onwards
             std::string retval{reply};
             linenoiseFree(reply);
             return retval;
@@ -22,23 +24,21 @@ namespace ka {
     }
 
     console::console() {
-
-        /* Drain stdout before reconfiguring it */
+        // Drain stdout before reconfiguring it
         std::fflush(stdout);
         fsync(fileno(stdout));
 
-        /* Disable buffering on stdin */
+        // Disable buffering on stdin
         std::setvbuf(stdin, nullptr, _IONBF, 0);
 
-        /* Minicom, screen, idf_monitor send CR when ENTER key is pressed */
+        // Minicom, screen, idf_monitor send CR when ENTER key is pressed
         esp_vfs_dev_uart_port_set_rx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CR);
-        /* Move the caret to the beginning of the next line on '\n' */
+        // Move the caret to the beginning of the next line on '\n'
         esp_vfs_dev_uart_port_set_tx_line_endings(CONFIG_ESP_CONSOLE_UART_NUM, ESP_LINE_ENDINGS_CRLF);
 
 
-        /* Configure UART. Note that REF_TICK is used so that the baud rate remains
-         * correct while APB frequency is changing in light sleep mode.
-         */
+        // Configure UART. Note that REF_TICK is used so that the baud rate remains
+        // correct while APB frequency is changing in light sleep mode.
         const uart_config_t uart_config = {
             .baud_rate = CONFIG_ESP_CONSOLE_UART_BAUDRATE,
             .data_bits = UART_DATA_8_BITS,
@@ -53,15 +53,15 @@ namespace ka {
 #endif
         };
 
-        /* Install UART driver for interrupt-driven reads and writes */
+        // Install UART driver for interrupt-driven reads and writes
         ESP_ERROR_CHECK(uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM,
                                             256, 0, 0, nullptr, 0));
         ESP_ERROR_CHECK(uart_param_config(CONFIG_ESP_CONSOLE_UART_NUM, &uart_config));
 
-        /* Tell VFS to use UART driver */
+        // Tell VFS to use UART driver
         esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
 
-        /* Initialize the console */
+        // Initialize the console
         esp_console_config_t console_config = {
             .max_cmdline_length = 256,
             .max_cmdline_args = 8,
@@ -229,8 +229,41 @@ namespace ka {
         }
 
 
+        void shell::linenoise_free_hints(void *data) {
+            char *strdata = reinterpret_cast<char *>(data);
+            delete[] strdata;
+        }
+
+        namespace {
+            [[nodiscard]] shell const *&active_shell() {
+                static shell const *_active = nullptr;
+                return _active;
+            }
+        }// namespace
+
+        struct shell::activate_on_linenoise {
+            explicit activate_on_linenoise(shell const &sh) {
+                active_shell() = &sh;
+                linenoiseSetCompletionCallback(&shell::linenoise_completion);
+                linenoiseSetHintsCallback(&shell::linenoise_hints);
+                linenoiseSetFreeHintsCallback(&shell::linenoise_free_hints);
+            }
+
+            ~activate_on_linenoise() {
+                linenoiseSetFreeHintsCallback(nullptr);
+                linenoiseSetHintsCallback(nullptr);
+                linenoiseSetCompletionCallback(nullptr);
+                active_shell() = nullptr;
+            }
+        };
+
+
         void shell::linenoise_completion(const char *typed, linenoiseCompletions *lc) {
-            for (auto const &pcmd : instance()._cmds) {
+            if (active_shell() == nullptr) {
+                ESP_LOGE("KA", "No shell is active!");
+                return;
+            }
+            for (auto const &pcmd : active_shell()->_cmds) {
                 if (pcmd->name.starts_with(typed)) {
                     linenoiseAddCompletion(lc, pcmd->name.data());
                 }
@@ -238,8 +271,12 @@ namespace ka {
         }
 
         char *shell::linenoise_hints(const char *typed, int *color, int *bold) {
+            if (active_shell() == nullptr) {
+                ESP_LOGE("KA", "No shell is active!");
+                return nullptr;
+            }
             const std::string typed_s = typed;
-            for (auto const &pcmd : instance()._cmds) {
+            for (auto const &pcmd : active_shell()->_cmds) {
                 if (typed_s.starts_with(pcmd->name)) {
                     auto s = pcmd->signature();
                     char *retval = new char[s.size() + 1]{/* zero-initialize */};
@@ -251,27 +288,24 @@ namespace ka {
             return nullptr;
         }
 
-        void shell::linenoise_free_hints(void *data) {
-            char *strdata = reinterpret_cast<char *>(data);
-            delete[] strdata;
-        }
-
-        shell &shell::instance() {
-            static shell _shell{};
-            return _shell;
-        }
-
         void shell::repl(console &c) const {
             constexpr unsigned max_args = 10;
 
-            linenoiseSetCompletionCallback(&linenoise_completion);
-            linenoiseSetHintsCallback(&linenoise_hints);
-            linenoiseSetFreeHintsCallback(&linenoise_free_hints);
+            // Make sure only one shell can enter repl
+            static std::mutex unique_shell_lock{};
+            std::unique_lock<std::mutex> lock{unique_shell_lock, std::try_to_lock};
 
-            while (true) {
-                auto s = c.read_line();
+            if (not lock) {
+                ESP_LOGE("KA", "A REPL shell instance is already active.");
+                return;
+            }
+
+            // RAII register callbacks
+            activate_on_linenoise activate{*this};
+
+            for (auto s = c.read_line(); s; s = c.read_line()) {
                 auto pargv = std::make_unique<char *[]>(max_args);
-                const std::size_t argc = esp_console_split_argv(s.data(), pargv.get(), max_args);
+                const std::size_t argc = esp_console_split_argv(s->data(), pargv.get(), max_args);
                 if (argc == 0) {
                     continue;
                 }
@@ -304,10 +338,6 @@ namespace ka {
                     }
                 }
             }
-
-            linenoiseSetFreeHintsCallback(nullptr);
-            linenoiseSetHintsCallback(nullptr);
-            linenoiseSetCompletionCallback(nullptr);
         }
     }// namespace cmd
 }// namespace ka

@@ -24,7 +24,7 @@ namespace ka {
         console &operator=(console const &) = delete;
         console &operator=(console &&) noexcept = delete;
 
-        [[nodiscard]] std::string read_line(std::string_view prompt = "> ") const;
+        [[nodiscard]] std::optional<std::string> read_line(std::string_view prompt = "> ") const;
 
         ~console();
     };
@@ -211,13 +211,15 @@ namespace ka {
         class shell {
             std::vector<std::unique_ptr<command_base>> _cmds;
 
+            struct activate_on_linenoise;
+
             static void linenoise_completion(const char *typed, linenoiseCompletions *lc);
             static char *linenoise_hints(const char *typed, int *color, int *bold);
             static void linenoise_free_hints(void *data);
 
+        public:
             shell() = default;
 
-        public:
             template <class R, class... Args>
             void register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
@@ -225,8 +227,6 @@ namespace ka {
             void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             void repl(console &c) const;
-
-            static shell &instance();
         };
 
     }// namespace cmd
