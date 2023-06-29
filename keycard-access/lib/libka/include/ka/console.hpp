@@ -563,11 +563,15 @@ namespace ka {
         template <class R, class T, is_parsable... Args>
         template <std::size_t... Is>
         [[nodiscard]] r<Args...> command<R, T, Args...>::parse(std::index_sequence<Is...>, std::vector<std::string_view> const &values) const {
-            if (auto r_map = argument::map_values(values, {std::get<Is>(*this)...}); r_map) {
-                return mlab::concat_result(std::get<Is>(*this).parse((*r_map)[Is].second)...);
+            if constexpr (sizeof...(Is) == 0) {
+                return mlab::result_success;
             } else {
-                return r_map.error();
-            };
+                if (auto r_map = argument::map_values(values, {std::get<Is>(*this)...}); r_map) {
+                    return mlab::concat_result(std::get<Is>(*this).parse((*r_map)[Is].second)...);
+                } else {
+                    return r_map.error();
+                }
+            }
         }
 
         template <class R, class T, is_parsable... Args>
