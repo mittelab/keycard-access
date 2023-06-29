@@ -252,6 +252,8 @@ namespace ka {
             static char *linenoise_hints(const char *typed, int *color, int *bold);
             static void linenoise_free_hints(void *data);
 
+            void help() const;
+
         public:
             shell() = default;
 
@@ -263,6 +265,8 @@ namespace ka {
 
             template <class R = void, class T, parsable... Args>
             void register_command(std::string_view name, T const &obj, R (T::*fn)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq);
+
+            void register_help_command(std::string_view name = "help");
 
             void repl(console &c) const;
         };

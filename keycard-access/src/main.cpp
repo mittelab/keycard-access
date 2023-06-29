@@ -21,9 +21,10 @@ extern "C" void app_main() {
 
     ka::console console;
     ka::cmd::shell sh;
+    sh.register_help_command();
     this_device.register_commands(sh);
 
-    ESP_LOGI(LOG_PFX, "Entering shell:");
+    ESP_LOGI(LOG_PFX, "Entering shell, type 'help' for help:");
 
     sh.repl(console);
 

@@ -359,5 +359,23 @@ namespace ka {
                     return nullptr;
             }
         }
+
+        void shell::help() const {
+            std::printf("Listing all known commands:\n");
+            std::vector<std::string> signatures;
+            signatures.reserve(_cmds.size());
+            for (auto const &cmd : _cmds) {
+                signatures.push_back(concatenate({cmd->name, " ", cmd->signature()}));
+            }
+            std::sort(std::begin(signatures), std::end(signatures));
+            for (std::size_t i = 0; i < signatures.size(); ++i) {
+                std::printf("%2d. %s\n", i + 1, signatures[i].c_str());
+            }
+            std::printf("\nTo get more details, type <command> --help.\n");
+        }
+
+        void shell::register_help_command(std::string_view name) {
+            register_command(name, *this, &shell::help, {});
+        }
     }// namespace cmd
 }// namespace ka
