@@ -13,6 +13,8 @@
 #include <string_view>
 #include <vector>
 
+struct linenoiseCompletions;
+
 namespace ka {
     class console {
     public:
@@ -30,9 +32,9 @@ namespace ka {
     };
 
     namespace cmd_literals {
-        auto operator""_pos(const char *name, std::size_t);
-        auto operator""_flag(const char *name, std::size_t);
-        auto operator""_arg(const char *name, std::size_t);
+        inline auto operator""_pos(const char *name, std::size_t);
+        inline auto operator""_flag(const char *name, std::size_t);
+        inline auto operator""_arg(const char *name, std::size_t);
     }// namespace cmd_literals
 
     namespace cmd {
@@ -256,10 +258,10 @@ namespace ka {
             template <class R, parsable... Args>
             void register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
-            template <class R, class T, parsable... Args>
+            template <class R = void, class T, parsable... Args>
             void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
-            template <class R, class T, parsable... Args>
+            template <class R = void, class T, parsable... Args>
             void register_command(std::string_view name, T const &obj, R (T::*fn)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq);
 
             void repl(console &c) const;
