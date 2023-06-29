@@ -147,14 +147,20 @@ namespace ka {
 
         namespace traits {
             template <class T>
-            struct is_typed_argument;
+            struct is_typed_argument : std::false_type {};
 
-            template <class T, class... Args>
-            struct types_to_typed_argument_tuple;
+            template <class T>
+            struct is_typed_argument<typed_argument<T>> : std::true_type {};
         }// namespace traits
 
         template <class T>
         concept is_typed_argument_v = traits::is_typed_argument<T>::value;
+
+        template <class... Args>
+        using typed_arguments_tuple_t = std::tuple<typed_argument<Args>...>;
+
+        template <is_typed_argument_v... TArgs>
+        using typed_arguments_result_t = r<typename TArgs::value_type...>;
 
         /**
          * @tparam TArgs
@@ -163,7 +169,8 @@ namespace ka {
          * @return Given TArgs = typed_argument<T1>, ..., typed_argument<Tn>, returns r<T1, ..., Tn>.
          */
         template <is_typed_argument_v... TArgs>
-        [[nodiscard]] auto parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values);
+        [[nodiscard]] typed_arguments_result_t<TArgs...> parse_from_string(std::tuple<TArgs...> const &targs,
+                                                                           std::vector<std::string_view> const &values);
 
         struct command_base {
             std::string_view name;
@@ -184,24 +191,20 @@ namespace ka {
         }// namespace util
 
         template <class R, class T = util::void_struct, class... Args>
-        struct command final : command_base, traits::types_to_typed_argument_tuple<Args...>::type {
-            util::target_method<R, T, Args...> tm;
+        struct command final : command_base, typed_arguments_tuple_t<Args...>, util::target_method<R, T, Args...> {
 
-            using traits::types_to_typed_argument_tuple<Args...>::type::type;
+            explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
-            explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq);
-
-            explicit command(std::string_view name, R (*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq);
+            explicit command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             [[nodiscard]] auto parse(std::vector<std::string_view> const &values) const;
 
-            R invoke_with_tuple(std::tuple<Args...> &&tpl);
-
-            R operator()(Args... args);
+            using util::target_method<R, T, Args...>::operator();
 
             [[nodiscard]] r<> parse_and_invoke(std::vector<std::string_view> const &values) override;
 
             [[nodiscard]] std::string signature() const override;
+
             [[nodiscard]] std::string help() const override;
         };
 
@@ -216,10 +219,10 @@ namespace ka {
 
         public:
             template <class R, class... Args>
-            void register_command(std::string_view name, R (*fn)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq);
+            void register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             template <class R, class T, class... Args>
-            void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq);
+            void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             void repl(console &c) const;
 
@@ -232,38 +235,6 @@ namespace ka {
 namespace ka::cmd {
 
     namespace traits {
-        template <class T, class... Args>
-        struct types_to_result_tuple {
-            using type = decltype(std::tuple_cat(std::declval<std::tuple<r<T>>>(), std::declval<typename types_to_result_tuple<Args...>::type>()));
-        };
-
-        template <class T>
-        struct types_to_result_tuple<T> {
-            using type = std::tuple<r<T>>;
-        };
-
-        static_assert(std::is_same_v<types_to_result_tuple<int>::type, std::tuple<r<int>>>);
-        static_assert(std::is_same_v<types_to_result_tuple<int, float>::type, std::tuple<r<int>, r<float>>>);
-
-        template <class T, class... Args>
-        struct types_to_typed_argument_tuple {
-            using type = decltype(std::tuple_cat(std::declval<std::tuple<typed_argument<T>>>(), std::declval<typename types_to_typed_argument_tuple<Args...>::type>()));
-        };
-
-        template <class T>
-        struct types_to_typed_argument_tuple<T> {
-            using type = std::tuple<typed_argument<T>>;
-        };
-
-        static_assert(std::is_same_v<types_to_typed_argument_tuple<int>::type, std::tuple<typed_argument<int>>>);
-        static_assert(std::is_same_v<types_to_typed_argument_tuple<int, float>::type, std::tuple<typed_argument<int>, typed_argument<float>>>);
-
-        template <class T>
-        struct is_typed_argument : std::false_type {};
-
-        template <class T>
-        struct is_typed_argument<typed_argument<T>> : std::true_type {};
-
         template <std::size_t N>
         struct fixed_size_string {
             char data[N];
@@ -273,12 +244,12 @@ namespace ka::cmd {
             }
 
             /**
-                 * @note It's possible to automatically deduct the size when passing string literals as follows:
-                 * @code
-                 *  constexpr fixed_size_string(const char s[N]);
-                 * @endcode
-                 */
-            constexpr fixed_size_string(const char *s) {
+             * @note It's possible to automatically deduct the size when passing string literals as follows:
+             * @code
+             *  constexpr fixed_size_string(const char s[N]);
+             * @endcode
+             */
+            constexpr explicit fixed_size_string(const char *s) : data{} {
                 std::size_t i = 0;
                 for (; i < N - 1; ++i) {
                     if (s[i] == '\0') {
@@ -319,28 +290,15 @@ namespace ka::cmd {
                 return fixed_size_string<1>{""};
             }
         }
-
-        template <ka::cmd::is_typed_argument_v T, ka::cmd::is_typed_argument_v... Args>
-        struct typed_args_to_result_tuple {
-            using type = typename mlab::concat_result_t<r<typename T::value_type>, typename typed_args_to_result_tuple<Args...>::type>;
-        };
-
-        template <ka::cmd::is_typed_argument_v T>
-        struct typed_args_to_result_tuple<T> {
-            using type = r<typename T::value_type>;
-        };
-
-        static_assert(std::is_same_v<typed_args_to_result_tuple<typed_argument<int>>::type, r<int>>);
-        static_assert(std::is_same_v<typed_args_to_result_tuple<typed_argument<int>, typed_argument<float>>::type, r<int, float>>);
     }// namespace traits
 
     namespace util {
         struct void_struct {
             /**
-                 * @note This is needed because to use automated template argument resolution, we need to have in the cctor of
-                 * @ref command all the parameters available; this means we must be able to spell T::*method, and that cannot
-                 * be done with anything that is not a struct type.
-                 */
+             * @note This is needed because to use automated template argument resolution, we need to have in the cctor of
+             * @ref command all the parameters available; this means we must be able to spell T::*method, and that cannot
+             * be done with anything that is not a struct type.
+             */
         };
 
         template <class R, class T, class... Args>
@@ -353,11 +311,7 @@ namespace ka::cmd {
 
             target_method(target_ptr_t target_, fn_ptr_t method_) : target{target_}, method{method_} {}
 
-            auto invoke_with_tuple(std::tuple<Args...> &&args) {
-                return ((*target).*method)(std::forward<Args>(std::get<Args>(args))...);
-            }
-
-            auto operator()(Args... args) {
+            auto operator()(Args &&...args) {
                 return ((*target).*method)(std::forward<Args>(args)...);
             }
         };
@@ -370,11 +324,7 @@ namespace ka::cmd {
 
             explicit target_method(fn_ptr_t method_) : method{method_} {}
 
-            auto invoke_with_tuple(std::tuple<Args...> &&args) {
-                return (*method)(std::forward<Args>(std::get<Args>(args))...);
-            }
-
-            auto operator()(Args... args) {
+            auto operator()(Args &&...args) {
                 return method(std::forward<Args>(args)...);
             }
         };
@@ -540,14 +490,16 @@ namespace ka::cmd {
     }
 
     template <class R, class T, class... Args>
-    command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq)
-        : command_base{name}, traits::types_to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
-          tm{obj_, fn_} {}
+    command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
+        : command_base{name},
+          typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
+          util::target_method<R, T, Args...>{obj_, fn_} {}
 
     template <class R, class T, class... Args>
-    command<R, T, Args...>::command(std::string_view name, R (*fn_)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq)
-        : command_base{name}, traits::types_to_typed_argument_tuple<Args...>::type{std::move(arg_seq)},
-          tm{fn_} {}
+    command<R, T, Args...>::command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
+        : command_base{name},
+          typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
+          util::target_method<R, T, Args...>{fn_} {}
 
 
     template <class R, class T, class... Args>
@@ -556,19 +508,9 @@ namespace ka::cmd {
     }
 
     template <class R, class T, class... Args>
-    R command<R, T, Args...>::invoke_with_tuple(std::tuple<Args...> &&tpl) {
-        return tm.invoke_with_tuple(std::move(tpl));
-    }
-
-    template <class R, class T, class... Args>
-    R command<R, T, Args...>::operator()(Args... args) {
-        return tm(std::forward<Args>(args)...);
-    }
-
-    template <class R, class T, class... Args>
     r<> command<R, T, Args...>::parse_and_invoke(std::vector<std::string_view> const &values) {
         if (auto r_args = parse(values); r_args) {
-            invoke_with_tuple(std::move(*r_args));
+            (*this)(std::forward<Args>(std::get<Args>(std::move(*r_args)))...);
             return mlab::result_success;
         } else {
             return r_args.error();
@@ -576,73 +518,50 @@ namespace ka::cmd {
     }
 
     namespace util {
-        template <std::size_t StartIdx = 0, ka::cmd::is_typed_argument_v... TArgs>
-        constexpr auto parse_tail(std::tuple<TArgs...> const &targs, value_argument_map const &vmap) {
-            auto ith_r = std::get<StartIdx>(targs).parse(vmap[StartIdx].second);
-            if constexpr (StartIdx >= sizeof...(TArgs) - 1) {
-                return ith_r;
-            } else {
-                return mlab::concat_result(ith_r, parse_tail<StartIdx + 1, TArgs...>(targs, vmap));
-            }
+        template <std::size_t... Is>
+        [[nodiscard]] auto zip_parse(std::index_sequence<Is...>, auto const &template_args_tpl, value_argument_map const &mapping) {
+            return mlab::concat_result(std::get<Is>(template_args_tpl).parse(mapping[Is].second)...);
         }
-
-        static_assert(std::is_same_v<
-                      decltype(parse_tail(std::declval<std::tuple<typed_argument<int>, typed_argument<float>>>(), std::declval<value_argument_map>())),
-                      r<int, float>>);
-        static_assert(std::is_same_v<
-                      decltype(parse_tail(std::declval<std::tuple<typed_argument<int>, typed_argument<float>, typed_argument<std::string>>>(), std::declval<value_argument_map>())),
-                      r<int, float, std::string>>);
 
     }// namespace util
 
     template <is_typed_argument_v... TArgs>
-    auto parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values) {
-        using result_v = traits::typed_args_to_result_tuple<TArgs...>::type;
+    typed_arguments_result_t<TArgs...> parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values) {
         if (auto r_map = argument::map_values(values, {std::get<TArgs>(targs)...}); r_map) {
-            return util::parse_tail<0, TArgs...>(targs, std::move(*r_map));
+            return util::zip_parse(std::index_sequence_for<TArgs...>{}, targs, *r_map);
         } else {
-            return result_v{r_map.error()};
+            return r_map.error();
         };
     }
 
-    static_assert(std::is_same_v<
-                  decltype(parse_from_string(std::declval<std::tuple<typed_argument<int>, typed_argument<float>>>(), std::declval<std::vector<std::string_view>>())),
-                  r<int, float>>);
-    static_assert(std::is_same_v<
-                  decltype(parse_from_string(std::declval<std::tuple<typed_argument<int>, typed_argument<float>, typed_argument<std::string>>>(), std::declval<std::vector<std::string_view>>())),
-                  r<int, float, std::string>>);
+    namespace util {
+        template <is_typed_argument_v... TArgs>
+        [[nodiscard]] std::string signature_impl(std::tuple<TArgs...> const &targs) {
+            return concatenate({"", std::get<TArgs>(targs).signature_string()...}, " ");
+        }
+        template <is_typed_argument_v... TArgs>
+        [[nodiscard]] std::string help_impl(std::string_view cmd_name, std::tuple<TArgs...> const &targs) {
+            return concatenate({cmd_name, std::get<TArgs>(targs).help_string()...}, "\n    ");
+        }
+    }// namespace util
 
     template <class R, class T, class... Args>
     std::string command<R, T, Args...>::signature() const {
-        std::vector<std::string> strs;
-        strs.reserve(sizeof...(Args) + 1);
-        strs.emplace_back("");
-        std::apply([&](auto const &...targs) {
-            (strs.push_back(targs.signature_string()), ...);
-        },
-                   static_cast<traits::types_to_typed_argument_tuple<Args...>::type const &>(*this));
-        return concatenate_strings(strs, " ");
+        return util::signature_impl(*this);
     }
 
     template <class R, class T, class... Args>
     std::string command<R, T, Args...>::help() const {
-        std::vector<std::string> strs;
-        strs.reserve(sizeof...(Args) + 1);
-        strs.push_back(std::string{name});
-        std::apply([&](auto const &...targs) {
-            (strs.push_back(targs.help_string()), ...);
-        },
-                   static_cast<traits::types_to_typed_argument_tuple<Args...>::type const &>(*this));
-        return concatenate_strings(strs, "\n    ");
+        return util::help_impl(name, *this);
     }
 
     template <class R, class... Args>
-    void shell::register_command(std::string_view name, R (*fn)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq) {
+    void shell::register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
         _cmds.push_back(std::make_unique<command<R, util::void_struct, Args...>>(name, fn, std::move(arg_seq)));
     }
 
     template <class R, class T, class... Args>
-    void shell::register_command(std::string_view name, T &obj, R (T::*fn)(Args...), traits::types_to_typed_argument_tuple<Args...>::type arg_seq) {
+    void shell::register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
         _cmds.push_back(std::make_unique<command<R, T, Args...>>(name, &obj, fn, std::move(arg_seq)));
     }
 
