@@ -23,7 +23,11 @@ extern "C" void app_main() {
     ka::cmd::shell sh;
     this_device.register_commands(sh);
 
+    ESP_LOGI(LOG_PFX, "Entering shell:");
+
     sh.repl(console);
+
+    ESP_LOGI(LOG_PFX, "Exiting shell.");
 
     vTaskSuspend(nullptr);
 }
