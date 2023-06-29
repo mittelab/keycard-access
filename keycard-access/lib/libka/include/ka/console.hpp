@@ -599,6 +599,7 @@ namespace ka {
         template <parse_can_output R, class T, parsable... Args>
         template <std::size_t... Is>
         [[nodiscard]] r<Args...> command<R, T, Args...>::parse(std::index_sequence<Is...>, std::vector<std::string_view> const &values) const {
+            static_assert(sizeof...(Is) == sizeof...(Args));
             if constexpr (sizeof...(Is) == 0) {
                 return mlab::result_success;
             } else {
@@ -613,7 +614,13 @@ namespace ka {
         template <parse_can_output R, class T, parsable... Args>
         template <std::size_t... Is>
         R command<R, T, Args...>::invoke(std::index_sequence<Is...>, r<Args...> args) {
-            return (*this)(std::forward<Args>(std::get<Is>(*args))...);
+            static_assert(sizeof...(Is) == sizeof...(Args));
+            // Special treatment for one parameter
+            if constexpr (sizeof...(Is) == 1) {
+                return (*this)(std::forward<Args>(*args)...);
+            } else {
+                return (*this)(std::forward<Args>(std::get<Is>(*args))...);
+            }
         }
 
         template <parse_can_output R, class T, parsable... Args>
