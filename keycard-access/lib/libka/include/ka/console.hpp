@@ -187,7 +187,7 @@ namespace ka {
             [[nodiscard]] virtual std::string signature() const = 0;
             [[nodiscard]] virtual std::string help() const = 0;
 
-            ~command_base() = default;
+            virtual ~command_base() = default;
         };
 
         namespace util {
@@ -406,13 +406,13 @@ namespace ka {
 
         template <is_parsable T>
         std::string typed_argument<T>::help_string() const {
-            return argument::help_string(traits::type_name<T>().data, default_value ? std::to_string(*default_value) : "");
+            return argument::help_string(traits::type_name<T>().data, default_value ? parser<T>::to_string(*default_value) : "");
         }
 
         template <is_parsable T>
         std::string typed_argument<T>::signature_string() const {
             if (default_value) {
-                return argument::signature_string(std::to_string(*default_value));
+                return argument::signature_string(parser<T>::to_string(*default_value));
             } else {
                 return argument::signature_string(traits::type_name<T>().data);
             }
@@ -459,7 +459,8 @@ namespace ka {
                             std::is_same_v<T, unsigned int> or std::is_same_v<T, unsigned long> or
                             std::is_same_v<T, long long> or std::is_same_v<T, unsigned long long> or
                             std::is_same_v<T, float> or std::is_same_v<T, double> or
-                            std::is_same_v<T, bool> or std::is_same_v<T, std::string>,
+                            std::is_same_v<T, bool> or std::is_same_v<T, std::string> or
+                            std::is_same_v<T, std::string_view>,
                     "You must implement a specialization of parser<T>::parse for this type.");
 
             // We need the c_str
@@ -506,6 +507,8 @@ namespace ka {
                 }
             } else if constexpr (std::is_same_v<T, std::string>) {
                 return std::string{value};
+            } else if constexpr (std::is_same_v<T, std::string_view>) {
+                return value;
             } else if constexpr (std::is_same_v<T, bool>) {
                 std::string v{p};
                 std::transform(std::begin(v), std::end(v), std::begin(v), ::tolower);
@@ -527,10 +530,13 @@ namespace ka {
 
         template <class T>
         std::string parser<T>::to_string(T const &value) {
-            static_assert(util::is_std_to_stringable<T> or std::is_same_v<T, std::string>,
+            static_assert(util::is_std_to_stringable<T> or std::is_same_v<T, std::string> or std::is_same_v<T, std::string_view>,
                           "You must implement a specialization of parser<T>::to_string for this type.");
             if constexpr (util::is_std_to_stringable<T>) {
                 return std::to_string(value);
+            } else if constexpr (std::is_same_v<T, std::string_view>) {
+                // Requires explicit conversion
+                return std::string{value};
             } else {
                 return value;
             }
