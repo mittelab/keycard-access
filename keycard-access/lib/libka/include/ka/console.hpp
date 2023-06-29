@@ -576,42 +576,30 @@ namespace ka::cmd {
     }
 
     namespace util {
-        template <class... Args>
-        constexpr auto concat_results_from_tuple(std::tuple<Args...> tpl) {
-            return mlab::concat_result(std::get<Args>(tpl)...);
-        }
-
-        static_assert(std::is_same_v<decltype(concat_results_from_tuple(std::declval<std::tuple<r<int>, r<float>>>())), r<int, float>>);
-        static_assert(std::is_same_v<decltype(concat_results_from_tuple(std::declval<std::tuple<r<int>, r<float>, r<std::string>>>())), r<int, float, std::string>>);
-
         template <std::size_t StartIdx = 0, ka::cmd::is_typed_argument_v... TArgs>
         constexpr auto parse_tail(std::tuple<TArgs...> const &targs, value_argument_map const &vmap) {
-            auto ith_tuple = std::make_tuple(std::get<StartIdx>(targs).parse(vmap[StartIdx].second));
+            auto ith_r = std::get<StartIdx>(targs).parse(vmap[StartIdx].second);
             if constexpr (StartIdx >= sizeof...(TArgs) - 1) {
-                return ith_tuple;
+                return ith_r;
             } else {
-                return std::tuple_cat(std::move(ith_tuple), parse_tail<StartIdx + 1, TArgs...>(targs, vmap));
+                return mlab::concat_result(ith_r, parse_tail<StartIdx + 1, TArgs...>(targs, vmap));
             }
         }
 
         static_assert(std::is_same_v<
                       decltype(parse_tail(std::declval<std::tuple<typed_argument<int>, typed_argument<float>>>(), std::declval<value_argument_map>())),
-                      std::tuple<r<int>, r<float>>>);
+                      r<int, float>>);
         static_assert(std::is_same_v<
                       decltype(parse_tail(std::declval<std::tuple<typed_argument<int>, typed_argument<float>, typed_argument<std::string>>>(), std::declval<value_argument_map>())),
-                      std::tuple<r<int>, r<float>, r<std::string>>>);
+                      r<int, float, std::string>>);
 
     }// namespace util
 
     template <is_typed_argument_v... TArgs>
     auto parse_from_string(std::tuple<TArgs...> const &targs, std::vector<std::string_view> const &values) {
         using result_v = traits::typed_args_to_result_tuple<TArgs...>::type;
-        std::vector<std::reference_wrapper<const argument>> argrefs;
-        argrefs.reserve(sizeof...(TArgs));
-        // Use apply with a generic lambda to downclass all arguments to their common base reference.
-        std::apply([&](auto const &...arg) { (argrefs.push_back(std::cref(arg)), ...); }, targs);
-        if (auto r_map = argument::map_values(values, argrefs); r_map) {
-            return util::concat_results_from_tuple(util::parse_tail<0, TArgs...>(targs, std::move(*r_map)));
+        if (auto r_map = argument::map_values(values, {std::get<TArgs>(targs)...}); r_map) {
+            return util::parse_tail<0, TArgs...>(targs, std::move(*r_map));
         } else {
             return result_v{r_map.error()};
         };
