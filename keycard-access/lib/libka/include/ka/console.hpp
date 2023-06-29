@@ -210,6 +210,8 @@ namespace ka {
 
             explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
+            explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq);
+
             explicit command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
             [[nodiscard]] r<Args...> parse(std::vector<std::string_view> const &values) const;
@@ -251,6 +253,9 @@ namespace ka {
 
             template <class R, class T, parsable... Args>
             void register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
+
+            template <class R, class T, parsable... Args>
+            void register_command(std::string_view name, T const &obj, R (T::*fn)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq);
 
             void repl(console &c) const;
         };
@@ -323,16 +328,16 @@ namespace ka {
         namespace util {
             struct void_struct {
                 /**
-             * @note This is needed because to use automated template argument resolution, we need to have in the cctor of
-             * @ref command all the parameters available; this means we must be able to spell T::*method, and that cannot
-             * be done with anything that is not a struct type.
-             */
+                 * @note This is needed because to use automated template argument resolution, we need to have in the cctor of
+                 * @ref command all the parameters available; this means we must be able to spell T::*method, and that cannot
+                 * be done with anything that is not a struct type.
+                 */
             };
 
             template <class R, class T, class... Args>
             struct target_method {
                 using target_ptr_t = T *;
-                using fn_ptr_t = R (T::*)(Args...);
+                using fn_ptr_t = std::conditional_t<std::is_const_v<T>, R (T::*)(Args...) const, R (T::*)(Args...)>;
 
                 target_ptr_t target;
                 fn_ptr_t method;
@@ -558,6 +563,14 @@ namespace ka {
               util::target_method<R, T, Args...>{obj_, fn_} {}
 
         template <parse_can_output R, class T, parsable... Args>
+        command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq)
+            : command_base{name},
+              typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
+              util::target_method<R, T, Args...>{obj_, fn_} {
+            static_assert(std::is_const_v<T>, "You must explicitly mark the class type as const to call its const methods.");
+        }
+
+        template <parse_can_output R, class T, parsable... Args>
         command<R, T, Args...>::command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
@@ -632,6 +645,11 @@ namespace ka {
         template <class R, class T, parsable... Args>
         void shell::register_command(std::string_view name, T &obj, R (T::*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
             _cmds.push_back(std::make_unique<command<R, T, Args...>>(name, &obj, fn, std::move(arg_seq)));
+        }
+
+        template <class R, class T, parsable... Args>
+        void shell::register_command(std::string_view name, T const &obj, R (T::*fn)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq) {
+            _cmds.push_back(std::make_unique<command<R, const T, Args...>>(name, &obj, fn, std::move(arg_seq)));
         }
     }// namespace cmd
 
