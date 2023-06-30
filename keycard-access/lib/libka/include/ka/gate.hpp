@@ -28,10 +28,14 @@ namespace ka {
         [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
     };
 
-    struct gate_config {
+
+    struct gate_credentials {
+        pub_key gate_pub_key = {};
+        gate_base_key app_base_key = {};
+    };
+
+    struct gate_config : gate_credentials {
         gate_id id{};
-        pub_key gate_pub_key;
-        gate_base_key app_base_key{};
     };
 
     /**

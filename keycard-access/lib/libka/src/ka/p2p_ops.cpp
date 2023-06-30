@@ -122,7 +122,7 @@ namespace ka::p2p {
             }
             gate_base_key base_key{};
             std::copy(std::begin(*r), std::end(*r), std::begin(base_key));
-            km.register_gate({gid, pub_key{comm.peer_pub_key()}, base_key});
+            km.save_gate({{pub_key{comm.peer_pub_key()}, base_key}, gid});
         }
 
         return mlab::result_success;

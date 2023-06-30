@@ -22,8 +22,12 @@ namespace ka {
 
         void configure();
 
+    protected:
+        [[nodiscard]] inline key_pair const &keys() const;
+
     public:
         device();
+        virtual ~device() = default;
 
         device(device const &) = delete;
         device(device &&) = delete;
@@ -46,8 +50,14 @@ namespace ka {
         [[nodiscard]] bool test_wifi();
         bool connect_wifi(std::string_view ssid, std::string_view password);
 
-        void register_commands(cmd::shell &sh);
+        virtual void register_commands(cmd::shell &sh);
     };
 }// namespace ka
+
+namespace ka {
+    const key_pair &device::keys() const {
+        return _kp;
+    }
+}
 
 #endif//KEYCARD_ACCESS_DEVICE_HPP

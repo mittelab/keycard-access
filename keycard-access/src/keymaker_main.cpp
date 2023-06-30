@@ -21,7 +21,8 @@ namespace ka {
             ka::keymaker km;
 
             keymaker_responder() : km{} {
-                km._kp.generate_from_pwhash("foobar");
+                ESP_LOGE("KA", "Overriding public key for testing purposes!");
+                const_cast<key_pair &>(km.keys()).generate_from_pwhash("foobar");
             }
 
             std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
@@ -51,7 +52,7 @@ namespace ka {
                 if (const auto r_deployed = token.is_deployed_correctly(km); r_deployed) {
                     ESP_LOGI(LOG_PFX, "Token was deployed.");
                     bool all_gates_were_enrolled = true;
-                    for (ka::gate_config const &cfg : km._gates) {
+                    for (auto const &cfg : km.gate_configs()) {
                         if (const auto r_enrolled = token.is_gate_enrolled_correctly(km, cfg); r_enrolled) {
                             if (r_enrolled->first) {
                                 ESP_LOGI(LOG_PFX, "Gate %lu was already enrolled.", std::uint32_t(cfg.id));

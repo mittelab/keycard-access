@@ -52,6 +52,10 @@ namespace ka {
         [[nodiscard]] static constexpr std::pair<bool, gate_id> from_app_and_file(desfire::app_id aid, desfire::file_id fid);
     };
 
+    constexpr std::strong_ordering operator<=>(gate_id gid1, gate_id gid2);
+    constexpr std::strong_ordering operator<=>(std::uint32_t gid1, gate_id gid2);
+    constexpr std::strong_ordering operator<=>(gate_id gid1, std::uint32_t gid2);
+
     constexpr gate_id operator""_g(unsigned long long int id);
 
     template <class... Tn>
@@ -163,6 +167,16 @@ namespace ka {
         constexpr unsigned long long int lo = std::numeric_limits<gate_id>::min();
         constexpr unsigned long long int hi = std::numeric_limits<gate_id>::max();
         return gate_id{std::uint32_t(std::clamp(id, lo, hi))};
+    }
+
+    constexpr std::strong_ordering operator<=>(gate_id gid1, gate_id gid2) {
+        return std::uint32_t{gid1} <=> std::uint32_t{gid2};
+    }
+    constexpr std::strong_ordering operator<=>(std::uint32_t gid1, gate_id gid2) {
+        return gid1 <=> std::uint32_t{gid2};
+    }
+    constexpr std::strong_ordering operator<=>(gate_id gid1, std::uint32_t gid2) {
+        return std::uint32_t{gid1} <=> gid2;
     }
 
     constexpr std::pair<desfire::app_id, desfire::file_id> gate_id::app_and_file() const {
