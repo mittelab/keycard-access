@@ -90,13 +90,14 @@ namespace ut {
             test_bundle() {
                 kp = key_pair{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
                                0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
-                km._kp = kp;
+                // TODO Ensure this is done with friedliness
+                const_cast<key_pair &>(km.keys()) = kp;
                 g0.regenerate_keys();
                 g13.regenerate_keys();
                 g0.configure(0_g, "Gate 0", pub_key{km.keys().raw_pk()});
                 g13.configure(13_g, "Gate 13", pub_key{km.keys().raw_pk()});
-                g0_cfg = gate_config{g0.id(), pub_key{g0.keys().raw_pk()}, g0.app_base_key()};
-                g13_cfg = gate_config{g13.id(), pub_key{g13.keys().raw_pk()}, g13.app_base_key()};
+                g0_cfg = gate_config{{pub_key{g0.keys().raw_pk()}, g0.app_base_key()}, g0.id()};
+                g13_cfg = gate_config{{pub_key{g13.keys().raw_pk()}, g13.app_base_key()}, g13.id()};
                 id = identity{{}, "Test user", "Test deployer"};
             }
         } const bundle{};
