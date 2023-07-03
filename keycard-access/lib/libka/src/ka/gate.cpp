@@ -41,7 +41,7 @@ namespace ka {
         desfire::key_body<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         util::pack_token_id(token_id),
+                         pack_token_id(token_id),
                          app_master_key_context.data(),
                          data())) {
             ESP_LOGE("KA", "Unable to derive root key.");

@@ -77,7 +77,7 @@ namespace ka {
         desfire::key_body<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         util::pack_token_id(id),
+                         pack_token_id(id),
                          root_key_context.data(),
                          raw_sk().data())) {
             ESP_LOGE("KA", "Unable to derive root key.");
@@ -89,7 +89,7 @@ namespace ka {
         desfire::key_body<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
                          derived_key_data.data(), derived_key_data.size(),
-                         util::pack_token_id(id),
+                         pack_token_id(id),
                          gate_key_context.data(),
                          raw_sk().data())) {
             ESP_LOGE("KA", "Unable to derive gate app master key.");

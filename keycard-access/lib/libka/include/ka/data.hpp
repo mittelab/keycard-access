@@ -9,6 +9,8 @@
 #include <desfire/data.hpp>
 #include <desfire/keys.hpp>
 #include <desfire/tag.hpp>
+#include <ka/misc.hpp>
+#include <neargye/semver.hpp>
 
 namespace ka {
 
@@ -81,6 +83,13 @@ namespace ka {
     using hash_type = mlab::tagged_array<hash_tag, 64>;
     using token_id = mlab::tagged_array<token_id_tag, 7>;
 
+    [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
+
+    [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);
+
+    [[nodiscard]] constexpr std::uint32_t pack_app_id(desfire::app_id aid);
+    [[nodiscard]] constexpr desfire::app_id unpack_app_id(std::uint32_t aid);
+
     struct identity {
         token_id id;
         std::string holder;
@@ -93,19 +102,39 @@ namespace ka {
         [[nodiscard]] bool operator!=(identity const &other) const;
     };
 
-    namespace util {
+    struct fw_info {
+        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
+        std::string commit_info{};
+        std::string app_name{};
+        std::string platform_code{};
+
+        [[nodiscard]] static fw_info get_running_fw();
+
         /**
-         * Escapes backslashes and newlines (with a backslash in front).
+         * Returns a string that prefixes every version of this firmware, given by "app_name-platform"
          */
-        [[nodiscard]] std::string escape(std::string const &text);
+        [[nodiscard]] std::string get_fw_bin_prefix() const;
 
-        [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
+        /**
+         * Returns true if and only if an OTA update has just occurred and the firmware was not verified yet.
+         * @see
+         *  - mark_running_fw_as_verified
+         *  - rollback_running_fw
+         */
+        [[nodiscard]] static bool is_running_fw_pending_verification();
 
-        [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);
+        /**
+         * Marks this firmware as safe and prevents rollback on the next boot.
+         */
+        static void running_fw_mark_verified();
 
-        [[nodiscard]] constexpr std::uint32_t pack_app_id(desfire::app_id aid);
-        [[nodiscard]] constexpr desfire::app_id unpack_app_id(std::uint32_t aid);
-    }// namespace util
+        /**
+         * Triggers rollback of the previous fw.
+         */
+        static void running_fw_rollback();
+
+        [[nodiscard]] std::string to_string() const;
+    };
 
 };// namespace ka
 
@@ -157,6 +186,14 @@ namespace std {
 
 namespace ka {
 
+    constexpr std::uint64_t pack_token_id(token_id id) {
+        std::uint64_t retval = 0;
+        for (auto b : id) {
+            retval = (retval << 8) | b;
+        }
+        return retval;
+    }
+
     constexpr gate_id::gate_id(std::uint32_t idx) : _idx{idx} {}
 
     constexpr gate_id::operator std::uint32_t() const {
@@ -180,7 +217,7 @@ namespace ka {
     }
 
     constexpr std::pair<desfire::app_id, desfire::file_id> gate_id::app_and_file() const {
-        return {util::unpack_app_id(aid_range_begin + _idx / gates_per_app), desfire::file_id(1 + _idx % gates_per_app)};
+        return {unpack_app_id(aid_range_begin + _idx / gates_per_app), desfire::file_id(1 + _idx % gates_per_app)};
     }
 
     constexpr desfire::app_id gate_id::app() const {
@@ -196,7 +233,7 @@ namespace ka {
     }
 
     constexpr bool gate_id::is_gate_app(desfire::app_id aid) {
-        const auto n_aid = util::pack_app_id(aid);
+        const auto n_aid = pack_app_id(aid);
         return n_aid >= aid_range_begin and n_aid < aid_range_end;
     }
 
@@ -208,35 +245,21 @@ namespace ka {
         if (not is_gate_app_and_file(aid, fid)) {
             return {false, std::numeric_limits<gate_id>::max()};
         }
-        const auto n_aid = util::pack_app_id(aid);
+        const auto n_aid = pack_app_id(aid);
         return {true, gate_id{(n_aid - aid_range_begin) * gates_per_app + fid - 1}};
     }
 
-    namespace util {
 
-        constexpr std::uint64_t pack_token_id(token_id id) {
-            std::uint64_t retval = 0;
-            for (auto b : id) {
-                retval = (retval << 8) | b;
-            }
-            return retval;
-        }
-
-        constexpr std::uint32_t pack_app_id(desfire::app_id aid) {
-            return (std::uint32_t(aid[0]) << 16) |
-                   (std::uint32_t(aid[1]) << 8) |
-                   std::uint32_t(aid[2]);
-        }
-        constexpr desfire::app_id unpack_app_id(std::uint32_t aid) {
-            return {std::uint8_t((aid >> 16) & 0xff),
-                    std::uint8_t((aid >> 8) & 0xff),
-                    std::uint8_t(aid & 0xff)};
-        }
-        template <std::size_t N>
-        std::string hex_string(std::array<std::uint8_t, N> const &a) {
-            return hex_string(mlab::make_range<std::uint8_t const *>(a.data(), a.data() + a.size()));
-        }
-    }// namespace util
+    constexpr std::uint32_t pack_app_id(desfire::app_id aid) {
+        return (std::uint32_t(aid[0]) << 16) |
+               (std::uint32_t(aid[1]) << 8) |
+               std::uint32_t(aid[2]);
+    }
+    constexpr desfire::app_id unpack_app_id(std::uint32_t aid) {
+        return {std::uint8_t((aid >> 16) & 0xff),
+                std::uint8_t((aid >> 8) & 0xff),
+                std::uint8_t(aid & 0xff)};
+    }
 
 }// namespace ka
 #endif//KEYCARD_ACCESS_DATA_HPP

@@ -409,7 +409,7 @@ namespace ka {
     r<> member_token::list_gate_apps_internal(bool check_app, Fn &&app_action) const {
         desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
         for (auto n_aid = gate_id::aid_range_begin; n_aid < gate_id::aid_range_end; ++n_aid) {
-            const auto aid = util::unpack_app_id(n_aid);
+            const auto aid = unpack_app_id(n_aid);
             if (check_app) {
                 if (const auto r = check_gate_app(aid, false); not r) {
                     if (r.error() == desfire::error::app_not_found) {
@@ -437,10 +437,10 @@ namespace ka {
     r<mlab::range<desfire::app_id>> member_token::list_gate_apps(bool check_app) const {
         auto last_aid = gate_id::aid_range_begin;
         TRY_SILENT(list_gate_apps_internal(check_app, [&](desfire::app_id aid) -> r<> {
-            last_aid = util::pack_app_id(aid);
+            last_aid = pack_app_id(aid);
             return mlab::result_success;
         }));
-        return mlab::make_range(gate_id::first_aid, util::unpack_app_id(last_aid + 1));
+        return mlab::make_range(gate_id::first_aid, unpack_app_id(last_aid + 1));
     }
 
     r<> member_token::ensure_gate_app(desfire::app_id aid, token_root_key const &rkey, gate_app_master_key const &mkey) {

@@ -9,7 +9,8 @@
 #include <condition_variable>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <neargye/semver.hpp>
+#include <ka/data.hpp>
+#include <ka/misc.hpp>
 #include <nlohmann/json.hpp>
 #include <thread>
 
@@ -74,54 +75,6 @@ namespace ka {
         [[nodiscard]] inline bool is_running() const;
         void stop();
     };
-
-    using datetime = std::chrono::time_point<std::chrono::system_clock>;
-
-    struct fw_info {
-        semver::version semantic_version{0, 0, 0, semver::prerelease::alpha, 0};
-        std::string commit_info{};
-        std::string app_name{};
-        std::string platform_code{};
-
-        [[nodiscard]] static fw_info get_running_fw();
-
-        /**
-         * Returns a string that prefixes every version of this firmware, given by "app_name-platform"
-         */
-        [[nodiscard]] std::string get_fw_bin_prefix() const;
-
-        /**
-         * Returns true if and only if an OTA update has just occurred and the firmware was not verified yet.
-         * @see
-         *  - mark_running_fw_as_verified
-         *  - rollback_running_fw
-         */
-        [[nodiscard]] static bool is_running_fw_pending_verification();
-
-        /**
-         * Marks this firmware as safe and prevents rollback on the next boot.
-         */
-        static void running_fw_mark_verified();
-
-        /**
-         * Triggers rollback of the previous fw.
-         */
-        static void running_fw_rollback();
-
-        [[nodiscard]] std::string to_string() const;
-    };
-
-    namespace utils {
-        /**
-         * Parse C++ dates using C's strptime.
-         */
-        [[nodiscard]] std::optional<datetime> strptime(std::string_view s, std::string_view fmt);
-
-        /**
-         * Formats C++ dates using C's strftime.
-         */
-        [[nodiscard]] std::string strftime(datetime const &dt, std::string_view fmt);
-    }// namespace utils
 
 }// namespace ka
 

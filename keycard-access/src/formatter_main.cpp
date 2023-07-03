@@ -39,7 +39,7 @@ namespace ka {
             }
 
             pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-                current_id = ka::util::id_from_nfc_id(target.nfcid);
+                current_id = ka::id_from_nfc_id(target.nfcid);
                 return desfire::tag_responder<desfire::esp32::default_cipher_provider>::interact(scanner, target);
             }
 

@@ -453,7 +453,7 @@ namespace ut {
 
                     r_gate_apps = token.list_gate_apps(false);
                     TEST_ASSERT(r_gate_apps);
-                    TEST_ASSERT(r_gate_apps->end() == ka::util::unpack_app_id(ka::util::pack_app_id(aid) + 1));
+                    TEST_ASSERT(r_gate_apps->end() == ka::unpack_app_id(ka::pack_app_id(aid) + 1));
                 }
                 TEST_ASSERT(desfire::fs::login_app(token.tag(), desfire::root_app, rkey));
                 TEST_ASSERT(token.tag().format_picc());
