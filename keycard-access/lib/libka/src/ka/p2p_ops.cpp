@@ -12,13 +12,30 @@
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
 
-
 namespace ka::p2p {
     namespace bits {
         static constexpr std::uint8_t command_code_configure = 0xcf;
-    }
+        static constexpr std::uint8_t command_hello = 0x00;
+    }// namespace bits
 
     namespace {
+
+        [[nodiscard]] r<> parse_return_byte(std::uint8_t b) {
+            switch (b) {
+                case 0x00:
+                    return mlab::result_success;
+                case static_cast<std::uint8_t>(error::unauthorized):
+                    return error::unauthorized;
+                case static_cast<std::uint8_t>(error::invalid):
+                    return error::invalid;
+                default:
+                    ESP_LOGE("KA", "Unknown result byte %02x", b);
+                    [[fallthrough]];
+                case static_cast<std::uint8_t>(error::malformed):
+                    return error::malformed;
+            }
+        }
+
         [[nodiscard]] pn532::nfcid_3t fabricate_nfcid(gate const &g) {
             return {
                     std::uint8_t(g.id() & 0xff),
@@ -139,4 +156,149 @@ namespace ka::p2p {
         secure_initiator comm{raw_comm, km.keys()};
         return bool(configure_gate_exchange(km, comm, gate_description));
     }
+
+    remote_gate_base::remote_gate_base(secure_initiator &remote_gate) : _remote_gate{remote_gate} {}
+
+    pub_key remote_gate_base::gate_public_key() const {
+        return pub_key{remote().peer_pub_key()};
+    }
+
+    r<gate_fw_info> remote_gate_base::hello_and_assert_protocol(std::uint8_t proto_version) {
+        auto r = remote_gate_base::hello();
+        if (r->proto_version != proto_version) {
+            ESP_LOGE("KA", "Mismatching protocol version %d", r->proto_version);
+            return error::invalid;
+        }
+        return r;
+    }
+
+    r<mlab::bin_data> remote_gate_base::command_response(mlab::bin_data const &command) {
+        if (auto r = remote().communicate(command, 5s); r) {
+            // Last byte identifies the status code
+            if (r->empty()) {
+                return error::malformed;
+            }
+            const auto status_b = r->back();
+            r->pop_back();
+            if (const auto r_status = parse_return_byte(status_b); r_status) {
+                return std::move(*r);
+            } else {
+                return r_status.error();
+            }
+        } else {
+            return channel_error_to_p2p_error(r.error());
+        }
+    }
+
+    bool remote_gate_base::assert_stream_healthy(mlab::bin_stream const &s) {
+        if (not s.eof()) {
+            ESP_LOGW("KA", "Stray %u bytes at the end of the stream.", s.remaining());
+            return false;
+        } else if (s.bad()) {
+            ESP_LOGW("KA", "Malformed or unreadable response.");
+            return false;
+        }
+        return true;
+    }
+
+    r<gate_fw_info> remote_gate_base::hello() {
+        return command_parse_response<gate_fw_info>(bits::command_hello);
+    }
+
+    namespace v0 {
+        enum struct commands : std::uint8_t {
+            _ = bits::command_hello,///< Reserved
+            get_registration_info,
+            register_gate,
+            reset_gate
+        };
+
+        r<registration_info> remote_gate::get_registration_info() {
+            return command_parse_response<registration_info>(commands::get_registration_info);
+        }
+
+        r<gate_fw_info> remote_gate::hello() {
+            return hello_and_assert_protocol(0);
+        }
+
+        r<> remote_gate::register_gate(gate_id requested_id) {
+            return command_parse_response<void>(commands::register_gate);
+        }
+
+        r<> remote_gate::reset_gate() {
+            return command_parse_response<void>(commands::reset_gate);
+        }
+    }// namespace v0
+
 }// namespace ka::p2p
+
+namespace mlab {
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_fw_info &fwinfo) {
+        s >> fwinfo.semantic_version;
+        s >> length_encoded >> fwinfo.commit_info;
+        s >> length_encoded >> fwinfo.app_name;
+        s >> length_encoded >> fwinfo.platform_code;
+        s >> fwinfo.proto_version;
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::gate_id &gid) {
+        std::uint32_t v{};
+        s >> lsb32 >> v;
+        if (not s.bad()) {
+            gid = ka::gate_id{v};
+        }
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::raw_pub_key &pk) {
+        s >> static_cast<std::array<std::uint8_t, ka::raw_pub_key::array_size> &>(pk);
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::registration_info &rinfo) {
+        s >> rinfo.id >> rinfo.km_pk;
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::pub_key &pk) {
+        ka::raw_pub_key rpk{};
+        s >> rpk;
+        if (not s.bad()) {
+            pk = ka::pub_key{rpk};
+        }
+        return s;
+    }
+
+    bin_stream &operator>>(length_encoded_wrapper w, std::string &str) {
+        auto &s = w.s;
+        if (s.bad() or s.remaining() < 4) {
+            s.set_bad();
+            return s;
+        }
+        std::uint32_t length = 0;
+        s >> mlab::lsb32 >> length;
+        if (s.bad()) {
+            return s;
+        }
+        if (s.remaining() < length) {
+            s.set_bad();
+            return s;
+        }
+        str = mlab::data_to_string(s.read(length));
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, semver::version &v) {
+        if (s.bad()) {
+            return s;
+        }
+        if (s.remaining() < 5) {
+            s.set_bad();
+            return s;
+        }
+
+        s >> v.major >> v.minor >> v.patch >> v.prerelease_type >> v.prerelease_number;
+        return s;
+    }
+}// namespace mlab
