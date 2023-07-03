@@ -26,7 +26,7 @@ namespace ka {
     /**
      * Only used for commands
      */
-    struct gate_info {
+    struct registerd_gate_info {
         gate_id id = {};
         std::string_view notes = {};
         std::optional<pub_key> public_key = std::nullopt;
@@ -46,7 +46,7 @@ namespace ka {
         void set_gate_notes(gate_id id, std::string notes);
         [[nodiscard]] bool is_gate_registered(gate_id id) const;
         [[nodiscard]] bool is_gate_configured(gate_id id) const;
-        [[nodiscard]] std::optional<gate_info> get_gate_info(gate_id id) const;
+        [[nodiscard]] std::optional<registerd_gate_info> get_gate_info(gate_id id) const;
         void print_gates() const;
 
         [[nodiscard]] inline std::vector<gate_data> const &gates() const;

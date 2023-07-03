@@ -46,17 +46,17 @@ namespace ka {
         return false;
     }
 
-    std::optional<gate_info> keymaker::get_gate_info(gate_id id) const {
+    std::optional<registerd_gate_info> keymaker::get_gate_info(gate_id id) const {
         if (const auto *gd = (*this)[id]; gd != nullptr) {
-            return gate_info{gd->id, gd->notes, gd->credentials != std::nullopt ? std::optional<pub_key>{gd->credentials->gate_pub_key} : std::nullopt};
+            return registerd_gate_info{gd->id, gd->notes, gd->credentials != std::nullopt ? std::optional<pub_key>{gd->credentials->gate_pub_key} : std::nullopt};
         }
         return std::nullopt;
     }
 
     namespace cmd {
         template <>
-        struct parser<gate_info> {
-            [[nodiscard]] static std::string to_string(gate_info const &gi) {
+        struct parser<registerd_gate_info> {
+            [[nodiscard]] static std::string to_string(registerd_gate_info const &gi) {
                 if (gi.is_configured()) {
                     return concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
                                         "Configured, public key ", mlab::data_to_hex_string(gi.public_key->raw_pk()), "\n",
