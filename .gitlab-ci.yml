@@ -82,7 +82,7 @@ check format:
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.bin"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.elf"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.map"
-      - "${PIO_PROJ_FOLDER}/.pio/build/config/sdkconfig.json"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/config/sdkconfig.json"
 
 
 build test firmware:
