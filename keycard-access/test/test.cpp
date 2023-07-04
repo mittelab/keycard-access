@@ -1,5 +1,4 @@
 #include <chrono>
-#include <desfire/esp32/cipher_provider.hpp>
 #include <desfire/esp32/utils.hpp>
 #include <ka/config.hpp>
 #include <ka/desfire_fs.hpp>
@@ -8,21 +7,18 @@
 #include <ka/keymaker.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
-#include <ka/p2p_ops.hpp>
+#include <mlab/strutils.hpp>
 #include <pn532/esp32/hsu.hpp>
 #include <thread>
 #include <unity.h>
 
-
 using namespace ka;
 using namespace std::chrono_literals;
-
-static const unsigned char plaintext[] = "The quick brown fox jumps over the lazy dog";
 
 namespace ut {
 
     void test_encrypt_decrypt() {
-        const mlab::bin_data message = mlab::bin_data::chain(plaintext);
+        const mlab::bin_data message = mlab::data_from_string("The quick brown fox jumps over the lazy dog");
         mlab::bin_data buffer = message;
 
         key_pair k1, k2;
