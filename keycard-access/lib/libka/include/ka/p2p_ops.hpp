@@ -54,12 +54,6 @@ namespace ka::p2p {
         template <class R, class... Args>
         [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(Args &&...args);
 
-        /**
-         * @todo Deprecate when mlab::bin_data::chain is fixed with folding expressions
-         */
-        template <class R>
-        [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(mlab::bin_data const &bd);
-
         [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &command);
 
     public:
@@ -175,12 +169,7 @@ namespace ka::p2p {
 
     template <class R, class... Args>
     std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(Args &&...args) {
-        return command_parse_response<R>(mlab::bin_data::chain(std::forward<Args>(args)...));
-    }
-
-    template <class R>
-    std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(mlab::bin_data const &bd) {
-        if (const auto r = command_response(bd); r) {
+        if (const auto r = command_response(mlab::bin_data::chain(std::forward<Args>(args)...)); r) {
             mlab::bin_stream s{*r};
             if constexpr (std::is_void_v<R>) {
                 if (assert_stream_healthy(s)) {

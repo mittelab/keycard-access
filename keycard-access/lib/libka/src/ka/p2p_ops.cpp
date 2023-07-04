@@ -232,12 +232,11 @@ namespace ka::p2p {
         }
 
         r<> remote_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
-            mlab::bin_data bd;
-            /**
-             * @todo When bin_data::chain is fixed with folding expressions, this should be passed to the other overload of command_parse_response
-             */
-            bd << mlab::prealloc{update_channel.size() + 6} << commands::set_update_settings << mlab::length_encoded << update_channel << automatic_updates;
-            return command_parse_response<void>(bd);
+            return command_parse_response<void>(
+                    mlab::prealloc{update_channel.size() + 6},
+                    commands::set_update_settings,
+                    mlab::length_encoded, update_channel,
+                    automatic_updates);
         }
 
 
@@ -246,14 +245,10 @@ namespace ka::p2p {
         }
 
         r<bool> remote_gate::connect_wifi(std::string_view ssid, std::string_view password) {
-            mlab::bin_data bd;
-            /**
-             * @todo When bin_data::chain is fixed with folding expressions, this should be passed to the other overload of command_parse_response
-             */
-            bd << mlab::prealloc{ssid.size() + password.size() + 9} << commands::connect_wifi
-               << mlab::length_encoded << ssid
-               << mlab::length_encoded << password;
-            return command_parse_response<bool>(bd);
+            return command_parse_response<bool>(mlab::prealloc{ssid.size() + password.size() + 9},
+                                                commands::connect_wifi,
+                                                mlab::length_encoded, ssid,
+                                                mlab::length_encoded, password);
         }
 
         r<gate_fw_info> remote_gate::hello() {
@@ -320,10 +315,7 @@ namespace mlab {
     }
 
     bin_data &operator<<(encode_length<bin_data> w, std::string_view s) {
-        /**
-         * @todo When this is available in Mittelib, use directly data_from_string
-         */
-        return w.s << mlab::lsb32 << w.s.size() << mlab::make_range(reinterpret_cast<std::uint8_t const *>(s.data()), reinterpret_cast<std::uint8_t const *>(s.data() + s.size()));
+        return w.s << mlab::lsb32 << w.s.size() << mlab::data_from_string(s);
     }
 
     bin_stream &operator>>(encode_length<bin_stream> w, std::string &str) {
