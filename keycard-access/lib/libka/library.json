@@ -18,7 +18,7 @@
   "frameworks": "espidf",
   "platforms": "espressif32",
   "dependencies": {
-    "mittelab/libSpookyAction": "^1.0.2",
+    "libSpookyAction": "^1.0.3",
     "mitteLib": "^1.0.5",
     "libModernJson": "^3.11.2",
     "libSemVer": "^0.3.0"
