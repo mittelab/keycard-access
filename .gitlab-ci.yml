@@ -75,14 +75,18 @@ check format:
     - cd "${PIO_PROJ_FOLDER}"
     # Remove the cached firmwares to ensure we will rebuild
     - rm -f .pio/build/${PIO_ENV}/*.{bin,elf,map}
-    - rm -f .pio/build/${PIO_ENV}/*flash*
+    - rm -f .pio/build/${PIO_ENV}/*flash_args
+    - rm -f .pio/build/${PIO_ENV}/flash_*_args
+    - rm -f .pio/build/${PIO_ENVflasher_args.json
   artifacts:
     paths:
       - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.bin"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.elf"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.map"
-      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*flash*"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*flash_args"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/flash_*_args"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/flasher_args.json"
 
 
 build test firmware:
