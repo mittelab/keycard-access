@@ -77,7 +77,7 @@ check format:
     - rm -f .pio/build/${PIO_ENV}/*.{bin,elf,map}
     - rm -f .pio/build/${PIO_ENV}/*flash_args
     - rm -f .pio/build/${PIO_ENV}/flash_*_args
-    - rm -f .pio/build/${PIO_ENVflasher_args.json
+    - rm -f .pio/build/${PIO_ENV}/flasher_args.json
   artifacts:
     paths:
       - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
