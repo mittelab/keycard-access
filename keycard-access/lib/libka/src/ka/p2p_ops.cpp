@@ -16,6 +16,7 @@ namespace ka::p2p {
     namespace bits {
         static constexpr std::uint8_t command_code_configure = 0xcf;
         static constexpr std::uint8_t command_hello = 0x00;
+        static constexpr std::uint8_t command_bye = 0x01;
     }// namespace bits
 
     namespace {
@@ -205,16 +206,54 @@ namespace ka::p2p {
         return command_parse_response<gate_fw_info>(bits::command_hello);
     }
 
+    void remote_gate_base::bye() {
+        void(command_parse_response<void>(bits::command_bye));
+    }
+
     namespace v0 {
         enum struct commands : std::uint8_t {
-            _ = bits::command_hello,///< Reserved
-            get_registration_info,
-            register_gate,
-            reset_gate
+            _reserved1 [[maybe_unused]] = bits::command_hello,///< Reserved, make sure it does not clash
+            _reserved2 [[maybe_unused]] = bits::command_bye,  ///< Reserved, make sure it does not clash
+            get_update_settings = 0x02,
+            set_update_settings = 0x03,
+            get_wifi_status = 0x04,
+            connect_wifi = 0x05,
+            get_registration_info = 0x06,
+            register_gate = 0x07,
+            reset_gate = 0x08,
         };
 
         r<registration_info> remote_gate::get_registration_info() {
             return command_parse_response<registration_info>(commands::get_registration_info);
+        }
+
+        r<update_settings> remote_gate::get_update_settings() {
+            return command_parse_response<update_settings>(commands::get_update_settings);
+        }
+
+        r<> remote_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
+            mlab::bin_data bd;
+            /**
+             * @todo When bin_data::chain is fixed with folding expressions, this should be passed to the other overload of command_parse_response
+             */
+            bd << mlab::prealloc{update_channel.size() + 6} << commands::set_update_settings << mlab::length_encoded << update_channel << automatic_updates;
+            return command_parse_response<void>(bd);
+        }
+
+
+        r<wifi_status> remote_gate::get_wifi_status() {
+            return command_parse_response<wifi_status>(commands::get_wifi_status);
+        }
+
+        r<bool> remote_gate::connect_wifi(std::string_view ssid, std::string_view password) {
+            mlab::bin_data bd;
+            /**
+             * @todo When bin_data::chain is fixed with folding expressions, this should be passed to the other overload of command_parse_response
+             */
+            bd << mlab::prealloc{ssid.size() + password.size() + 9} << commands::connect_wifi
+               << mlab::length_encoded << ssid
+               << mlab::length_encoded << password;
+            return command_parse_response<bool>(bd);
         }
 
         r<gate_fw_info> remote_gate::hello() {
@@ -261,6 +300,16 @@ namespace mlab {
         return s;
     }
 
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_settings &usettings) {
+        s >> length_encoded >> usettings.update_channel >> usettings.enable_automatic_update;
+        return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings) {
+        s >> length_encoded >> wfsettings.ssid >> wfsettings.operational;
+        return s;
+    }
+
     bin_stream &operator>>(bin_stream &s, ka::pub_key &pk) {
         ka::raw_pub_key rpk{};
         s >> rpk;
@@ -270,7 +319,14 @@ namespace mlab {
         return s;
     }
 
-    bin_stream &operator>>(length_encoded_wrapper w, std::string &str) {
+    bin_data &operator<<(encode_length<bin_data> w, std::string_view s) {
+        /**
+         * @todo When this is available in Mittelib, use directly data_from_string
+         */
+        return w.s << mlab::lsb32 << w.s.size() << mlab::make_range(reinterpret_cast<std::uint8_t const *>(s.data()), reinterpret_cast<std::uint8_t const *>(s.data() + s.size()));
+    }
+
+    bin_stream &operator>>(encode_length<bin_stream> w, std::string &str) {
         auto &s = w.s;
         if (s.bad() or s.remaining() < 4) {
             s.set_bad();

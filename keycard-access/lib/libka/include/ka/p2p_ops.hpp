@@ -54,6 +54,12 @@ namespace ka::p2p {
         template <class R, class... Args>
         [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(Args &&...args);
 
+        /**
+         * @todo Deprecate when mlab::bin_data::chain is fixed with folding expressions
+         */
+        template <class R>
+        [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(mlab::bin_data const &bd);
+
         [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &command);
 
     public:
@@ -62,6 +68,7 @@ namespace ka::p2p {
         [[nodiscard]] pub_key gate_public_key() const;
 
         [[nodiscard]] virtual r<gate_fw_info> hello();
+        virtual void bye();
 
         virtual ~remote_gate_base() = default;
     };
@@ -72,13 +79,33 @@ namespace ka::p2p {
             pub_key km_pk = {};
         };
 
-        struct remote_gate final : remote_gate_base {
+        struct update_settings {
+            std::string update_channel = {};
+            bool enable_automatic_update = false;
+        };
+
+        struct wifi_status {
+            /**
+             * Empty = no SSID.
+             */
+            std::string ssid = {};
+            bool operational = false;
+        };
+
+        struct remote_gate : remote_gate_base {
             using remote_gate_base::remote_gate_base;
 
             [[nodiscard]] r<gate_fw_info> hello() override;
-            [[nodiscard]] r<registration_info> get_registration_info();
-            [[nodiscard]] r<> register_gate(gate_id requested_id);
-            [[nodiscard]] r<> reset_gate();
+
+            [[nodiscard]] virtual r<update_settings> get_update_settings();
+            [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
+
+            [[nodiscard]] virtual r<wifi_status> get_wifi_status();
+            [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
+
+            [[nodiscard]] virtual r<registration_info> get_registration_info();
+            [[nodiscard]] virtual r<> register_gate(gate_id requested_id);
+            [[nodiscard]] virtual r<> reset_gate();
         };
     }// namespace v0
 
@@ -99,19 +126,25 @@ namespace mlab {
 
     constexpr length_encoded_t length_encoded{};
 
-    struct length_encoded_wrapper {
-        bin_stream &s;
+    template <class T = bin_stream>
+    struct encode_length {
+        T &s;
     };
 
-    inline length_encoded_wrapper operator>>(bin_stream &s, length_encoded_t);
+    inline encode_length<bin_stream> operator>>(bin_stream &s, length_encoded_t);
+    inline encode_length<bin_data> operator<<(bin_data &bd, length_encoded_t);
 
     bin_stream &operator>>(bin_stream &s, ka::p2p::gate_fw_info &fwinfo);
     bin_stream &operator>>(bin_stream &s, semver::version &v);
-    bin_stream &operator>>(length_encoded_wrapper w, std::string &str);
+    bin_stream &operator>>(encode_length<bin_stream> w, std::string &str);
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid);
     bin_stream &operator>>(bin_stream &s, ka::raw_pub_key &pk);
     bin_stream &operator>>(bin_stream &s, ka::pub_key &pk);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::registration_info &rinfo);
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_settings &usettings);
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
+
+    bin_data &operator<<(encode_length<bin_data> w, std::string_view s);
 }// namespace mlab
 
 namespace ka::p2p {
@@ -142,7 +175,12 @@ namespace ka::p2p {
 
     template <class R, class... Args>
     std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(Args &&...args) {
-        if (const auto r = command_response(mlab::bin_data::chain(std::forward<Args>(args)...)); r) {
+        return command_parse_response<R>(mlab::bin_data::chain(std::forward<Args>(args)...));
+    }
+
+    template <class R>
+    std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(mlab::bin_data const &bd) {
+        if (const auto r = command_response(bd); r) {
             mlab::bin_stream s{*r};
             if constexpr (std::is_void_v<R>) {
                 if (assert_stream_healthy(s)) {
@@ -166,8 +204,12 @@ namespace ka::p2p {
 }// namespace ka::p2p
 
 namespace mlab {
-    length_encoded_wrapper operator>>(bin_stream &s, length_encoded_t) {
+    encode_length<bin_stream> operator>>(bin_stream &s, length_encoded_t) {
         return {s};
+    }
+
+    encode_length<bin_data> operator<<(bin_data &bd, length_encoded_t) {
+        return {bd};
     }
 }// namespace mlab
 
