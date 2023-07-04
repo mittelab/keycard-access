@@ -9,6 +9,7 @@
 #include <ka/misc.hpp>
 #include <ka/ota.hpp>
 #include <ka/wifi.hpp>
+#include <mlab/strutils.hpp>
 
 #define TAG "KA-UPDATE"
 
@@ -61,7 +62,7 @@ namespace ka {
             }
 
             // What is the expected firmware name for this version?
-            const auto fw_name = concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
+            const auto fw_name = mlab::concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
 
             // Does it have the correct firmware version?
             for (auto const &link : entry["assets"]["links"]) {

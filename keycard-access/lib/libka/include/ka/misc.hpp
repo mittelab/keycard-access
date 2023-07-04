@@ -11,7 +11,6 @@
 #include <string>
 
 namespace ka {
-    [[nodiscard]] std::string concatenate(std::initializer_list<std::string_view> const &strs, std::string_view separator = "");
 
     using datetime = std::chrono::time_point<std::chrono::system_clock>;
 

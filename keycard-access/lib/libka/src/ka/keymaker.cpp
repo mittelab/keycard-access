@@ -58,11 +58,11 @@ namespace ka {
         struct parser<registerd_gate_info> {
             [[nodiscard]] static std::string to_string(registerd_gate_info const &gi) {
                 if (gi.is_configured()) {
-                    return concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
+                    return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
                                         "Configured, public key ", mlab::data_to_hex_string(gi.public_key->raw_pk()), "\n",
                                         "Notes: ", gi.notes.empty() ? "n/a" : gi.notes});
                 } else {
-                    return concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
+                    return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
                                         "Not configured.\nNotes: ", gi.notes.empty() ? "n/a" : gi.notes});
                 }
             }

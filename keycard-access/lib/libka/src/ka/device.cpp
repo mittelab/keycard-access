@@ -123,7 +123,7 @@ namespace ka {
         template <>
         struct parser<release_info> {
             [[nodiscard]] static std::string to_string(release_info const &ri) {
-                return concatenate({"New release! ", ri.semantic_version.to_string(), ", url: ", ri.firmware_url});
+                return mlab::concatenate({"New release! ", ri.semantic_version.to_string(), ", url: ", ri.firmware_url});
             }
         };
         template <>

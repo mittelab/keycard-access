@@ -137,7 +137,7 @@ namespace ka {
     }
 
     std::string fw_info::get_fw_bin_prefix() const {
-        return concatenate({app_name, "-", platform_code});
+        return mlab::concatenate({app_name, "-", platform_code});
     }
 
     fw_info fw_info::get_running_fw() {
@@ -159,9 +159,9 @@ namespace ka {
 
     std::string fw_info::to_string() const {
         if (commit_info.empty()) {
-            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string()});
+            return mlab::concatenate({app_name, "-", platform_code, "-", semantic_version.to_string()});
         } else {
-            return concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
+            return mlab::concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
         }
     }
 

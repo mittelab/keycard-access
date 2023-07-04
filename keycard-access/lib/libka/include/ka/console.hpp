@@ -8,6 +8,7 @@
 #include <functional>
 #include <ka/misc.hpp>
 #include <mlab/result.hpp>
+#include <mlab/strutils.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -649,11 +650,11 @@ namespace ka {
         namespace util {
             template <std::size_t... Is>
             [[nodiscard]] std::string signature_impl(std::index_sequence<Is...>, auto const &targs) {
-                return concatenate({"", std::get<Is>(targs).signature_string()...}, " ");
+                return mlab::concatenate({"", std::get<Is>(targs).signature_string()...}, " ");
             }
             template <std::size_t... Is>
             [[nodiscard]] std::string help_impl(std::index_sequence<Is...>, std::string_view cmd_name, auto const &targs) {
-                return concatenate({cmd_name, std::get<Is>(targs).help_string()...}, "\n    ");
+                return mlab::concatenate({cmd_name, std::get<Is>(targs).help_string()...}, "\n    ");
             }
         }// namespace util
 
