@@ -88,6 +88,9 @@ namespace ka {
             return _code;
         }
 
+        [[nodiscard]] std::string escape(std::string const &text) {
+            return mlab::replace_all(mlab::replace_all(text, "\\", "\\\\"), "\n", "\\\n");
+        }
     }// namespace
 
     std::string identity::string_representation() const {
