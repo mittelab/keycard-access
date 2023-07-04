@@ -19,7 +19,7 @@
   "platforms": "espressif32",
   "dependencies": {
     "mittelab/libSpookyAction": "^1.0.2",
-    "mittelab/mitteLib": "^1.0.4",
+    "mitteLib": "^1.0.5",
     "libModernJson": "^3.11.2",
     "libSemVer": "^0.3.0"
   }
