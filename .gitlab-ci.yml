@@ -74,12 +74,15 @@ check format:
     - git config --global --add safe.directory $CI_PROJECT_DIR
     - cd "${PIO_PROJ_FOLDER}"
     # Remove the cached firmwares to ensure we will rebuild
-    - rm -f .pio/build/${PIO_ENV}/*.{bin,elf}
+    - rm -f .pio/build/${PIO_ENV}/*.{bin,elf,map}
+    - rm -f .pio/build/${PIO_ENV}/flasher_args.json
   artifacts:
     paths:
       - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.bin"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.elf"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.map"
+      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/flasher_args.json"
 
 
 build test firmware:
