@@ -645,7 +645,7 @@ namespace ka {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto [aid, fid] = g.id().app_and_file();
             const auto key = g.app_base_key().derive_token_key(*r_id, g.id().key_no());
-            return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.programmer_pub_key(), check_app, check_file), r_id);
+            return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.keymaker_pk(), check_app, check_file), r_id);
         }
     }
 

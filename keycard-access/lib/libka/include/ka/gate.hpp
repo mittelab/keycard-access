@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <desfire/data.hpp>
 #include <ka/data.hpp>
+#include <ka/device.hpp>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
 
@@ -77,71 +78,65 @@ namespace ka {
         pn532::post_interaction interact_with_token(member_token &token) override;
     };
 
-    class keyed_gate_locator;
+    class gate final : public device {
+        gate_id _id = std::numeric_limits<gate_id>::max();
+        pub_key _km_pk = {};
+        gate_base_key _base_key = {};
 
-    class gate {
+        std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
+
     public:
-        gate() = default;
-        gate(gate const &) = delete;
-        gate(gate &&) = default;
-        gate &operator=(gate const &) = delete;
-        gate &operator=(gate &&) = default;
+        gate();
 
-        [[nodiscard]] inline bool is_configured() const;
-        [[nodiscard]] inline key_pair keys() const;
-        [[nodiscard]] inline pub_key programmer_pub_key() const;
-        [[nodiscard]] inline std::string description() const;
-        [[nodiscard]] inline gate_id id() const;
-        [[nodiscard]] inline gate_base_key app_base_key() const;
+        /**
+         * @addtogroup ActualMethods
+         * @{
+         */
 
-        void regenerate_keys();
-        void configure(gate_id id, std::string desc, pub_key prog_pub_key);
+        void reset();
 
-        void config_store(nvs::partition &partition) const;
-        [[nodiscard]] bool config_load(nvs::partition &partition);
-        static void config_clear(nvs::partition &partition);
+        /**
+         * @return `nullopt` if this gate was already configured.
+         */
+        [[nodiscard]] std::optional<gate_base_key> configure(gate_id gid, pub_key keymaker_pubkey);
 
-        void config_store() const;
-        [[nodiscard]] bool config_load();
-        static void config_clear();
+        /**
+         * @}
+         */
 
-        [[nodiscard]] static gate load_from_config(nvs::partition &partition);
-        [[nodiscard]] static gate load_from_config();
+        [[nodiscard]] gate_id id() const;
+        [[nodiscard]] bool is_configured() const;
+        [[nodiscard]] pub_key const &keymaker_pk() const;
+
+        /**
+         * @todo Make private?
+         */
+        [[nodiscard]] gate_base_key const &app_base_key() const;
+
+
+        /**
+         * @todo Make private?
+         */
+        using device::keys;
+
 
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
 
-        void log_public_gate_info() const;
+
+        /**
+         * @addtogroup Deprecated
+         * @{
+         */
+        [[deprecated]] void log_public_gate_info() const;
+        /**
+         * @}
+         */
 
     private:
-        gate_id _id = std::numeric_limits<gate_id>::max();
-        std::string _desc;
-        key_pair _kp;
-        pub_key _prog_pk;
-        gate_base_key _base_key{};
     };
 }// namespace ka
 
 namespace ka {
-    bool gate::is_configured() const {
-        return _id != std::numeric_limits<gate_id>::max();
-    }
-    key_pair gate::keys() const {
-        return _kp;
-    }
-    pub_key gate::programmer_pub_key() const {
-        return _prog_pk;
-    }
-    std::string gate::description() const {
-        return _desc;
-    }
-    gate_id gate::id() const {
-        return _id;
-    }
-
-    gate_base_key gate::app_base_key() const {
-        return _base_key;
-    }
-
 }// namespace ka
 
 #endif//KEYCARDACCESS_GATE_HPP

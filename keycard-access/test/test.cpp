@@ -802,10 +802,9 @@ namespace ut {
         gate g{};
         TEST_ASSERT(g.config_load());
         TEST_ASSERT_EQUAL(g.id(), bundle.g0.id());
-        TEST_ASSERT(g.description() == bundle.g0.description());
         TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), bundle.g0.keys().raw_pk().data(), raw_pub_key::array_size);
         TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), bundle.g0.keys().raw_sk().data(), raw_sec_key::array_size);
-        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.programmer_pub_key().raw_pk().data(), bundle.kp.raw_pk().data(), raw_pub_key::array_size);
+        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keymaker_pk().raw_pk().data(), bundle.kp.raw_pk().data(), raw_pub_key::array_size);
         gate::config_clear();
     }
 }// namespace ut

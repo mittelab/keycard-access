@@ -49,17 +49,6 @@ namespace ka {
         return gate_token_key{key_no, derived_key_data};
     }
 
-    void gate::configure(gate_id id, std::string desc, pub_key prog_pub_key) {
-        if (app_base_key() == gate_base_key{} or keys().raw_pk() == raw_pub_key{}) {
-            ESP_LOGE("KA", "Keys have not been generated for this gate! You must re-query the public key.");
-            regenerate_keys();
-        }
-        _id = id;
-        _desc = std::move(desc);
-        _prog_pk = prog_pub_key;
-    }
-
-
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
         if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {
             ESP_LOGI("KA", "Authenticated as %s.", r->first.holder.c_str());
@@ -120,145 +109,99 @@ namespace ka {
         ESP_LOGV("GATE", "Scan failed with error: %s", pn532::to_string(err));
     }
 
-    void gate::config_store(nvs::partition &partition) const {
-        ESP_LOGW("KA", "Saving gate configuration.");
-        auto ns = partition.open_namespc(ka_namespc);
-        if (ns == nullptr) {
-            ESP_LOGE("KA", "Unable to create or access NVS namespace.");
-            return;
-        }
-        const auto r_id = ns->set<std::uint32_t>(ka_gid, id());
-        const auto r_desc = ns->set<std::string>(ka_desc, description());
-        const auto r_prog_pk = ns->set<mlab::bin_data>(ka_prog_pk, mlab::bin_data::chain(programmer_pub_key().raw_pk()));
-        const auto r_sk = ns->set<mlab::bin_data>(ka_sk, mlab::bin_data::chain(keys().raw_sk()));
-        const auto r_base_key = ns->set<mlab::bin_data>(ka_base_key, mlab::bin_data::chain(app_base_key()));
-        const auto r_commit = ns->commit();
-        if (not(r_id and r_desc and r_prog_pk and r_sk and r_base_key and r_commit)) {
-            ESP_LOGE("KA", "Unable to save gate configuration.");
-        }
-    }
-
-    void gate::config_store() const {
-#ifndef CONFIG_NVS_ENCRYPTION
-        ESP_LOGW("KA", "Encryption is disabled!");
-#endif
-        auto &nvs = nvs::instance();
-        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
-            ESP_LOGE("KA", "NVS partition is not available.");
-        } else {
-            config_store(*partition);
-        }
-    }
-    bool gate::config_load() {
-#ifndef CONFIG_NVS_ENCRYPTION
-        ESP_LOGW("KA", "Encryption is disabled!");
-#endif
-        auto &nvs = nvs::instance();
-        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
-            ESP_LOGE("KA", "NVS partition is not available.");
-            return false;
-        } else {
-            return config_load(*partition);
-        }
-    }
-    void gate::config_clear() {
-#ifndef CONFIG_NVS_ENCRYPTION
-        ESP_LOGW("KA", "Encryption is disabled!");
-#endif
-        auto &nvs = nvs::instance();
-        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
-            ESP_LOGE("KA", "NVS partition is not available.");
-        } else {
-            config_clear(*partition);
-        }
-    }
-
-    gate gate::load_from_config() {
-#ifndef CONFIG_NVS_ENCRYPTION
-        ESP_LOGW("KA", "Encryption is disabled!");
-#endif
-        auto &nvs = nvs::instance();
-        if (auto partition = nvs.open_partition(NVS_DEFAULT_PART_NAME, nvs_encrypted); partition == nullptr) {
-            ESP_LOGE("KA", "NVS partition is not available.");
-            return gate{};
-        } else {
-            return load_from_config(*partition);
-        }
-    }
-
-    gate gate::load_from_config(nvs::partition &partition) {
-        gate g{};
-        void(g.config_load(partition));
-        return g;
-    }
-
-    void gate::regenerate_keys() {
-        *this = gate{};
-        _kp.generate_random();
-        randombytes_buf(_base_key.data(), _base_key.size());
-    }
-
-
-    namespace {
-        [[nodiscard]] nvs::r<mlab::bin_data> assert_size(nvs::r<mlab::bin_data> r_data, std::size_t size, const char *item) {
-            if (r_data and r_data->size() != size) {
-                ESP_LOGE("KA", "Invalid %s size %d, should be %d.", item, r_data->size(), size);
-                // Reject the result
-                r_data = nvs::error::invalid_length;
-            }
-            return r_data;
-        }
-    }// namespace
-
-    bool gate::config_load(nvs::partition &partition) {
-        auto ns = partition.open_namespc(ka_namespc);
-        if (ns == nullptr) {
-            return false;
-        }
-        ESP_LOGW("KA", "Loading gate configuration.");
-        const auto r_id = ns->get<std::uint32_t>(ka_gid);
-        const auto r_desc = ns->get<std::string>(ka_desc);
-        const auto r_prog_pk = assert_size(ns->get<mlab::bin_data>(ka_prog_pk), raw_pub_key::array_size, "programmer key");
-        const auto r_sk = assert_size(ns->get<mlab::bin_data>(ka_sk), raw_sec_key::array_size, "secret key");
-        const auto r_base_key = assert_size(ns->get<mlab::bin_data>(ka_base_key), gate_base_key::array_size, "gate app base key");
-        if (r_id and r_desc and r_prog_pk and r_sk and r_base_key) {
-            _id = gate_id{*r_id};
-            _desc = *r_desc;
-            // Trim the nul ending character
-            _desc.erase(std::find(std::begin(_desc), std::end(_desc), '\0'), std::end(_desc));
-            _kp = key_pair{r_sk->data_view()};
-            _prog_pk = pub_key{r_prog_pk->data_view()};
-            std::copy(std::begin(*r_base_key), std::end(*r_base_key), std::begin(_base_key));
-            if (not _kp.is_valid()) {
-                ESP_LOGE("KA", "Invalid secret key, rejecting stored configuration.");
-            } else {
-                return true;
-            }
-        } else if (r_id or r_desc or r_prog_pk or r_sk or r_base_key) {
-            ESP_LOGE("KA", "Incomplete stored configuration, rejecting.");
-        }
-        return false;
-    }
-
     void gate::log_public_gate_info() const {
-        ESP_LOGI("KA", "Gate %lu: %s", std::uint32_t(this->id()), description().c_str());
+        ESP_LOGI("KA", "Gate %lu", std::uint32_t(this->id()));
         ESP_LOGI("KA", "Gate public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
         ESP_LOGI("KA", "Keymaker public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", programmer_pub_key().raw_pk().data(), programmer_pub_key().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pk().raw_pk().data(), keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
     }
 
-    void gate::config_clear(nvs::partition &partition) {
-        auto ns = partition.open_namespc(ka_namespc);
-        if (ns == nullptr) {
-            ESP_LOGE("KA", "Unable to create or access NVS namespace.");
-            return;
-        }
-        if (not ns->clear() or not ns->commit()) {
-            ESP_LOGE("KA", "Unable to config_clear configuration.");
-        } else {
-            ESP_LOGW("KA", "Cleared configuration.");
+    bool gate::is_configured() const {
+        return _id != std::numeric_limits<gate_id>::max();
+    }
+    pub_key const &gate::keymaker_pk() const {
+        return _km_pk;
+    }
+    gate_id gate::id() const {
+        return _id;
+    }
+
+    gate_base_key const &gate::app_base_key() const {
+        return _base_key;
+    }
+
+    gate::gate() : device{},
+                   _id{std::numeric_limits<gate_id>::max()},
+                   _km_pk{},
+                   _base_key{},
+                   _gate_ns{nullptr} {
+        if (storage() != nullptr) {
+            _gate_ns = storage()->open_namespc("ka-gate");
+            if (_gate_ns) {
+                if (const auto r = _gate_ns->get_u32("id"); r) {
+                    _id = gate_id{*r};
+                }
+                if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
+                    _km_pk = pub_key{r->data_view()};
+                } else {
+                    // Reset
+                    _id = std::numeric_limits<gate_id>::max();
+                    return;
+                }
+                if (const auto r = _gate_ns->get_blob("base-key"); r and r->size() == gate_base_key::array_size) {
+                    std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
+                } else {
+                    // Reset
+                    _id = std::numeric_limits<gate_id>::max();
+                    _km_pk = {};
+                }
+            }
         }
     }
+
+    void gate::reset() {
+        ESP_LOGW("KA", "Gate is being reset.");
+        _id = std::numeric_limits<gate_id>::max();
+        _km_pk = {};
+        _base_key = {};
+        if (_gate_ns) {
+            _gate_ns->erase("id");
+            _gate_ns->erase("keymaker-pubkey");
+            _gate_ns->erase("base-key");
+            _gate_ns->commit();
+        }
+    }
+
+
+    std::optional<gate_base_key> gate::configure(gate_id gid, pub_key keymaker_pubkey) {
+        if (is_configured()) {
+            ESP_LOGE("KA", "Attempt to reconfigure gate %lu as gate %lu with the following public key:",
+                     std::uint32_t(id()), std::uint32_t(gid));
+            ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_ERROR);
+            return std::nullopt;
+        }
+        ESP_LOGI("KA", "Configuring as gate %lu, with the following keymaker pubkey:", std::uint32_t(gid));
+        ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_INFO);
+        _id = gid;
+        _km_pk = keymaker_pubkey;
+        // Generate a new app base key
+        randombytes_buf(_base_key.data(), _base_key.size());
+
+        if (_gate_ns) {
+#ifndef CONFIG_NVS_ENCRYPTION
+            ESP_LOGW("KA", "Encryption is disabled!");
+#endif
+            _gate_ns->set_u32("id", std::uint32_t(_id));
+            _gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk.raw_pk()));
+            _gate_ns->set_blob("base-key", mlab::bin_data::chain(_base_key));
+            _gate_ns->commit();
+        } else {
+            ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+        }
+
+        return _base_key;
+    }
+
 
 }// namespace ka
