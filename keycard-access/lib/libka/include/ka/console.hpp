@@ -625,12 +625,7 @@ namespace ka {
         template <std::size_t... Is>
         R command<R, T, Args...>::invoke(std::index_sequence<Is...>, r<Args...> args) {
             static_assert(sizeof...(Is) == sizeof...(Args));
-            // Special treatment for one parameter
-            if constexpr (sizeof...(Is) == 1) {
-                return (*this)(std::forward<Args>(*args)...);
-            } else {
-                return (*this)(std::forward<Args>(std::get<Is>(*args))...);
-            }
+            return (*this)(std::forward<Args>(mlab::get<Is>(args))...);
         }
 
         template <parse_can_output R, class T, parsable... Args>
