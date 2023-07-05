@@ -38,6 +38,11 @@ namespace ka {
         std::vector<gate_data> _gates;
 
     public:
+        using device::device;
+
+        /**
+         * @todo Consider removing this. Might be hard, lots of usages in member_token
+         */
         using device::keys;
 
         [[nodiscard]] gate_data const *operator[](gate_id id) const;

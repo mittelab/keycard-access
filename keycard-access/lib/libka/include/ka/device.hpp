@@ -16,25 +16,27 @@ namespace ka {
     }
 
     class device {
-        key_pair _kp;
-        ota_watch _ota;
-        std::shared_ptr<nvs::namespc> _device_ns;
+        key_pair _kp = {};
+        std::unique_ptr<ota_watch> _ota = nullptr;
+        std::shared_ptr<nvs::namespc> _device_ns = nullptr;
 
-        void configure();
+        device() = default;
+
+        void generate_keys();
 
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
-        [[nodiscard]] std::shared_ptr<nvs::partition> storage();
-        [[nodiscard]] std::shared_ptr<const nvs::partition> storage() const;
 
     public:
-        device();
+        explicit device(std::shared_ptr<nvs::partition> const &partition);
+        explicit device(key_pair kp);
+
         virtual ~device() = default;
 
         device(device const &) = delete;
-        device(device &&) = delete;
+        device(device &&) = default;
         device &operator=(device const &) = delete;
-        device &operator=(device &&) = delete;
+        device &operator=(device &&) = default;
 
         [[nodiscard]] bool updates_automatically() const;
         void set_update_automatically(bool v);

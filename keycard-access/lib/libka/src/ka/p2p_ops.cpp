@@ -75,8 +75,6 @@ namespace ka::p2p {
     void configure_gate_loop(pn532::controller &ctrl, gate &g) {
         pn532::p2p::pn532_target raw_comm{ctrl};
         while (not g.is_configured()) {
-            // Make sure you get fresh new keys
-            g.regenerate_keys();
             while (not g.is_configured()) {
                 desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {PN532_TAG}};
                 if (raw_comm.init_as_dep_target(fabricate_nfcid(g))) {
@@ -115,9 +113,13 @@ namespace ka::p2p {
             }
 
             // Finally:
-            g.configure(gate_id{new_id}, std::move(new_desc), pub_key{comm.peer_pub_key()});
+            const auto base_key = g.configure(gate_id{new_id}, pub_key{comm.peer_pub_key()});
+            if (not base_key) {
+                ESP_LOGE("KA", "Gate already configured.");
+                return pn532::channel_error::app_error;
+            }
             g.log_public_gate_info();
-            TRY(comm.send(mlab::bin_data::chain(g.app_base_key()), 1s))
+            TRY(comm.send(mlab::bin_data::chain(*base_key), 1s))
         }
         return mlab::result_success;
     }
@@ -148,12 +150,18 @@ namespace ka::p2p {
 
     bool configure_gate_in_rf(pn532::controller &ctrl, gate &g) {
         pn532::p2p::pn532_target raw_comm{ctrl};
+        /**
+         * @todo Try hard not to expose keys
+         */
         secure_target comm{raw_comm, g.keys()};
         return bool(configure_gate_exchange(g, dynamic_cast<secure_target &>(comm)));
     }
 
     bool configure_gate_in_rf(pn532::controller &ctrl, std::uint8_t logical_index, keymaker &km, std::string const &gate_description) {
         pn532::p2p::pn532_initiator raw_comm{ctrl, logical_index};
+        /**
+         * @todo Try hard not to expose keys
+         */
         secure_initiator comm{raw_comm, km.keys()};
         return bool(configure_gate_exchange(km, comm, gate_description));
     }

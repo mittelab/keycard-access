@@ -17,21 +17,7 @@
 using namespace std::chrono_literals;
 
 namespace ka {
-
     namespace {
-        constexpr auto ka_namespc = "keycard-access";
-        constexpr auto ka_sk = "secret-key";
-        constexpr auto ka_desc = "description";
-        constexpr auto ka_gid = "gate-id";
-        constexpr auto ka_prog_pk = "programmer-key";
-        constexpr auto ka_base_key = "gate-base-key";
-
-
-#ifdef CONFIG_NVS_ENCRYPTION
-        constexpr bool nvs_encrypted = true;
-#else
-        constexpr bool nvs_encrypted = false;
-#endif
         constexpr std::array<char, crypto_kdf_blake2b_CONTEXTBYTES> app_master_key_context{"gateapp"};
     }// namespace
 
@@ -131,34 +117,38 @@ namespace ka {
         return _base_key;
     }
 
-    gate::gate() : device{},
-                   _id{std::numeric_limits<gate_id>::max()},
-                   _km_pk{},
-                   _base_key{},
-                   _gate_ns{nullptr} {
-        if (storage() != nullptr) {
-            _gate_ns = storage()->open_namespc("ka-gate");
-            if (_gate_ns) {
-                if (const auto r = _gate_ns->get_u32("id"); r) {
-                    _id = gate_id{*r};
-                }
-                if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
-                    _km_pk = pub_key{r->data_view()};
-                } else {
-                    // Reset
-                    _id = std::numeric_limits<gate_id>::max();
-                    return;
-                }
-                if (const auto r = _gate_ns->get_blob("base-key"); r and r->size() == gate_base_key::array_size) {
-                    std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
-                } else {
-                    // Reset
-                    _id = std::numeric_limits<gate_id>::max();
-                    _km_pk = {};
-                }
+    gate::gate(std::shared_ptr<nvs::partition> const &partition) : device{partition} {
+        if (partition) {
+            _gate_ns = partition->open_namespc("ka-gate");
+        }
+        if (_gate_ns) {
+            if (const auto r = _gate_ns->get_u32("id"); r) {
+                _id = gate_id{*r};
+            }
+            if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
+                _km_pk = pub_key{r->data_view()};
+            } else {
+                // Reset
+                _id = std::numeric_limits<gate_id>::max();
+                return;
+            }
+            if (const auto r = _gate_ns->get_blob("base-key"); r and r->size() == gate_base_key::array_size) {
+                std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
+            } else {
+                // Reset
+                _id = std::numeric_limits<gate_id>::max();
+                _km_pk = {};
             }
         }
     }
+
+    gate::gate(key_pair kp) : device{kp} {}
+
+    gate::gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey, gate_base_key base_key)
+        : device{kp},
+          _id{gid},
+          _km_pk{keymaker_pubkey},
+          _base_key{base_key} {}
 
     void gate::reset() {
         ESP_LOGW("KA", "Gate is being reset.");

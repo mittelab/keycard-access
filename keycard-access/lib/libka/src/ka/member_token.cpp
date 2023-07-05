@@ -644,6 +644,9 @@ namespace ka {
     r<identity, token_id> member_token::read_encrypted_gate_file(gate const &g, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto [aid, fid] = g.id().app_and_file();
+            /**
+             * @todo Use a method of gate instead of accessing directly app_base_key
+             */
             const auto key = g.app_base_key().derive_token_key(*r_id, g.id().key_no());
             return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.keymaker_pk(), check_app, check_file), r_id);
         }

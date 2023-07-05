@@ -75,27 +75,24 @@ namespace ut {
         }
 
         struct test_bundle {
-            ka::key_pair kp;
-            ka::keymaker km;
-            ka::gate g0;
-            ka::gate_config g0_cfg;
-            ka::gate g13;
-            ka::gate_config g13_cfg;
-            ka::identity id;
-
-            test_bundle() {
-                kp = key_pair{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                               0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
-                // TODO Ensure this is done with friedliness
-                const_cast<key_pair &>(km.keys()) = kp;
-                g0.regenerate_keys();
-                g13.regenerate_keys();
-                g0.configure(0_g, "Gate 0", pub_key{km.keys().raw_pk()});
-                g13.configure(13_g, "Gate 13", pub_key{km.keys().raw_pk()});
-                g0_cfg = gate_config{{pub_key{g0.keys().raw_pk()}, g0.app_base_key()}, g0.id()};
-                g13_cfg = gate_config{{pub_key{g13.keys().raw_pk()}, g13.app_base_key()}, g13.id()};
-                id = identity{{}, "Test user", "Test deployer"};
-            }
+            ka::key_pair kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
+            ka::keymaker km{kp};
+            ka::gate g0{ka::key_pair{{0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+                                      0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f}},
+                        0_g,
+                        ka::pub_key{kp.raw_pk()},
+                        {0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
+                         0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f}};
+            ka::gate g13{ka::key_pair{{0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f,
+                                       0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f}},
+                         0_g,
+                         ka::pub_key{kp.raw_pk()},
+                         {0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f,
+                          0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f}};
+            ka::gate_config g0_cfg{gate_credentials{ka::pub_key{g0.keys().raw_pk()}, g0.app_base_key()}, 0_g};
+            ka::gate_config g13_cfg{gate_credentials{ka::pub_key{g13.keys().raw_pk()}, g13.app_base_key()}, 13_g};
+            ka::identity id{{}, "Test user", "Test deployer"};
         } const bundle{};
 
         using namespace ::desfire::esp32;
@@ -793,20 +790,6 @@ namespace ut {
         TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
         TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km, bundle.g13_cfg));
     }
-
-    void test_nvs_gate() {
-        // Make sure nvs is initialized
-        auto &nvs [[maybe_unused]] = nvs::instance();
-
-        bundle.g0.config_store();
-        gate g{};
-        TEST_ASSERT(g.config_load());
-        TEST_ASSERT_EQUAL(g.id(), bundle.g0.id());
-        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_pk().data(), bundle.g0.keys().raw_pk().data(), raw_pub_key::array_size);
-        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keys().raw_sk().data(), bundle.g0.keys().raw_sk().data(), raw_sec_key::array_size);
-        TEST_ASSERT_EQUAL_HEX8_ARRAY(g.keymaker_pk().raw_pk().data(), bundle.kp.raw_pk().data(), raw_pub_key::array_size);
-        gate::config_clear();
-    }
 }// namespace ut
 
 extern "C" void app_main() {
@@ -814,7 +797,6 @@ extern "C" void app_main() {
 
     RUN_TEST(ut::test_keys);
     RUN_TEST(ut::test_nvs);
-    RUN_TEST(ut::test_nvs_gate);
     RUN_TEST(ut::test_encrypt_decrypt);
 
     ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);

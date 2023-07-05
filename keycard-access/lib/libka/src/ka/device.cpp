@@ -8,33 +8,34 @@
 using namespace ka::cmd_literals;
 
 namespace ka {
-    device::device() : _kp{}, _ota{}, _device_ns{} {
-        if (auto part = nvs::instance().open_default_partition(); part) {
-            _device_ns = part->open_namespc("ka-device");
-            if (not _device_ns) {
-                ESP_LOGE("KA", "Unable to open NVS namespace.");
-            }
-        } else {
-            ESP_LOGE("KA", "Unable to open NVS partition.");
+
+    device::device(std::shared_ptr<nvs::partition> const &partition) : device{} {
+        _ota = std::make_unique<ota_watch>();
+        if (partition) {
+            _device_ns = partition->open_namespc("ka-device");
         }
         if (_device_ns) {
             if (const auto r = _device_ns->get_str("update-channel"); r) {
-                _ota.set_update_channel(*r);
+                _ota->set_update_channel(*r);
             }
             if (const auto r = _device_ns->get_u8("update-enabled"); r and *r != 0) {
-                _ota.start();
+                _ota->start();
             }
             if (const auto r = _device_ns->get_blob("secret-key"); r) {
                 _kp = key_pair{r->data_view()};
             } else {
-                configure();
+                generate_keys();
             }
         } else {
-            configure();
+            generate_keys();
         }
     }
 
-    void device::configure() {
+    device::device(key_pair kp) {
+        _kp = kp;
+    }
+
+    void device::generate_keys() {
         _kp.generate_random();
         ESP_LOGI("KA", "Generated random key pair; public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
@@ -51,24 +52,22 @@ namespace ka {
         ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
     }
 
-
-    std::shared_ptr<nvs::partition> device::storage() {
-        return _device_ns ? _device_ns->get_partition() : nullptr;
-    }
-
-    std::shared_ptr<const nvs::partition> device::storage() const {
-        return _device_ns ? _device_ns->get_partition() : nullptr;
-    }
-
     bool device::updates_automatically() const {
-        return _ota.is_running();
+        if (not _ota) {
+            return false;
+        }
+        return _ota->is_running();
     }
 
     void device::set_update_automatically(bool v) {
+        if (not _ota) {
+            ESP_LOGE("KA", "Updates not available during test.");
+            return;
+        }
         if (v) {
-            _ota.start();
+            _ota->start();
         } else {
-            _ota.stop();
+            _ota->stop();
         }
         if (_device_ns) {
             _device_ns->set_u8("update-enabled", v ? 1 : 0);
@@ -77,16 +76,23 @@ namespace ka {
     }
 
     std::string_view device::update_channel() const {
-        return _ota.update_channel();
+        if (not _ota) {
+            return "";
+        }
+        return _ota->update_channel();
     }
 
     bool device::set_update_channel(std::string_view channel, bool test_before) {
+        if (not _ota) {
+            ESP_LOGE("KA", "Updates not available during test.");
+            return false;
+        }
         if (test_before) {
-            if (not _ota.test_update_channel(channel)) {
+            if (not _ota->test_update_channel(channel)) {
                 return false;
             }
         }
-        _ota.set_update_channel(channel);
+        _ota->set_update_channel(channel);
         if (_device_ns) {
             _device_ns->set_str("update-channel", std::string{channel});
             _device_ns->commit();
@@ -95,7 +101,11 @@ namespace ka {
     }
 
     std::optional<release_info> device::check_for_updates() const {
-        return _ota.check_now();
+        if (not _ota) {
+            ESP_LOGE("KA", "Updates not available during test.");
+            return std::nullopt;
+        }
+        return _ota->check_now();
     }
 
     fw_info device::get_firmware_info() const {
@@ -103,13 +113,21 @@ namespace ka {
     }
 
     void device::update_firmware() {
-        if (const auto ri = _ota.check_now(); ri) {
-            _ota.update_from(ri->firmware_url);
+        if (not _ota) {
+            ESP_LOGE("KA", "Updates not available during test.");
+            return;
+        }
+        if (const auto ri = _ota->check_now(); ri) {
+            _ota->update_from(ri->firmware_url);
         }
     }
 
     void device::update_firmware(std::string_view fw_url) {
-        _ota.update_from(fw_url);
+        if (not _ota) {
+            ESP_LOGE("KA", "Updates not available during test.");
+            return;
+        }
+        _ota->update_from(fw_url);
     }
 
     bool device::is_wifi_configured() const {

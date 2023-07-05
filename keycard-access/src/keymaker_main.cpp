@@ -17,13 +17,21 @@ namespace ka {
 
     namespace {
 
+        [[nodiscard]] auto make_keymaker() {
+            key_pair kp{};
+            /**
+             * @todo This should not happen in real life.
+             */
+
+            ESP_LOGE("KA", "Overriding public key for testing purposes!");
+            kp.generate_from_pwhash("foobar");
+            return keymaker{kp};
+        }
+
         struct keymaker_responder final : public ka::member_token_responder {
             ka::keymaker km;
 
-            keymaker_responder() : km{} {
-                ESP_LOGE("KA", "Overriding public key for testing purposes!");
-                const_cast<key_pair &>(km.keys()).generate_from_pwhash("foobar");
-            }
+            keymaker_responder() : km{make_keymaker()} {}
 
             std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
                 // Allow both DEP targets (gates to be configured) and Mifare targets
@@ -72,6 +80,9 @@ namespace ka {
                     }
                     if (all_gates_were_enrolled) {
                         ESP_LOGI(LOG_PFX, "All gates were already enrolled, I'll format this PICC.");
+                        /**
+                         * @todo Use a method of keymaker and not direct access to keys
+                         */
                         const auto rkey = km.keys().derive_token_root_key(*r_deployed);
                         TRY(desfire::fs::login_app(token.tag(), desfire::root_app, rkey))
                         TRY(token.tag().format_picc())
