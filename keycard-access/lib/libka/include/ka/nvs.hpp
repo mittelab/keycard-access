@@ -122,6 +122,8 @@ namespace ka::nvs {
         const_namespc(const_namespc &&) noexcept = default;
         const_namespc &operator=(const_namespc &&) noexcept = default;
 
+        [[nodiscard]] std::shared_ptr<const partition> get_partition() const;
+
         [[nodiscard]] r<std::uint8_t> get_u8(const char *key) const;
         [[nodiscard]] r<std::uint16_t> get_u16(const char *key) const;
         [[nodiscard]] r<std::uint32_t> get_u32(const char *key) const;
@@ -167,6 +169,9 @@ namespace ka::nvs {
         namespc &operator=(namespc const &) = delete;
         namespc(namespc &&) noexcept = default;
         namespc &operator=(namespc &&) noexcept = default;
+
+        using const_namespc::get_partition;
+        [[nodiscard]] std::shared_ptr<partition> get_partition();
 
         r<> set_u8(const char *key, std::uint8_t value);
         r<> set_u16(const char *key, std::uint16_t value);

@@ -154,6 +154,14 @@ namespace ka::nvs {
         : _part{std::move(part)}, _hdl{hdl} {}
 
 
+    std::shared_ptr<const partition> const_namespc::get_partition() const {
+        return _part;
+    }
+
+    std::shared_ptr<partition> namespc::get_partition() {
+        return std::const_pointer_cast<partition>(const_namespc::get_partition());
+    }
+
     r<std::uint8_t> const_namespc::get_u8(const char *key) const {
         return get_known_type<std::uint8_t, nvs_get_u8>(key);
     }
