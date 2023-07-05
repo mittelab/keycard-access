@@ -55,8 +55,6 @@ namespace ka::nvs {
         nvs();
 
         friend nvs &instance();
-        friend void ut::test_nvs();
-
     public:
         nvs(nvs const &) = delete;
         nvs(nvs &&) = delete;

@@ -677,8 +677,10 @@ namespace ut {
     }
 
     void test_nvs() {
-        nvs::nvs root{};
-        auto part = root.open_partition(NVS_DEFAULT_PART_NAME, false);
+        // Make sure nvs is initialized
+        auto &nvs = nvs::instance();
+
+        auto part = nvs.open_partition(NVS_DEFAULT_PART_NAME, false);
         TEST_ASSERT(part != nullptr);
         auto ns = part->open_namespc("ka");
         TEST_ASSERT(ns != nullptr);
@@ -793,6 +795,9 @@ namespace ut {
     }
 
     void test_nvs_gate() {
+        // Make sure nvs is initialized
+        auto &nvs [[maybe_unused]] = nvs::instance();
+
         bundle.g0.config_store();
         gate g{};
         TEST_ASSERT(g.config_load());
