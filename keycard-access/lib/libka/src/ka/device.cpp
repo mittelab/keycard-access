@@ -39,6 +39,9 @@ namespace ka {
         ESP_LOGI("KA", "Generated random key pair; public key:");
         ESP_LOG_BUFFER_HEX_LEVEL("KA", _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
         if (_device_ns) {
+#ifndef CONFIG_NVS_ENCRYPTION
+            ESP_LOGW("KA", "Encryption is disabled!");
+#endif
             if (_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk()))) {
                 if (_device_ns->commit()) {
                     return;
@@ -46,6 +49,15 @@ namespace ka {
             }
         }
         ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+    }
+
+
+    std::shared_ptr<nvs::partition> device::storage() {
+        return _device_ns ? _device_ns->get_partition() : nullptr;
+    }
+
+    std::shared_ptr<const nvs::partition> device::storage() const {
+        return _device_ns ? _device_ns->get_partition() : nullptr;
     }
 
     bool device::updates_automatically() const {
@@ -132,7 +144,7 @@ namespace ka {
                 return fi.to_string();
             }
         };
-    }
+    }// namespace cmd
 
     void device::register_commands(cmd::shell &sh) {
         sh.register_command("wifi-connect", *this, &device::connect_wifi, {"ssid"_pos, "password"_pos});

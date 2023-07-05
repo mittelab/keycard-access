@@ -24,6 +24,8 @@ namespace ka {
 
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
+        [[nodiscard]] std::shared_ptr<nvs::partition> storage();
+        [[nodiscard]] std::shared_ptr<const nvs::partition> storage() const;
 
     public:
         device();
