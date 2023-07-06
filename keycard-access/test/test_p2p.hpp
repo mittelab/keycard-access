@@ -6,7 +6,7 @@
 #define KEYCARD_ACCESS_TEST_P2P_HPP
 
 namespace ut {
-    void test_p2p();
+    void test_p2p_comm();
 }
 
 #endif//KEYCARD_ACCESS_TEST_P2P_HPP
