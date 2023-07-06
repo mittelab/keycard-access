@@ -109,7 +109,7 @@ namespace ka::p2p {
         [[nodiscard]] inline gate const &g() const;
 
         [[nodiscard]] r<std::uint8_t, mlab::bin_data> command_receive();
-        [[nodiscard]] r<> response_send(proto_status s, mlab::bin_data const &resp);
+        [[nodiscard]] r<> response_send(proto_status s, mlab::bin_data resp);
 
         template <class... Args>
         [[nodiscard]] r<> response_send(r<Args...> const &response);

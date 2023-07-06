@@ -306,8 +306,9 @@ namespace ka::p2p {
         }
     }
 
-    r<> local_gate_base::response_send(proto_status s, mlab::bin_data const &resp) {
-        if (auto r = local_interface().communicate(mlab::bin_data::chain(mlab::prealloc{resp.size() + 1}, resp, s), 5s); r) {
+    r<> local_gate_base::response_send(proto_status s, mlab::bin_data resp) {
+        resp << s;
+        if (auto r = local_interface().communicate(resp, 5s); r) {
             if (r->size() != 1 or r->front() != static_cast<std::uint8_t>(proto_status::did_read_resp)) {
                 ESP_LOGE("KA", "Invalid protocol flow, I got %d bytes:", r->size());
                 ESP_LOG_BUFFER_HEX_LEVEL("KA", r->data(), r->size(), ESP_LOG_ERROR);
@@ -653,7 +654,7 @@ namespace mlab {
     }
 
     bin_data &operator<<(encode_length<bin_data> w, std::string_view s) {
-        return w.s << mlab::lsb32 << w.s.size() << mlab::data_from_string(s);
+        return w.s << mlab::lsb32 << s.size() << mlab::data_from_string(s);
     }
 
     bin_stream &operator>>(encode_length<bin_stream> w, std::string &str) {
