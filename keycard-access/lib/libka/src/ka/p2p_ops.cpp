@@ -421,7 +421,7 @@ namespace ka::p2p {
         }
 
         r<gate_base_key> remote_gate::register_gate(gate_id requested_id) {
-            return command_parse_response<gate_base_key>(commands::register_gate);
+            return command_parse_response<gate_base_key>(commands::register_gate, requested_id);
         }
 
         r<> remote_gate::reset_gate() {
