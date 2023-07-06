@@ -28,7 +28,15 @@ namespace ka {
         [[nodiscard]] inline key_pair const &keys() const;
 
     public:
+        /**
+         * Construct a device loading it from the NVS partition. All changes will be persisted.
+         */
         explicit device(std::shared_ptr<nvs::partition> const &partition);
+
+        /**
+         * Construct a device the given key pair. Testing purposes, changes will not be persisted
+         * and updates are not available on the device.
+         */
         explicit device(key_pair kp);
 
         virtual ~device() = default;

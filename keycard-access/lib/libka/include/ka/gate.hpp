@@ -86,15 +86,31 @@ namespace ka {
         std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
 
     public:
+        /**
+         * Construct a gate loading it from the NVS partition. All changes will be persisted.
+         * @see device::device(std::shared_ptr<nvs::partition> const &)
+         */
         explicit gate(std::shared_ptr<nvs::partition> const &partition);
+
+        /**
+         * Construct an unconfigured gate with the given key pair. Testing purposes, changes will not be persisted
+         * and updates are not available on the device.
+         * @see device::device(key_pair)
+         */
         explicit gate(key_pair kp);
+
+        /**
+         * Construct a configured gate with the given parameters. Testing purposes, changes will not be persisted
+         * and updates are not available on the device.
+         * @see device::device(key_pair)
+         */
         explicit gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey, gate_base_key base_key);
 
         /**
-         * @addtogroup ActualMethods
-         * @{
+         * Resets this gate to the original status, keeping wifi and update settings.
+         * @warning This will render all cards with this gate enrolled unusable on this gate!
+         * @todo In @ref keymaker, have a mechanism to realise a gate has been revoked and delete the app/file from the card.
          */
-
         void reset();
 
         /**
@@ -103,10 +119,6 @@ namespace ka {
         [[nodiscard]] std::optional<gate_base_key> configure(gate_id gid, pub_key keymaker_pubkey);
 
         [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
-
-        /**
-         * @}
-         */
 
         [[nodiscard]] gate_id id() const;
         [[nodiscard]] bool is_configured() const;
@@ -117,20 +129,9 @@ namespace ka {
          */
         using device::keys;
 
-
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
 
-
-        /**
-         * @addtogroup Deprecated
-         * @{
-         */
         [[deprecated]] void log_public_gate_info() const;
-        /**
-         * @}
-         */
-
-    private:
     };
 }// namespace ka
 
