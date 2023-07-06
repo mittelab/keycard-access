@@ -22,9 +22,10 @@ namespace ka::p2p {
     class secure_initiator;
 
     enum struct error : std::uint8_t {
-        malformed = 1,       ///< Command is malformed or unsupported
+        malformed,           ///< Command is malformed or unsupported
         unauthorized,        ///< This keymaker is not allowed to issue this command.
         invalid,             ///< Cannot execute this command in the current state.
+        arg_error,           ///< Invalid argument
         p2p_timeout = 0xfc,  ///< The given timeout was exceeded before the transmission was complete.
         p2p_hw_error = 0xfd, ///< Hardware error during transmission.
         p2p_malformed = 0xfe,///< Malformed data cannot be parsed, or the type of frame received was unexpected.
@@ -42,10 +43,14 @@ namespace ka::p2p {
     template <class... Args>
     using r = mlab::result<error, Args...>;
 
+    [[nodiscard]] bool assert_stream_healthy(mlab::bin_stream const &s);
+
+    /**
+     * @note Since cards are targets, and the gate continuously operates searching for a target, the
+     * keymaker must act as a target too so that the gate can see a keymaker is in the field.
+     */
     class remote_gate_base {
         secure_target &_local_interface;
-
-        [[nodiscard]] static bool assert_stream_healthy(mlab::bin_stream const &s);
 
     protected:
         [[nodiscard]] inline secure_target &local_interface();
@@ -54,20 +59,74 @@ namespace ka::p2p {
         [[nodiscard]] r<gate_fw_info> hello_and_assert_protocol(std::uint8_t proto_version);
 
         template <class R, class... Args>
-        [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(Args &&...args);
+        [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(std::uint8_t command_code, Args &&...args);
 
-        [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &cmd);
-        [[nodiscard]] r<> command(mlab::bin_data const &cmd);
+        template <class R, mlab::is_byte_enum CmdCode, class... Args>
+        [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(CmdCode command_code, Args &&...args);
+
+        [[nodiscard]] r<mlab::bin_data> command_response(std::uint8_t command_code, mlab::bin_data cmd);
+        [[nodiscard]] r<> command(std::uint8_t command_code, mlab::bin_data cmd);
 
     public:
+        /**
+         * @param local_interface A secure target with already performed handshake.
+         */
         explicit remote_gate_base(secure_target &local_interface);
-
-        [[nodiscard]] pub_key gate_public_key() const;
+        virtual ~remote_gate_base() = default;
 
         [[nodiscard]] virtual r<gate_fw_info> hello();
         virtual void bye();
+    };
 
-        virtual ~remote_gate_base() = default;
+    enum struct proto_status : std::uint8_t {
+        ok = 0x00,
+        malformed,
+        unauthorized,
+        invalid,
+        arg_error,
+        ready_for_cmd = 0xfe,
+        did_read_resp = 0xff
+    };
+
+    [[nodiscard]] error proto_status_to_error(proto_status s);
+    [[nodiscard]] proto_status error_to_proto_status(error e);
+
+    class local_gate_base {
+        secure_initiator &_local_interface;
+        gate &_g;
+
+    protected:
+        enum struct serve_outcome {
+            ok,
+            unknown,
+            halt
+        };
+
+        [[nodiscard]] inline secure_initiator &local_interface();
+        [[nodiscard]] inline secure_initiator const &local_interface() const;
+
+        [[nodiscard]] inline gate &g();
+        [[nodiscard]] inline gate const &g() const;
+
+        [[nodiscard]] r<std::uint8_t, mlab::bin_data> command_receive();
+        [[nodiscard]] r<> response_send(proto_status s, mlab::bin_data const &resp);
+
+        template <class... Args>
+        [[nodiscard]] r<> response_send(r<Args...> const &response);
+
+        [[nodiscard]] virtual r<serve_outcome> try_serve_command(std::uint8_t command_code, mlab::bin_data const &body);
+        [[nodiscard]] r<> assert_peer_is_keymaker() const;
+
+    public:
+        [[nodiscard]] virtual std::uint8_t protocol_version() const = 0;
+
+        [[nodiscard]] virtual r<gate_fw_info> hello();
+        [[nodiscard]] virtual r<gate_fw_info> hello(mlab::bin_data const &body);
+
+        void serve_loop();
+
+        explicit local_gate_base(secure_initiator &local_interface, gate &g);
+        virtual ~local_gate_base() = default;
     };
 
     namespace v0 {
@@ -92,30 +151,42 @@ namespace ka::p2p {
         class remote_gate : public remote_gate_base {
         public:
             using remote_gate_base::remote_gate_base;
-
             [[nodiscard]] r<gate_fw_info> hello() override;
 
             [[nodiscard]] virtual r<update_settings> get_update_settings();
             [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
-
             [[nodiscard]] virtual r<wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
-
             [[nodiscard]] virtual r<registration_info> get_registration_info();
-            [[nodiscard]] virtual r<> register_gate(gate_id requested_id);
+            [[nodiscard]] virtual r<gate_base_key> register_gate(gate_id requested_id);
             [[nodiscard]] virtual r<> reset_gate();
         };
 
-        class local_gate {
-            secure_target &_remote_keymaker;
+        class local_gate : public local_gate_base {
+        protected:
+            [[nodiscard]] r<serve_outcome> try_serve_command(std::uint8_t command_code, mlab::bin_data const &body) override;
+
+            [[nodiscard]] virtual r<update_settings> get_update_settings(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<> set_update_settings(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<wifi_status> get_wifi_status(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<bool> connect_wifi(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<registration_info> get_registration_info(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<gate_base_key> register_gate(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<> reset_gate(mlab::bin_data const &body);
 
         public:
-            explicit local_gate(secure_target &remote_keymaker);
+            using local_gate_base::local_gate_base;
 
-            virtual ~local_gate() = default;
-
-            virtual void serve();
+            [[nodiscard]] inline std::uint8_t protocol_version() const override { return 0; }
+            [[nodiscard]] virtual r<update_settings> get_update_settings();
+            [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
+            [[nodiscard]] virtual r<wifi_status> get_wifi_status();
+            [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
+            [[nodiscard]] virtual r<registration_info> get_registration_info();
+            [[nodiscard]] virtual r<gate_base_key> register_gate(gate_id requested_id);
+            [[nodiscard]] virtual r<> reset_gate();
         };
+
     }// namespace v0
 
     pn532::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
@@ -153,7 +224,15 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_settings &usettings);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
 
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_fw_info const &fwinfo);
+    bin_data &operator<<(bin_data &bd, semver::version const &v);
     bin_data &operator<<(encode_length<bin_data> w, std::string_view s);
+    bin_data &operator<<(bin_data &bd, ka::gate_id const &gid);
+    bin_data &operator<<(bin_data &bd, ka::raw_pub_key const &pk);
+    bin_data &operator<<(bin_data &bd, ka::pub_key const &pk);
+    bin_data &operator<<(bin_data &bd, ka::p2p::v0::registration_info const &rinfo);
+    bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_settings const &usettings);
+    bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings);
 }// namespace mlab
 
 namespace ka::p2p {
@@ -164,6 +243,22 @@ namespace ka::p2p {
 
     secure_target const &remote_gate_base::local_interface() const {
         return _local_interface;
+    }
+
+    secure_initiator &local_gate_base::local_interface() {
+        return _local_interface;
+    }
+
+    secure_initiator const &local_gate_base::local_interface() const {
+        return _local_interface;
+    }
+
+    gate &local_gate_base::g() {
+        return _g;
+    }
+
+    gate const &local_gate_base::g() const {
+        return _g;
     }
 
     constexpr error channel_error_to_p2p_error(pn532::channel_error err) {
@@ -181,10 +276,41 @@ namespace ka::p2p {
         }
     }
 
+    template <class R, mlab::is_byte_enum CmdCode, class... Args>
+    std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(CmdCode command_code, Args &&...args) {
+        return command_parse_response<R, Args...>(static_cast<std::uint8_t>(command_code), std::forward<Args>(args)...);
+    }
+
+    namespace impl {
+        template <std::size_t... Is, class... Args>
+        [[nodiscard]] mlab::bin_data chain_result(std::index_sequence<Is...>, r<Args...> const &result) {
+            mlab::bin_data bd;
+            (bd << ... << mlab::get<Is>(result));
+            return bd;
+        }
+    }// namespace impl
+
+
+    template <class... Args>
+    r<> local_gate_base::response_send(r<Args...> const &response) {
+        if (not response) {
+            return response_send(error_to_proto_status(response.error()), {});
+        } else {
+            if constexpr (sizeof...(Args) == 0) {
+                return response_send(proto_status::ok, {});
+            } else {
+                return response_send(proto_status::ok, impl::chain_result(std::index_sequence_for<Args...>{}, response));
+            }
+        }
+    }
 
     template <class R, class... Args>
-    std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(Args &&...args) {
-        if (const auto r = command_response(mlab::bin_data::chain(std::forward<Args>(args)...)); r) {
+    std::conditional_t<std::is_void_v<R>, r<>, r<R>> remote_gate_base::command_parse_response(std::uint8_t command_code, Args &&...args) {
+        mlab::bin_data body{};
+        if constexpr (sizeof...(Args) > 0) {
+            body = mlab::bin_data::chain(std::forward<Args>(args)...);
+        }
+        if (const auto r = command_response(command_code, std::move(body)); r) {
             mlab::bin_stream s{*r};
             if constexpr (std::is_void_v<R>) {
                 if (assert_stream_healthy(s)) {
