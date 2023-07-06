@@ -70,6 +70,6 @@ namespace ka {
     const key_pair &device::keys() const {
         return _kp;
     }
-}
+}// namespace ka
 
 #endif//KEYCARD_ACCESS_DEVICE_HPP

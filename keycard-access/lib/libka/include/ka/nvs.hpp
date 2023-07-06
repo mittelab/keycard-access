@@ -55,6 +55,7 @@ namespace ka::nvs {
         nvs();
 
         friend nvs &instance();
+
     public:
         nvs(nvs const &) = delete;
         nvs(nvs &&) = delete;

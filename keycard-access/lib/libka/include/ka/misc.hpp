@@ -8,7 +8,6 @@
 namespace ka {
 
 
-
 }// namespace ka
 
 #endif//KEYCARD_ACCESS_MISC_HPP

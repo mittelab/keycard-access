@@ -137,13 +137,13 @@ namespace ka {
 
         template <class T>
         concept parse_can_output = requires { std::is_void_v<T>; } or requires(T a) {
-            { parser<T>::to_string(std::declval<T>()) } -> std::convertible_to<std::string>;
-        };
+                                                                          { parser<T>::to_string(std::declval<T>()) } -> std::convertible_to<std::string>;
+                                                                      };
 
         template <class T>
         concept parse_can_input = requires(T a) {
-            { parser<T>::parse(std::string_view{}) } -> std::same_as<r<T>>;
-        };
+                                      { parser<T>::parse(std::string_view{}) } -> std::same_as<r<T>>;
+                                  };
 
         template <class T>
         concept parsable = parse_can_input<T> and parse_can_output<T>;
@@ -550,8 +550,8 @@ namespace ka {
         namespace util {
             template <class T>
             concept is_std_to_stringable = requires(T const &value) {
-                { std::to_string(value) } -> std::convertible_to<std::string>;
-            };
+                                               { std::to_string(value) } -> std::convertible_to<std::string>;
+                                           };
         }
 
         template <class T>
