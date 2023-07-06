@@ -72,6 +72,27 @@ namespace ka::p2p {
 
     }// namespace
 
+    const char *to_string(error e) {
+        switch (e) {
+            case error::malformed:
+                return "malformed command";
+            case error::unauthorized:
+                return "unauthorized";
+            case error::invalid:
+                return "invalid";
+            case error::p2p_timeout:
+                return to_string(pn532::channel_error::timeout);
+            case error::p2p_hw_error:
+                return to_string(pn532::channel_error::hw_error);
+            case error::p2p_malformed:
+                return to_string(pn532::channel_error::malformed);
+            case error::p2p_app_error:
+                return to_string(pn532::channel_error::app_error);
+            default:
+                return "UNKNOWN";
+        }
+    }
+
     void configure_gate_loop(pn532::controller &ctrl, gate &g) {
         pn532::p2p::pn532_target raw_comm{ctrl};
         while (not g.is_configured()) {
@@ -166,10 +187,10 @@ namespace ka::p2p {
         return bool(configure_gate_exchange(km, comm, gate_description));
     }
 
-    remote_gate_base::remote_gate_base(secure_initiator &remote_gate) : _remote_gate{remote_gate} {}
+    remote_gate_base::remote_gate_base(secure_target &local_interface) : _local_interface{local_interface} {}
 
     pub_key remote_gate_base::gate_public_key() const {
-        return pub_key{remote().peer_pub_key()};
+        return pub_key{local_interface().peer_pub_key()};
     }
 
     r<gate_fw_info> remote_gate_base::hello_and_assert_protocol(std::uint8_t proto_version) {
@@ -180,9 +201,16 @@ namespace ka::p2p {
         }
         return r;
     }
+    r<> remote_gate_base::command(mlab::bin_data const &cmd) {
+        if (auto r = local_interface().send(cmd, 5s); not r) {
+            return channel_error_to_p2p_error(r.error());
+        }
+        return mlab::result_success;
+    }
 
-    r<mlab::bin_data> remote_gate_base::command_response(mlab::bin_data const &command) {
-        if (auto r = remote().communicate(command, 5s); r) {
+    r<mlab::bin_data> remote_gate_base::command_response(mlab::bin_data const &cmd) {
+        TRY(command(cmd));
+        if (auto r = local_interface().receive(5s); r) {
             // Last byte identifies the status code
             if (r->empty()) {
                 return error::malformed;
@@ -215,7 +243,7 @@ namespace ka::p2p {
     }
 
     void remote_gate_base::bye() {
-        void(command_parse_response<void>(bits::command_bye));
+        void(command(mlab::bin_data::chain(bits::command_bye)));
     }
 
     namespace v0 {
@@ -269,6 +297,11 @@ namespace ka::p2p {
 
         r<> remote_gate::reset_gate() {
             return command_parse_response<void>(commands::reset_gate);
+        }
+
+        local_gate::local_gate(ka::p2p::secure_target &remote_keymaker) : _remote_keymaker{remote_keymaker} {}
+
+        void local_gate::serve() {
         }
     }// namespace v0
 

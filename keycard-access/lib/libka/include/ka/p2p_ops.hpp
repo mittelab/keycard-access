@@ -31,6 +31,8 @@ namespace ka::p2p {
         p2p_app_error = 0xff,///< The PN532 gave an application-level ERROR frame.
     };
 
+    [[nodiscard]] const char *to_string(error e);
+
     [[nodiscard]] constexpr error channel_error_to_p2p_error(pn532::channel_error err);
 
     struct gate_fw_info : fw_info {
@@ -41,23 +43,24 @@ namespace ka::p2p {
     using r = mlab::result<error, Args...>;
 
     class remote_gate_base {
-        secure_initiator &_remote_gate;
+        secure_target &_local_interface;
 
         [[nodiscard]] static bool assert_stream_healthy(mlab::bin_stream const &s);
 
     protected:
-        [[nodiscard]] inline secure_initiator &remote();
-        [[nodiscard]] inline secure_initiator const &remote() const;
+        [[nodiscard]] inline secure_target &local_interface();
+        [[nodiscard]] inline secure_target const &local_interface() const;
 
         [[nodiscard]] r<gate_fw_info> hello_and_assert_protocol(std::uint8_t proto_version);
 
         template <class R, class... Args>
         [[nodiscard]] std::conditional_t<std::is_void_v<R>, r<>, r<R>> command_parse_response(Args &&...args);
 
-        [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &command);
+        [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &cmd);
+        [[nodiscard]] r<> command(mlab::bin_data const &cmd);
 
     public:
-        explicit remote_gate_base(secure_initiator &remote_gate);
+        explicit remote_gate_base(secure_target &local_interface);
 
         [[nodiscard]] pub_key gate_public_key() const;
 
@@ -86,7 +89,8 @@ namespace ka::p2p {
             bool operational = false;
         };
 
-        struct remote_gate : remote_gate_base {
+        class remote_gate : public remote_gate_base {
+        public:
             using remote_gate_base::remote_gate_base;
 
             [[nodiscard]] r<gate_fw_info> hello() override;
@@ -100,6 +104,17 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<registration_info> get_registration_info();
             [[nodiscard]] virtual r<> register_gate(gate_id requested_id);
             [[nodiscard]] virtual r<> reset_gate();
+        };
+
+        class local_gate {
+            secure_target &_remote_keymaker;
+
+        public:
+            explicit local_gate(secure_target &remote_keymaker);
+
+            virtual ~local_gate() = default;
+
+            virtual void serve();
         };
     }// namespace v0
 
@@ -143,12 +158,12 @@ namespace mlab {
 
 namespace ka::p2p {
 
-    secure_initiator &remote_gate_base::remote() {
-        return _remote_gate;
+    secure_target &remote_gate_base::local_interface() {
+        return _local_interface;
     }
 
-    secure_initiator const &remote_gate_base::remote() const {
-        return _remote_gate;
+    secure_target const &remote_gate_base::local_interface() const {
+        return _local_interface;
     }
 
     constexpr error channel_error_to_p2p_error(pn532::channel_error err) {
