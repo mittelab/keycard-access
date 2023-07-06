@@ -122,6 +122,12 @@ namespace ut {
 
         auto trigger_test = [&]() {
             {
+                ESP_LOGI("UT", "Testing %s", "hello");
+                auto r = rg.hello();
+                TEST_ASSERT(r);
+            }
+            {
+                ESP_LOGI("UT", "Testing %s", "get_update_settings");
                 auto r = rg.get_update_settings();
                 TEST_ASSERT(r);
                 if (r) {
@@ -130,10 +136,12 @@ namespace ut {
                 }
             }
             {
+                ESP_LOGI("UT", "Testing %s", "set_update_settings");
                 auto r = rg.set_update_settings("The Channel", true);
                 TEST_ASSERT(r);
             }
             {
+                ESP_LOGI("UT", "Testing %s", "get_wifi_status");
                 auto r = rg.get_wifi_status();
                 TEST_ASSERT(r);
                 if (r) {
@@ -142,6 +150,7 @@ namespace ut {
                 }
             }
             {
+                ESP_LOGI("UT", "Testing %s", "connect_wifi");
                 auto r = rg.connect_wifi("Test SSID", "Test Password");
                 TEST_ASSERT(r);
                 if (r) {
@@ -149,6 +158,7 @@ namespace ut {
                 }
             }
             {
+                ESP_LOGI("UT", "Testing %s", "get_registration_info");
                 auto r = rg.get_registration_info();
                 TEST_ASSERT(r);
                 if (r) {
@@ -157,6 +167,7 @@ namespace ut {
                 }
             }
             {
+                ESP_LOGI("UT", "Testing %s", "register_gate");
                 auto r = rg.register_gate(ka::gate_id{13});
                 TEST_ASSERT(r);
                 if (r) {
