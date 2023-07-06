@@ -84,6 +84,7 @@ namespace ka {
         gate_base_key _base_key = {};
 
         std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
+
     public:
         explicit gate(std::shared_ptr<nvs::partition> const &partition);
         explicit gate(key_pair kp);
@@ -101,6 +102,8 @@ namespace ka {
          */
         [[nodiscard]] std::optional<gate_base_key> configure(gate_id gid, pub_key keymaker_pubkey);
 
+        [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
+
         /**
          * @}
          */
@@ -108,12 +111,6 @@ namespace ka {
         [[nodiscard]] gate_id id() const;
         [[nodiscard]] bool is_configured() const;
         [[nodiscard]] pub_key const &keymaker_pk() const;
-
-        /**
-         * @todo Make private.
-         */
-        [[nodiscard]] gate_base_key const &app_base_key() const;
-
 
         /**
          * @todo Make private?

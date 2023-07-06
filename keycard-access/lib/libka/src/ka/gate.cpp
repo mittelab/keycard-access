@@ -113,10 +113,6 @@ namespace ka {
         return _id;
     }
 
-    gate_base_key const &gate::app_base_key() const {
-        return _base_key;
-    }
-
     gate::gate(std::shared_ptr<nvs::partition> const &partition) : device{partition} {
         if (partition) {
             _gate_ns = partition->open_namespc("ka-gate");
@@ -163,6 +159,9 @@ namespace ka {
         }
     }
 
+    gate_token_key gate::derive_token_key(const ka::token_id &token_id, std::uint8_t key_no) const {
+        return _base_key.derive_token_key(token_id, key_no);
+    }
 
     std::optional<gate_base_key> gate::configure(gate_id gid, pub_key keymaker_pubkey) {
         if (is_configured()) {

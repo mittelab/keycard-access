@@ -647,7 +647,7 @@ namespace ka {
             /**
              * @todo Use a method of gate instead of accessing directly app_base_key
              */
-            const auto key = g.app_base_key().derive_token_key(*r_id, g.id().key_no());
+            const auto key = g.derive_token_key(*r_id, g.id().key_no());
             return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, g.keys(), g.keymaker_pk(), check_app, check_file), r_id);
         }
     }
