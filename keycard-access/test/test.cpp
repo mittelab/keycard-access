@@ -11,6 +11,7 @@
 #include <pn532/esp32/hsu.hpp>
 #include <thread>
 #include <unity.h>
+#include "test_p2p.hpp"
 
 using namespace ka;
 using namespace std::chrono_literals;
@@ -798,6 +799,7 @@ extern "C" void app_main() {
     RUN_TEST(ut::test_keys);
     RUN_TEST(ut::test_nvs);
     RUN_TEST(ut::test_encrypt_decrypt);
+    RUN_TEST(ut::test_p2p);
 
     ESP_LOGI("TEST", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);
 
