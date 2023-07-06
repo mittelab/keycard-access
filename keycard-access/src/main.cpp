@@ -2,6 +2,7 @@
 #include <desfire/esp32/utils.hpp>
 #include <ka/console.hpp>
 #include <ka/device.hpp>
+#include <ka/nvs.hpp>
 #include <thread>
 
 // Override the log prefix
@@ -14,7 +15,7 @@ extern "C" void app_main() {
     // In case someone forgets to disable logging root keys...
     desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
 
-    ka::device this_device;
+    ka::device this_device{ka::nvs::instance().open_default_partition()};
 
     ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
     std::this_thread::sleep_for(2s);

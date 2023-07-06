@@ -12,12 +12,11 @@
 namespace ka {
     void gate_main(pn532::controller &controller, pn532::scanner &scanner) {
         ESP_LOGI(LOG_PFX, "Reconfiguring as a new demo gate.");
-        ka::gate gate;
+        ka::gate gate{nvs::instance().open_default_partition()};
 
         if (not gate.is_configured()) {
             ESP_LOGW(LOG_PFX, "Gate is not configured, entering target mode.");
             ka::p2p::configure_gate_loop(controller, gate);
-            gate.config_store();
             ESP_LOGI(LOG_PFX, "Gate configured.");
         }
 
