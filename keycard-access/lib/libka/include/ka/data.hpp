@@ -83,6 +83,12 @@ namespace ka {
     using hash_type = mlab::tagged_array<hash_tag, 64>;
     using token_id = mlab::tagged_array<token_id_tag, 7>;
 
+    struct gate_base_key_tag {};
+
+    struct gate_base_key : public mlab::tagged_array<gate_base_key_tag, 32> {
+        [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
+    };
+
     [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);
 
     [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d);

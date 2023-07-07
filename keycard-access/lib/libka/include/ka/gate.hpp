@@ -23,13 +23,6 @@ namespace ka {
 
     class gate;
 
-    struct gate_base_key_tag {};
-
-    struct gate_base_key : public mlab::tagged_array<gate_base_key_tag, 32> {
-        [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
-    };
-
-
     struct gate_credentials {
         pub_key gate_pub_key = {};
         gate_base_key app_base_key = {};
