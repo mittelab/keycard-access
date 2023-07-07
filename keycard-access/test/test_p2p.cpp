@@ -5,6 +5,7 @@
 #include "test_p2p.hpp"
 #include "test_bundle.hpp"
 #include <chrono>
+#include <desfire/esp32/utils.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
@@ -45,13 +46,14 @@ namespace ut {
             }
         };
 
-        struct loopback_bundle : test_bundle {
-            p2p_loopback loopback{};
+        struct secure_p2p_loopback : p2p_loopback {
+            ka::p2p::secure_initiator initiator;
+            ka::p2p::secure_target target;
 
-            ka::p2p::secure_initiator initiator{loopback, g0_uncfg.keys()};
-            ka::p2p::secure_target target{loopback, km.keys()};
-
-            loopback_bundle() {
+            secure_p2p_loopback(ka::key_pair const &km_keys, ka::key_pair const &g_keys)
+                : p2p_loopback{},
+                  initiator{*this, g_keys},
+                  target{*this, km_keys} {
                 std::thread t{[&]() {
                     TEST_ASSERT(initiator.handshake(5s));
                 }};
@@ -60,10 +62,8 @@ namespace ut {
             }
         };
 
-        struct assertive_local_gate : public loopback_bundle, public ka::p2p::v0::local_gate {
-            assertive_local_gate()
-                : loopback_bundle{},
-                  ka::p2p::v0::local_gate{initiator, g0_uncfg} {}
+        struct assertive_local_gate : public ka::p2p::v0::local_gate {
+            using local_gate::local_gate;
 
             ka::p2p::r<ka::p2p::v0::update_settings> get_update_settings() override {
                 return ka::p2p::v0::update_settings{"Foo bar", false};
@@ -86,16 +86,16 @@ namespace ut {
             }
 
             ka::p2p::r<ka::p2p::v0::registration_info> get_registration_info() override {
-                return ka::p2p::v0::registration_info{ka::gate_id{32}, ka::pub_key{g0_uncfg.keys().raw_pk()}};
+                return ka::p2p::v0::registration_info{ka::gate_id{32}, ka::pub_key{g().keys().raw_pk()}};
             }
 
             ka::p2p::r<ka::gate_base_key> register_gate(ka::gate_id requested_id) override {
                 TEST_ASSERT(requested_id == ka::gate_id{13});
-                return test_bundle::g0_bk;
+                return bundle.g0_bk;
             }
 
             ka::p2p::r<> reset_gate() override {
-                return mlab::result_success;
+                return ka::p2p::error::unauthorized;
             }
         };
 
@@ -103,11 +103,14 @@ namespace ut {
     }// namespace
 
     void test_p2p_comm() {
-        assertive_local_gate lg{};
-        ka::p2p::v0::remote_gate rg{lg.target};
+        ka::gate g{bundle.g0.keys()};
+        ka::keymaker km{bundle.km_kp};
+        secure_p2p_loopback loop{km.keys(), g.keys()};
+        assertive_local_gate lg{loop.initiator, g};
+        ka::p2p::v0::remote_gate rg{loop.target};
 
-        TEST_ASSERT(lg.initiator.did_handshake());
-        TEST_ASSERT(lg.target.did_handshake());
+        TEST_ASSERT(loop.initiator.did_handshake());
+        TEST_ASSERT(loop.target.did_handshake());
 
         std::thread t{[&]() { lg.serve_loop(); }};
 
@@ -153,7 +156,7 @@ namespace ut {
             TEST_ASSERT(r);
             if (r) {
                 TEST_ASSERT(r->id == ka::gate_id{32});
-                TEST_ASSERT(r->km_pk.raw_pk() == lg.g0_uncfg.keys().raw_pk());
+                TEST_ASSERT(r->km_pk.raw_pk() == g.keys().raw_pk());
             }
         }
         {
@@ -161,11 +164,65 @@ namespace ut {
             auto r = rg.register_gate(ka::gate_id{13});
             TEST_ASSERT(r);
             if (r) {
-                TEST_ASSERT(*r == lg.g0_bk);
+                TEST_ASSERT(*r == bundle.g0_bk);
+            }
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "reset_gate (unauthorized)");
+            auto r = rg.reset_gate();
+            TEST_ASSERT(not r);
+            if (not r) {
+                TEST_ASSERT(r.error() == ka::p2p::error::unauthorized);
             }
         }
         rg.bye();
 
         t.join();
+    }
+
+    void test_p2p_registration() {
+        desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {"GATE", "P2P"}};
+
+        ka::keymaker km1{bundle.km_kp};
+        ka::keymaker km2{ka::key_pair{ka::pwhash, "foobar"}};
+        ka::gate g{bundle.g0.keys()};
+
+        secure_p2p_loopback loop1{km1.keys(), g.keys()};
+        secure_p2p_loopback loop2{km2.keys(), g.keys()};
+
+        ka::p2p::v0::remote_gate rg1{loop1.target};
+        ka::p2p::v0::local_gate lg1{loop1.initiator, g};
+
+        ka::p2p::v0::remote_gate rg2{loop2.target};
+        ka::p2p::v0::local_gate lg2{loop2.initiator, g};
+
+        std::thread t1{[&]() { lg1.serve_loop(); }};
+        std::thread t2{[&]() { lg2.serve_loop(); }};
+
+        auto is_unauthorized = [](auto const &r) { return not r and r.error() == ka::p2p::error::unauthorized; };
+        auto is_invalid = [](auto const &r) { return not r and r.error() == ka::p2p::error::invalid; };
+
+        // Do the setup with km1
+        TEST_ASSERT(rg1.hello());
+        TEST_ASSERT(rg1.register_gate(ka::gate_id{11}));
+        TEST_ASSERT(is_invalid(rg1.register_gate(ka::gate_id{11})));
+
+        // Attempt to register with km2
+        TEST_ASSERT(rg2.hello());
+        TEST_ASSERT(is_invalid(rg2.register_gate(ka::gate_id{12})));
+        TEST_ASSERT(is_unauthorized(rg2.reset_gate()));
+        TEST_ASSERT(is_unauthorized(rg2.connect_wifi("foo", "bar")));
+        TEST_ASSERT(is_unauthorized(rg2.set_update_settings("foo", false)));
+
+        // Reset with km1
+        TEST_ASSERT(rg1.reset_gate());
+        TEST_ASSERT(rg2.register_gate(ka::gate_id{11}));
+
+        // Good.
+        rg1.bye();
+        rg2.bye();
+
+        t1.join();
+        t2.join();
     }
 }// namespace ut

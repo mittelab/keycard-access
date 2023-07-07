@@ -11,6 +11,7 @@ extern "C" void app_main() {
     RUN_TEST(ut::test_encrypt_decrypt);
 
     RUN_TEST(ut::test_p2p_comm);
+    RUN_TEST(ut::test_p2p_registration);
 
     {
         ut::controller_test_fixture ctrl_fixture;
