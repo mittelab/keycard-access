@@ -85,6 +85,31 @@ namespace ka::nvs {
         }
     }
 
+    const char *to_string(error e) {
+        switch (e) {
+            case error::not_found:
+                return "not found";
+            case error::invalid_name:
+                return "invalid name";
+            case error::invalid_length:
+                return "invalid length";
+            case error::not_enough_space:
+                return "not enough space";
+            case error::read_only:
+                return "read only";
+            case error::too_long:
+                return "too long";
+            case error::remove_failed:
+                return "remove failed";
+            case error::fail:
+                return "fail";
+            case error::invalid_handle:
+                return "invalid handle";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
     error from_esp_error(esp_err_t esp_err) {
         switch (esp_err) {
             case ESP_ERR_NVS_NOT_FOUND:

@@ -40,6 +40,8 @@ namespace ka::nvs {
         other
     };
 
+    [[nodiscard]] const char *to_string(error e);
+
     template <class... Tn>
     using r = mlab::result<error, Tn...>;
 
