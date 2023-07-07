@@ -4,6 +4,7 @@
 
 #include <ka/console.hpp>
 #include <ka/device.hpp>
+#include <desfire/fs.hpp>
 
 using namespace ka::cmd_literals;
 
@@ -15,20 +16,30 @@ namespace ka {
             _device_ns = partition->open_namespc("ka-device");
         }
         if (_device_ns) {
-            if (const auto r = _device_ns->get_str("update-channel"); r) {
-                _ota->set_update_channel(*r);
+            auto load_from_nvs = [&]() -> nvs::r<> {
+                TRY_RESULT(_device_ns->get_str("update-channel")) {
+                    _ota->set_update_channel(*r);
+                }
+                TRY_RESULT(_device_ns->get_u8("update-enabled")) {
+                    if (*r != 0) {
+                        _ota->start();
+                    }
+                }
+                TRY_RESULT(_device_ns->get_blob("secret-key")) {
+                    if (r->size() == raw_sec_key::array_size) {
+                        _kp = key_pair{r->data_view()};
+                    } else {
+                        return nvs::error::invalid_length;
+                    }
+                }
+                return mlab::result_success;
+            };
+            if (load_from_nvs()) {
+                return;
             }
-            if (const auto r = _device_ns->get_u8("update-enabled"); r and *r != 0) {
-                _ota->start();
-            }
-            if (const auto r = _device_ns->get_blob("secret-key"); r) {
-                _kp = key_pair{r->data_view()};
-            } else {
-                generate_keys();
-            }
-        } else {
-            generate_keys();
         }
+        // Else: generate new keys
+        generate_keys();
     }
 
     device::device(key_pair kp) {
@@ -43,13 +54,17 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
             ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-            if (_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk()))) {
-                if (_device_ns->commit()) {
-                    return;
-                }
+            auto update_nvs = [&]() -> nvs::r<> {
+                TRY(_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk())));
+                TRY(_device_ns->commit());
+                return mlab::result_success;
+            };
+
+            if (not update_nvs()) {
+                ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
             }
         }
-        ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+
     }
 
     bool device::updates_automatically() const {
@@ -70,8 +85,11 @@ namespace ka {
             _ota->stop();
         }
         if (_device_ns) {
-            _device_ns->set_u8("update-enabled", v ? 1 : 0);
-            _device_ns->commit();
+            void([&]() -> nvs::r<> {
+                TRY(_device_ns->set_u8("update-enabled", v ? 1 : 0));
+                TRY(_device_ns->commit());
+                return mlab::result_success;
+            }());
         }
     }
 
@@ -94,8 +112,11 @@ namespace ka {
         }
         _ota->set_update_channel(channel);
         if (_device_ns) {
-            _device_ns->set_str("update-channel", std::string{channel});
-            _device_ns->commit();
+            void([&]() -> nvs::r<> {
+                TRY(_device_ns->set_str("update-channel", std::string{channel}));
+                TRY(_device_ns->commit());
+                return mlab::result_success;
+            }());
         }
         return true;
     }

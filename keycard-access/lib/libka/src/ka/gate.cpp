@@ -118,22 +118,31 @@ namespace ka {
             _gate_ns = partition->open_namespc("ka-gate");
         }
         if (_gate_ns) {
-            if (const auto r = _gate_ns->get_u32("id"); r) {
-                _id = gate_id{*r};
-            }
-            if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
-                _km_pk = pub_key{r->data_view()};
-            } else {
-                // Reset
-                _id = std::numeric_limits<gate_id>::max();
-                return;
-            }
-            if (const auto r = _gate_ns->get_blob("base-key"); r and r->size() == gate_base_key::array_size) {
-                std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
-            } else {
+            auto load_from_nvs = [&]() -> nvs::r<> {
+                TRY_RESULT(_gate_ns->get_u32("id")) {
+                    _id = gate_id{*r};
+                }
+                TRY_RESULT(_gate_ns->get_blob("keymaker-pubkey")) {
+                    if (r->size() == raw_pub_key::array_size) {
+                        _km_pk = pub_key{r->data_view()};
+                    } else {
+                        return nvs::error::invalid_length;
+                    }
+                }
+                TRY_RESULT(_gate_ns->get_blob("base-key")) {
+                    if (r->size() == gate_base_key::array_size) {
+                        std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
+                    } else {
+                        return nvs::error::invalid_length;
+                    }
+                }
+                return mlab::result_success;
+            };
+            if (not load_from_nvs()) {
                 // Reset
                 _id = std::numeric_limits<gate_id>::max();
                 _km_pk = {};
+                _base_key = {};
             }
         }
     }
@@ -152,10 +161,13 @@ namespace ka {
         _km_pk = {};
         _base_key = {};
         if (_gate_ns) {
-            _gate_ns->erase("id");
-            _gate_ns->erase("keymaker-pubkey");
-            _gate_ns->erase("base-key");
-            _gate_ns->commit();
+            void([&]() -> nvs::r<> {
+                TRY(_gate_ns->erase("id"));
+                TRY(_gate_ns->erase("keymaker-pubkey"));
+                TRY(_gate_ns->erase("base-key"));
+                TRY(_gate_ns->commit());
+                return mlab::result_success;
+            }());
         }
     }
 
@@ -181,12 +193,17 @@ namespace ka {
 #ifndef CONFIG_NVS_ENCRYPTION
             ESP_LOGW("KA", "Encryption is disabled!");
 #endif
-            _gate_ns->set_u32("id", std::uint32_t(_id));
-            _gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk.raw_pk()));
-            _gate_ns->set_blob("base-key", mlab::bin_data::chain(_base_key));
-            _gate_ns->commit();
-        } else {
-            ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+            auto update_nvs = [&]() -> nvs::r<> {
+                TRY(_gate_ns->set_u32("id", std::uint32_t(_id)));
+                TRY(_gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk.raw_pk())));
+                TRY(_gate_ns->set_blob("base-key", mlab::bin_data::chain(_base_key)));
+                TRY(_gate_ns->commit());
+                return mlab::result_success;
+            };
+
+            if (not update_nvs()) {
+                ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+            }
         }
 
         return _base_key;
