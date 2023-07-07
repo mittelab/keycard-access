@@ -8,6 +8,10 @@
 
 using namespace ka::cmd_literals;
 
+#define TAG "KADEV"
+#undef DESFIRE_FS_LOG_PREFIX
+#define DESFIRE_FS_LOG_PREFIX TAG
+
 namespace ka {
 
     device::device(std::shared_ptr<nvs::partition> const &partition) : device{} {
@@ -48,11 +52,11 @@ namespace ka {
 
     void device::generate_keys() {
         _kp.generate_random();
-        ESP_LOGI("KA", "Generated random key pair; public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Generated random key pair; public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
         if (_device_ns) {
 #ifndef CONFIG_NVS_ENCRYPTION
-            ESP_LOGW("KA", "Encryption is disabled!");
+            ESP_LOGW(TAG, "Encryption is disabled!");
 #endif
             auto update_nvs = [&]() -> nvs::r<> {
                 TRY(_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk())));
@@ -61,7 +65,7 @@ namespace ka {
             };
 
             if (not update_nvs()) {
-                ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+                ESP_LOGE(TAG, "Unable to save secret key! This makes all encrypted data ephemeral!");
             }
         }
 
@@ -76,7 +80,7 @@ namespace ka {
 
     void device::set_update_automatically(bool v) {
         if (not _ota) {
-            ESP_LOGE("KA", "Updates not available during test.");
+            ESP_LOGE(TAG, "Updates not available during test.");
             return;
         }
         if (v) {
@@ -102,7 +106,7 @@ namespace ka {
 
     bool device::set_update_channel(std::string_view channel, bool test_before) {
         if (not _ota) {
-            ESP_LOGE("KA", "Updates not available during test.");
+            ESP_LOGE(TAG, "Updates not available during test.");
             return false;
         }
         if (test_before) {
@@ -123,7 +127,7 @@ namespace ka {
 
     std::optional<release_info> device::check_for_updates() const {
         if (not _ota) {
-            ESP_LOGE("KA", "Updates not available during test.");
+            ESP_LOGE(TAG, "Updates not available during test.");
             return std::nullopt;
         }
         return _ota->check_now();
@@ -135,7 +139,7 @@ namespace ka {
 
     void device::update_firmware() {
         if (not _ota) {
-            ESP_LOGE("KA", "Updates not available during test.");
+            ESP_LOGE(TAG, "Updates not available during test.");
             return;
         }
         if (const auto ri = _ota->check_now(); ri) {
@@ -145,7 +149,7 @@ namespace ka {
 
     void device::update_firmware(std::string_view fw_url) {
         if (not _ota) {
-            ESP_LOGE("KA", "Updates not available during test.");
+            ESP_LOGE(TAG, "Updates not available during test.");
             return;
         }
         _ota->update_from(fw_url);

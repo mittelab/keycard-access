@@ -13,6 +13,9 @@
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/randombytes.h>
 
+#define TAG "GATE"
+#undef DESFIRE_FS_LOG_PREFIX
+#define DESFIRE_FS_LOG_PREFIX TAG
 
 using namespace std::chrono_literals;
 
@@ -30,21 +33,21 @@ namespace ka {
                          pack_token_id(token_id),
                          app_master_key_context.data(),
                          data())) {
-            ESP_LOGE("KA", "Unable to derive root key.");
+            ESP_LOGE(TAG, "Unable to derive root key.");
         }
         return gate_token_key{key_no, derived_key_data};
     }
 
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
         if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {
-            ESP_LOGI("KA", "Authenticated as %s.", r->first.holder.c_str());
+            ESP_LOGI(TAG, "Authenticated as %s.", r->first.holder.c_str());
             responder.on_authentication_success(r->first);
         } else {
             switch (r.error()) {
                 case desfire::error::app_not_found:
                     [[fallthrough]];
                 case desfire::error::file_not_found:
-                    ESP_LOGI("KA", "Not enrolled.");
+                    ESP_LOGI(TAG, "Not enrolled.");
                     break;
                 case desfire::error::app_integrity_error:
                     [[fallthrough]];
@@ -53,11 +56,11 @@ namespace ka {
                 case desfire::error::malformed:
                     [[fallthrough]];
                 case desfire::error::file_integrity_error:
-                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    ESP_LOGW(TAG, "Unable to authenticate, %s", member_token::describe(r.error()));
                     responder.on_authentication_fail(r.error(), true);
                     break;
                 default:
-                    ESP_LOGW("KA", "Unable to authenticate, %s", member_token::describe(r.error()));
+                    ESP_LOGW(TAG, "Unable to authenticate, %s", member_token::describe(r.error()));
                     responder.on_authentication_fail(r.error(), false);
                     break;
             }
@@ -92,15 +95,15 @@ namespace ka {
         ESP_LOGI("GATE", "NFC target %s has left the RF field.", s_id.c_str());
     }
     void gate_responder::on_failed_scan(pn532::scanner &, pn532::channel_error err) {
-        ESP_LOGV("GATE", "Scan failed with error: %s", pn532::to_string(err));
+        ESP_LOGV("GATE", "Scan failed  with error: %s", pn532::to_string(err));
     }
 
     void gate::log_public_gate_info() const {
-        ESP_LOGI("KA", "Gate %lu", std::uint32_t(this->id()));
-        ESP_LOGI("KA", "Gate public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
-        ESP_LOGI("KA", "Keymaker public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pk().raw_pk().data(), keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Gate %lu", std::uint32_t(this->id()));
+        ESP_LOGI(TAG, "Gate public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Keymaker public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pk().raw_pk().data(), keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
     }
 
     bool gate::is_configured() const {
@@ -156,7 +159,7 @@ namespace ka {
           _base_key{base_key} {}
 
     void gate::reset() {
-        ESP_LOGW("KA", "Gate is being reset.");
+        ESP_LOGW(TAG, "Gate is being reset.");
         _id = std::numeric_limits<gate_id>::max();
         _km_pk = {};
         _base_key = {};
@@ -177,13 +180,13 @@ namespace ka {
 
     std::optional<gate_base_key> gate::configure(gate_id gid, pub_key keymaker_pubkey) {
         if (is_configured()) {
-            ESP_LOGE("KA", "Attempt to reconfigure gate %lu as gate %lu with the following public key:",
+            ESP_LOGE(TAG, "Attempt to reconfigure gate %lu as gate %lu with the following public key:",
                      std::uint32_t(id()), std::uint32_t(gid));
-            ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_ERROR);
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_ERROR);
             return std::nullopt;
         }
-        ESP_LOGI("KA", "Configuring as gate %lu, with the following keymaker pubkey:", std::uint32_t(gid));
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Configuring as gate %lu, with the following keymaker pubkey:", std::uint32_t(gid));
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_INFO);
         _id = gid;
         _km_pk = keymaker_pubkey;
         // Generate a new app base key
@@ -191,7 +194,7 @@ namespace ka {
 
         if (_gate_ns) {
 #ifndef CONFIG_NVS_ENCRYPTION
-            ESP_LOGW("KA", "Encryption is disabled!");
+            ESP_LOGW(TAG, "Encryption is disabled!");
 #endif
             auto update_nvs = [&]() -> nvs::r<> {
                 TRY(_gate_ns->set_u32("id", std::uint32_t(_id)));
@@ -202,7 +205,7 @@ namespace ka {
             };
 
             if (not update_nvs()) {
-                ESP_LOGE("KA", "Unable to save secret key! This makes all encrypted data ephemeral!");
+                ESP_LOGE(TAG, "Unable to save secret key! This makes all encrypted data ephemeral!");
             }
         }
 

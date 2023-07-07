@@ -12,6 +12,10 @@
 #include <pn532/controller.hpp>
 #include <pn532/p2p.hpp>
 
+#define TAG "P2P"
+#undef DESFIRE_FS_LOG_PREFIX
+#define DESFIRE_FS_LOG_PREFIX TAG
+
 namespace ka::p2p {
     namespace bits {
         [[deprecated]] static constexpr std::uint8_t command_code_configure = 0xcf;
@@ -23,7 +27,7 @@ namespace ka::p2p {
     error proto_status_to_error(proto_status s) {
         switch (s) {
             case proto_status::ok:
-                ESP_LOGE("KA", "Proto status OK is not an error.");
+                ESP_LOGE(TAG, "Proto status OK is not an error.");
                 return error::p2p_app_error;
             case proto_status::unauthorized:
                 return error::unauthorized;
@@ -36,7 +40,7 @@ namespace ka::p2p {
             case proto_status::ready_for_cmd:
                 [[fallthrough]];
             case proto_status::did_read_resp:
-                ESP_LOGE("KA", "Broken NFC P2P flow, received status byte %02x", static_cast<std::uint8_t>(s));
+                ESP_LOGE(TAG, "Broken NFC P2P flow, received status byte %02x", static_cast<std::uint8_t>(s));
                 [[fallthrough]];
             case proto_status::malformed:
                 return error::malformed;
@@ -54,7 +58,7 @@ namespace ka::p2p {
             case error::arg_error:
                 return proto_status::arg_error;
             default:
-                ESP_LOGE("KA", "Broken NFC P2P flow, received status byte %02x", static_cast<std::uint8_t>(e));
+                ESP_LOGE(TAG, "Broken NFC P2P flow, received status byte %02x", static_cast<std::uint8_t>(e));
                 return proto_status::malformed;
         }
     }
@@ -141,8 +145,8 @@ namespace ka::p2p {
 
     pn532::result<> configure_gate_exchange(gate &g, secure_target &comm) {
         TRY(comm.handshake());
-        ESP_LOGI("KA", "Comm opened, peer's public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Comm opened, peer's public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
 
         TRY_RESULT(comm.receive(1s)) {
             std::uint32_t new_id = g.id();
@@ -153,14 +157,14 @@ namespace ka::p2p {
             s >> mlab::lsb32 >> new_id;
             std::string new_desc = mlab::data_to_string(s.peek());
             if (s.bad()) {
-                ESP_LOGE("KA", "Invalid configure command received.");
+                ESP_LOGE(TAG, "Invalid configure command received.");
                 return pn532::channel_error::malformed;
             }
 
             // Finally:
             const auto base_key = g.configure(gate_id{new_id}, pub_key{comm.peer_pub_key()});
             if (not base_key) {
-                ESP_LOGE("KA", "Gate already configured.");
+                ESP_LOGE(TAG, "Gate already configured.");
                 return pn532::channel_error::app_error;
             }
             g.log_public_gate_info();
@@ -171,8 +175,8 @@ namespace ka::p2p {
 
     pn532::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description) {
         TRY(comm.handshake());
-        ESP_LOGI("KA", "Comm opened, peer's public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL("KA", comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
+        ESP_LOGI(TAG, "Comm opened, peer's public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, comm.peer_pub_key().data(), comm.peer_pub_key().size(), ESP_LOG_INFO);
 
         /**
          * @todo Return the ID if needed.
@@ -182,7 +186,7 @@ namespace ka::p2p {
         msg << bits::command_code_configure << mlab::lsb32 << std::uint32_t(gid) << mlab::data_view_from_string(gate_description);
         TRY_RESULT(comm.communicate(msg, 1s)) {
             if (r->size() != gate_base_key::array_size) {
-                ESP_LOGE("KA", "Invalid configure response received.");
+                ESP_LOGE(TAG, "Invalid configure response received.");
                 return pn532::channel_error::malformed;
             }
             gate_base_key base_key{};
@@ -213,14 +217,14 @@ namespace ka::p2p {
 
     remote_gate_base::remote_gate_base(secure_target &local_interface) : _local_interface{local_interface} {
         if (not local_interface.did_handshake()) {
-            ESP_LOGE("KA", "You must have performed the handshake before!");
+            ESP_LOGE(TAG, "You must have performed the handshake before!");
         }
     }
 
     r<gate_fw_info> remote_gate_base::hello_and_assert_protocol(std::uint8_t proto_version) {
         auto r = remote_gate_base::hello();
         if (r and r->proto_version != proto_version) {
-            ESP_LOGE("KA", "Mismatching protocol version %d", r->proto_version);
+            ESP_LOGE(TAG, "Mismatching protocol version %d", r->proto_version);
             return error::invalid;
         }
         return r;
@@ -228,8 +232,8 @@ namespace ka::p2p {
     r<> remote_gate_base::command(std::uint8_t command_code, mlab::bin_data cmd) {
         if (auto r = local_interface().receive(5s); r) {
             if (r->size() != 1 or r->front() != static_cast<std::uint8_t>(proto_status::ready_for_cmd)) {
-                ESP_LOGE("KA", "Invalid protocol flow, I got %d bytes:", r->size());
-                ESP_LOG_BUFFER_HEX_LEVEL("KA", r->data(), r->size(), ESP_LOG_ERROR);
+                ESP_LOGE(TAG, "Invalid protocol flow, I got %d bytes:", r->size());
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, r->data(), r->size(), ESP_LOG_ERROR);
                 return error::malformed;
             }
         }
@@ -250,7 +254,7 @@ namespace ka::p2p {
         if (auto r_recv = local_interface().receive(5s); r_recv) {
             // Mark that the response has been received
             if (auto r_confirm = local_interface().send(mlab::bin_data::chain(proto_status::did_read_resp), 5s); not r_confirm) {
-                ESP_LOGW("KA", "Unable to confirm the response was received, status %s", to_string(r_confirm.error()));
+                ESP_LOGW(TAG, "Unable to confirm the response was received, status %s", to_string(r_confirm.error()));
             }
             // Last byte identifies the status code
             if (r_recv->empty()) {
@@ -270,10 +274,10 @@ namespace ka::p2p {
 
     bool assert_stream_healthy(mlab::bin_stream const &s) {
         if (not s.eof()) {
-            ESP_LOGW("KA", "Stray %u bytes at the end of the stream.", s.remaining());
+            ESP_LOGW(TAG, "Stray %u bytes at the end of the stream.", s.remaining());
             return false;
         } else if (s.bad()) {
-            ESP_LOGW("KA", "Malformed or unreadable response.");
+            ESP_LOGW(TAG, "Malformed or unreadable response.");
             return false;
         }
         return true;
@@ -289,7 +293,7 @@ namespace ka::p2p {
 
     local_gate_base::local_gate_base(secure_initiator &local_interface, ka::gate &g) : _local_interface{local_interface}, _g{g} {
         if (not local_interface.did_handshake()) {
-            ESP_LOGE("KA", "You must have performed the handshake before!");
+            ESP_LOGE(TAG, "You must have performed the handshake before!");
         }
     }
 
@@ -310,8 +314,8 @@ namespace ka::p2p {
         resp << s;
         if (auto r = local_interface().communicate(resp, 5s); r) {
             if (r->size() != 1 or r->front() != static_cast<std::uint8_t>(proto_status::did_read_resp)) {
-                ESP_LOGE("KA", "Invalid protocol flow, I got %d bytes:", r->size());
-                ESP_LOG_BUFFER_HEX_LEVEL("KA", r->data(), r->size(), ESP_LOG_ERROR);
+                ESP_LOGE(TAG, "Invalid protocol flow, I got %d bytes:", r->size());
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, r->data(), r->size(), ESP_LOG_ERROR);
                 return error::malformed;
             }
             return mlab::result_success;
@@ -340,14 +344,14 @@ namespace ka::p2p {
                     case serve_outcome::halt:
                         return;
                     case serve_outcome::unknown:
-                        ESP_LOGE("KA", "Unsupported command code %02x", r_recv->first);
+                        ESP_LOGE(TAG, "Unsupported command code %02x", r_recv->first);
                         if (auto r_malf = response_send(proto_status::malformed, {}); not r_malf) {
-                            ESP_LOGW("KA", "Unable to send reply, %s", to_string(r_malf.error()));
+                            ESP_LOGW(TAG, "Unable to send reply, %s", to_string(r_malf.error()));
                         }
                         break;
                 }
             } else {
-                ESP_LOGW("KA", "Unable to send reply, %s", to_string(r_repl.error()));
+                ESP_LOGW(TAG, "Unable to send reply, %s", to_string(r_repl.error()));
             }
         }
     }
