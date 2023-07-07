@@ -219,7 +219,7 @@ namespace ka::p2p {
 
     r<gate_fw_info> remote_gate_base::hello_and_assert_protocol(std::uint8_t proto_version) {
         auto r = remote_gate_base::hello();
-        if (r->proto_version != proto_version) {
+        if (r and r->proto_version != proto_version) {
             ESP_LOGE("KA", "Mismatching protocol version %d", r->proto_version);
             return error::invalid;
         }
