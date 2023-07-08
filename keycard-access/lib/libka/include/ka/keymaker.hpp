@@ -71,16 +71,6 @@ namespace ka {
             return cfgs;
         }
 
-        [[deprecated]] [[nodiscard]] gate_id allocate_gate_id() { return gate_id{_gates.size()}; }
-
-        [[deprecated]] void save_gate(gate_config cfg) {
-            if (cfg.id == _gates.size()) {
-                _gates.emplace_back(gate_data{cfg.id, {}, cfg});
-            } else {
-                ESP_LOGE("KA", "Invalid gate.");
-            }
-        }
-
         void register_commands(ka::cmd::shell &sh) override;
     };
 

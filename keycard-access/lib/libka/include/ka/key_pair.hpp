@@ -16,6 +16,9 @@ namespace ka {
     using raw_sec_key = mlab::tagged_array<sec_key_tag, 32>;
 
 
+    /**
+     * @todo Makre sure that slicing is done without calling raw_pk
+     */
     class pub_key {
     public:
         pub_key() = default;
