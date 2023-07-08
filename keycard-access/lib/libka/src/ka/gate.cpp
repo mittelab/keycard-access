@@ -67,6 +67,25 @@ namespace ka {
         }
     }
 
+    std::vector<pn532::target_type> gate_responder::get_scan_target_types(pn532::scanner &) const {
+        // Allow both DEP targets (gates to be configured) and Mifare targets
+        return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
+                pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
+    }
+
+
+    pn532::post_interaction gate_responder::interact(pn532::scanner &scanner, pn532::scanned_target const &target) {
+        const auto s_nfcid = mlab::data_to_hex_string(target.nfcid);
+        ESP_LOGI(TAG, "Found %s target with NFC ID %s.", pn532::to_string(target.type), s_nfcid.c_str());
+        if (target.type == pn532::target_type::passive_106kbps_iso_iec_14443_4_typea) {
+            return member_token_responder::interact(scanner, target);
+        } else {
+            // Enter a gate configuration loop
+            _g.serve_remote_gate<p2p::v0::local_gate>(scanner.ctrl(), target.index);
+        }
+        return pn532::post_interaction::reject;
+    }
+
     pn532::post_interaction gate_responder::interact_with_token(member_token &token) {
         if (_g.is_configured()) {
             _g.try_authenticate(token, *this);
@@ -210,6 +229,17 @@ namespace ka {
         }
 
         return _base_key;
+    }
+
+    void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory) {
+        pn532::p2p::pn532_initiator raw_initiator{ctrl, logical_idx};
+        p2p::secure_initiator sec_initiator{raw_initiator, keys()};
+        auto proto = factory(sec_initiator, *this);
+        if (not proto) {
+            ESP_LOGE(TAG, "Broken factory!");
+            std::abort();
+        }
+        proto->serve_loop();
     }
 
 

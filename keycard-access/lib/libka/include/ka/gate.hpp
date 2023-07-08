@@ -11,6 +11,8 @@
 #include <ka/device.hpp>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
+#include <ka/p2p_ops.hpp>
+#include <ka/secure_p2p.hpp>
 
 namespace pn532 {
     class controller;
@@ -69,6 +71,10 @@ namespace ka {
          */
 
         pn532::post_interaction interact_with_token(member_token &token) override;
+
+        pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override;
+
+        [[nodiscard]] std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override;
     };
 
     class gate final : public device {
@@ -106,6 +112,11 @@ namespace ka {
          */
         void reset();
 
+        template <p2p::local_gate_protocol Protocol>
+        void serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx);
+
+        void serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory);
+
         /**
          * @return `nullopt` if this gate was already configured.
          */
@@ -129,6 +140,12 @@ namespace ka {
 }// namespace ka
 
 namespace ka {
+
+    template <p2p::local_gate_protocol Protocol>
+    void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx) {
+        serve_remote_gate(ctrl, logical_idx, p2p::protocol_factory<Protocol>{});
+    }
+
 }// namespace ka
 
 #endif//KEYCARDACCESS_GATE_HPP

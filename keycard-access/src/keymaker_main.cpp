@@ -33,28 +33,6 @@ namespace ka {
 
             keymaker_responder() : km{make_keymaker()} {}
 
-            std::vector<pn532::target_type> get_scan_target_types(pn532::scanner &) const override {
-                // Allow both DEP targets (gates to be configured) and Mifare targets
-                return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
-                        pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
-            }
-
-            pn532::post_interaction interact(pn532::scanner &scanner, pn532::scanned_target const &target) override {
-                const auto s_nfcid = mlab::data_to_hex_string(target.nfcid);
-                ESP_LOGI(LOG_PFX, "Found %s target with NFC ID %s.", pn532::to_string(target.type), s_nfcid.c_str());
-                if (target.type == pn532::target_type::passive_106kbps_iso_iec_14443_4_typea) {
-                    return desfire::tag_responder<desfire::esp32::default_cipher_provider>::interact(scanner, target);
-                } else {
-                    // Enter a gate configuration loop
-                    if (ka::p2p::configure_gate_in_rf(scanner.ctrl(), target.index, km, "Dummy gate")) {
-                        ESP_LOGI(LOG_PFX, "Gate configured.");
-                    } else {
-                        ESP_LOGE(LOG_PFX, "Gate not configured.");
-                    }
-                }
-                return pn532::post_interaction::reject;
-            }
-
             desfire::result<> interact_with_token_internal(ka::member_token &token) {
                 const ka::identity unique_id{{}, "Holder", "Publisher"};
                 if (const auto r_deployed = token.is_deployed_correctly(km); r_deployed) {

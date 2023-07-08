@@ -11,7 +11,7 @@ namespace pn532 {
 
 }// namespace pn532
 namespace ka {
-    void gate_main(pn532::controller &controller, pn532::scanner &scanner);
+    void gate_main(pn532::scanner &scanner);
 }
 
 #endif//KEYCARD_ACCESS_GATE_MAIN_HPP

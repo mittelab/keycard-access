@@ -5,7 +5,7 @@
 #ifndef KEYCARD_ACCESS_P2P_OPS_HPP
 #define KEYCARD_ACCESS_P2P_OPS_HPP
 
-#include <ka/gate.hpp>
+#include <ka/data.hpp>
 #include <ka/key_pair.hpp>
 #include <pn532/p2p.hpp>
 
@@ -129,6 +129,22 @@ namespace ka::p2p {
         virtual ~local_gate_base() = default;
     };
 
+    template <class T>
+    concept local_gate_protocol = std::is_base_of_v<local_gate_base, T>;
+
+    struct protocol_factory_base {
+        [[nodiscard]] virtual std::unique_ptr<local_gate_base> operator()(secure_initiator &initiator, gate &g) const = 0;
+        virtual ~protocol_factory_base() = default;
+    };
+
+    template <local_gate_protocol Protocol>
+    struct protocol_factory final : protocol_factory_base {
+        [[nodiscard]] std::unique_ptr<local_gate_base> operator()(secure_initiator &initiator, gate &g) const override {
+            return std::make_unique<Protocol>(initiator, g);
+        }
+    };
+
+
     namespace v0 {
         struct registration_info {
             gate_id id = std::numeric_limits<gate_id>::max();
@@ -188,15 +204,6 @@ namespace ka::p2p {
         };
 
     }// namespace v0
-
-    pn532::result<> configure_gate_exchange(keymaker &km, secure_initiator &comm, std::string const &gate_description);
-    pn532::result<> configure_gate_exchange(gate &g, secure_target &comm);
-
-    [[nodiscard]] bool configure_gate_in_rf(pn532::controller &ctrl, gate &g);
-    [[nodiscard]] bool configure_gate_in_rf(pn532::controller &ctrl, std::uint8_t logical_index, keymaker &km, std::string const &gate_description);
-
-    void configure_gate_loop(pn532::controller &ctrl, gate &g);
-    [[nodiscard]] bool configure_gate_loop(pn532::controller &ctrl, keymaker &km, std::string const &gate_description);
 
 }// namespace ka::p2p
 
