@@ -132,6 +132,9 @@ namespace ka::p2p {
     template <class T>
     concept local_gate_protocol = std::is_base_of_v<local_gate_base, T>;
 
+    template <class T>
+    concept remote_gate_protocol = std::is_base_of_v<remote_gate_base, T>;
+
     struct protocol_factory_base {
         [[nodiscard]] virtual std::unique_ptr<local_gate_base> operator()(secure_initiator &initiator, gate &g) const = 0;
         virtual ~protocol_factory_base() = default;

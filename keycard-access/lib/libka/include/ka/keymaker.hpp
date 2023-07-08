@@ -42,10 +42,24 @@ namespace ka {
     };
 
     class keymaker : public device {
+        std::shared_ptr<pn532::controller> _ctrl;
         std::vector<gate_data> _gates;
 
+        class gate_channel;
+
+        [[nodiscard]] p2p::r<gate_channel> open_gate_channel();
     public:
-        using device::device;
+        /**
+         * Construct a device loading it from the NVS partition. All changes will be persisted.
+         */
+        explicit keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl);
+
+        /**
+         * Construct a keymaker the given key pair. Testing purposes, changes will not be persisted
+         * and updates are not available on the device.
+         */
+        explicit keymaker(key_pair kp);
+
 
         /**
          * @todo Consider removing this. Might be hard, lots of usages in member_token
