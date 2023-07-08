@@ -10,22 +10,31 @@ namespace ka {
 
     using namespace ka::cmd_literals;
 
-    gate_id keymaker::register_gate(std::string notes) {
-        gate_id max_id{0};
-        for (auto const &gd : gates()) {
-            max_id = std::max(max_id, gd.id);
+    const char *to_string(gate_status gs) {
+        switch (gs)  {
+            case gate_status::initialized:
+                return "initialized";
+            case gate_status::configured:
+                return "configured";
+            case gate_status::deleted:
+                return "deleted";
+            default:
+                return "unknown";
         }
-        // Increment by one
-        auto const &gd = _gates.emplace_back(gate_data{gate_id{std::uint32_t{max_id} + 1}, std::move(notes), std::nullopt});
-        return gd.id;
+    }
+
+    gate_id keymaker::register_gate(std::string notes) {
+        const gate_id id{_gates.size()};
+        _gates.push_back(gate_data{id, std::move(notes), ka::gate_status::initialized, {}, {}});
+        return id;
     }
 
     gate_data const *keymaker::operator[](gate_id id) const {
-        auto it = std::lower_bound(std::begin(gates()), std::end(gates()), id);
-        if (it == std::end(gates()) or it->id != id) {
-            return nullptr;
+        const auto i = std::uint32_t(id);
+        if (i < gates().size()) {
+            return &gates()[i];
         }
-        return &*it;
+        return nullptr;
     }
 
     void keymaker::set_gate_notes(gate_id id, std::string notes) {
@@ -35,36 +44,39 @@ namespace ka {
         }
     }
 
-    bool keymaker::is_gate_registered(gate_id id) const {
-        return (*this)[id] != nullptr;
+    gate_status keymaker::get_gate_status(gate_id id) const {
+        if (const auto *gd = (*this)[id]; gd != nullptr) {
+            return gd->status;
+        }
+        return gate_status::unknown;
     }
 
-    bool keymaker::is_gate_configured(gate_id id) const {
+    gate_info keymaker::get_gate_info(gate_id id) const {
         if (const auto *gd = (*this)[id]; gd != nullptr) {
-            return gd->credentials != std::nullopt;
+            return gate_info{gd->id, gd->status, gd->notes, gd->gate_pub_key};
         }
-        return false;
-    }
-
-    std::optional<registerd_gate_info> keymaker::get_gate_info(gate_id id) const {
-        if (const auto *gd = (*this)[id]; gd != nullptr) {
-            return registerd_gate_info{gd->id, gd->notes, gd->credentials != std::nullopt ? std::optional<pub_key>{gd->credentials->gate_pub_key} : std::nullopt};
-        }
-        return std::nullopt;
+        return gate_info{id, gate_status::unknown, {}, {}};
     }
 
     namespace cmd {
         template <>
-        struct parser<registerd_gate_info> {
-            [[nodiscard]] static std::string to_string(registerd_gate_info const &gi) {
-                if (gi.is_configured()) {
+        struct parser<gate_info> {
+            [[nodiscard]] static std::string to_string(gate_info const &gi) {
+                if (gi.status == gate_status::configured) {
                     return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
-                                              "Configured, public key ", mlab::data_to_hex_string(gi.public_key->raw_pk()), "\n",
+                                              "Configured, PK ", mlab::data_to_hex_string(gi.public_key.raw_pk()), "\n",
                                               "Notes: ", gi.notes.empty() ? "n/a" : gi.notes});
                 } else {
                     return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
-                                              "Not configured.\nNotes: ", gi.notes.empty() ? "n/a" : gi.notes});
+                                              "Status ", ka::to_string(gi.status),
+                                              ".\nNotes: ", gi.notes.empty() ? "n/a" : gi.notes});
                 }
+            }
+        };
+        template <>
+        struct parser<gate_status> {
+            [[nodiscard]] static std::string to_string(gate_status gs) {
+                return ka::to_string(gs);
             }
         };
         template <>
@@ -85,9 +97,9 @@ namespace ka {
     void keymaker::print_gates() const {
         for (std::size_t i = 0; i < gates().size(); ++i) {
             auto const &g = gates()[i];
-            std::printf("%2d. Gate %lu (%s)", i + 1, std::uint32_t{g.id}, g.credentials ? "configured" : "not configured");
-            if (g.credentials) {
-                auto s = mlab::data_to_hex_string(g.credentials->gate_pub_key.raw_pk());
+            std::printf("%2d. Gate %lu (%s)", i + 1, std::uint32_t{g.id}, to_string(g.status));
+            if (g.status == gate_status::configured) {
+                auto s = mlab::data_to_hex_string(g.gate_pub_key.raw_pk());
                 std::printf(" PK: %s", s.c_str());
             }
             std::printf("\n");
@@ -99,8 +111,7 @@ namespace ka {
         sh.register_command("gate-register", *this, &keymaker::register_gate, {{"notes", {}, ""}});
         sh.register_command("gate-get-info", *this, &keymaker::get_gate_info, {{"gate-id", "gid"}});
         sh.register_command("gate-set-notes", *this, &keymaker::set_gate_notes, {{"gate-id", "gid"}, {"notes"}});
-        sh.register_command("gate-is-registered", *this, &keymaker::is_gate_registered, {{"gate-id", "gid"}});
-        sh.register_command("gate-is-configured", *this, &keymaker::is_gate_configured, {{"gate-id", "gid"}});
+        sh.register_command("gate-get-status", *this, &keymaker::get_gate_status, {{"gate-id", "gid"}});
         sh.register_command("gate-list", *this, &keymaker::print_gates, {});
     }
 

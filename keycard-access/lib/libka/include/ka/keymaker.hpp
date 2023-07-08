@@ -14,24 +14,31 @@ namespace ka {
         class shell;
     }
 
+    enum struct gate_status {
+        unknown,
+        initialized,
+        configured,
+        deleted
+    };
+
+    [[nodiscard]] const char *to_string(gate_status gs);
+
     struct gate_data {
         gate_id id = {};
         std::string notes = {};
-        std::optional<gate_credentials> credentials = std::nullopt;
+        gate_status status = gate_status::unknown;
+        pub_key gate_pub_key = {};
+        gate_base_key app_base_key = {};
     };
-
-    constexpr std::strong_ordering operator<=>(gate_data const &gd, gate_id gid);
-    constexpr std::strong_ordering operator<=>(gate_id gid, gate_data const &gd);
 
     /**
      * Only used for commands
      */
-    struct registerd_gate_info {
+    struct gate_info {
         gate_id id = {};
+        gate_status  status = gate_status::unknown;
         std::string_view notes = {};
-        std::optional<pub_key> public_key = std::nullopt;
-
-        [[nodiscard]] inline bool is_configured() const { return public_key != std::nullopt; }
+        pub_key public_key = {};
     };
 
     class keymaker : public device {
@@ -49,9 +56,8 @@ namespace ka {
 
         gate_id register_gate(std::string notes = "");
         void set_gate_notes(gate_id id, std::string notes);
-        [[nodiscard]] bool is_gate_registered(gate_id id) const;
-        [[nodiscard]] bool is_gate_configured(gate_id id) const;
-        [[nodiscard]] std::optional<registerd_gate_info> get_gate_info(gate_id id) const;
+        [[nodiscard]] gate_status get_gate_status(gate_id id) const;
+        [[nodiscard]] gate_info get_gate_info(gate_id id) const;
         void print_gates() const;
 
         [[nodiscard]] inline std::vector<gate_data> const &gates() const;
@@ -60,12 +66,9 @@ namespace ka {
         [[deprecated]] [[nodiscard]] std::vector<gate_config> gate_configs() const {
             std::vector<gate_config> cfgs;
             cfgs.reserve(_gates.size());
-            for (std::size_t i = 0; i < _gates.size(); ++i) {
-                if (_gates[i].credentials) {
-                    gate_config cfg;
-                    static_cast<gate_credentials &>(cfg) = *_gates[i].credentials;
-                    cfg.id = gate_id{i};
-                    cfgs.emplace_back(cfg);
+            for (auto const &gd : _gates) {
+                if (gd.status == gate_status::configured) {
+                    cfgs.emplace_back(gate_config{gate_credentials{gd.gate_pub_key, gd.app_base_key}, gd.id});
                 }
             }
             return cfgs;
@@ -80,13 +83,6 @@ namespace ka {
 namespace ka {
     std::vector<gate_data> const &keymaker::gates() const {
         return _gates;
-    }
-
-    constexpr std::strong_ordering operator<=>(gate_data const &gd, gate_id gid) {
-        return gd.id <=> gid;
-    }
-    constexpr std::strong_ordering operator<=>(gate_id gid, gate_data const &gd) {
-        return gid <=> gd.id;
     }
 }// namespace ka
 
