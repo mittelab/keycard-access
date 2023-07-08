@@ -96,7 +96,7 @@ build test firmware:
     PIO_ENV: cicdmachine
 
 
-build esp32 app firmware:
+build esp32 keymaker firmware:
   <<: *build-template
   script:
     - pio run -e ${PIO_ENV}
@@ -104,7 +104,7 @@ build esp32 app firmware:
     - when: always
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
-    PIO_ENV: esp32
+    PIO_ENV: esp32-keymaker
 
 
 test hardware:
@@ -150,12 +150,12 @@ test hardware:
       done
 
 
-upload esp32 app firmware:
+upload esp32 keymaker firmware:
   <<: *upload-template
   dependencies:
-    - build esp32 app firmware
+    - build esp32 keymaker firmware
   variables:
-    PIO_ENV: esp32
+    PIO_ENV: esp32-keymaker
 
 
 release:
