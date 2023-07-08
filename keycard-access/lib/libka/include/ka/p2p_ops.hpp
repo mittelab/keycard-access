@@ -74,6 +74,8 @@ namespace ka::p2p {
         explicit remote_gate_base(secure_target &local_interface);
         virtual ~remote_gate_base() = default;
 
+        [[nodiscard]] pub_key peer_pub_key() const;
+
         [[nodiscard]] virtual r<gate_fw_info> hello();
         virtual void bye();
     };
