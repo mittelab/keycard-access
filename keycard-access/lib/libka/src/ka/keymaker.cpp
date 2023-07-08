@@ -147,7 +147,7 @@ namespace ka {
         }
     };
 
-    [[nodiscard]] p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() {
+    [[nodiscard]] p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() const {
         if (not _ctrl) {
             ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
             std::abort();
@@ -168,14 +168,14 @@ namespace ka {
                         const bool is_mine = r->km_pk.raw_pk() == keys().raw_pk();
                         ESP_LOGE(TAG, "This gate was already configured as gate %lu with %s keymaker.",
                                  std::uint32_t{r->id}, is_mine ? "this" : "another");
-                        if (gd.gate_pub_key.raw_pk() != r_chn->remote_gate().peer_pub_key().raw_pk()) {
+                        if (gd.gate_pub_key.raw_pk() != r_rg->get().peer_pub_key().raw_pk()) {
                             ESP_LOGE(TAG, "The gate status is out of sync, you should reset this gate.");
                         }
                         return p2p::error::invalid;
                     }
                 }
                 TRY_RESULT(r_rg->get().register_gate(gd.id)) {
-                    gd.gate_pub_key = r_chn->remote_gate().peer_pub_key();
+                    gd.gate_pub_key = r_rg->get().peer_pub_key();
                     gd.app_base_key = *r;
                     gd.status = gate_status::configured;
                 }
@@ -246,8 +246,12 @@ namespace ka {
                             ESP_LOGE(TAG, "This is not gate %lu, it's gate %lu.", std::uint32_t{id}, std::uint32_t{r->id});
                             return p2p::error::invalid;
                         }
-                        if (r_chn->remote_gate().peer_pub_key().raw_pk() != gd.gate_pub_key.raw_pk()) {
+                        if (r_rg->get().peer_pub_key().raw_pk() != gd.gate_pub_key.raw_pk()) {
                             ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
+                            return p2p::error::invalid;
+                        }
+                        if (r->id == id and r->km_pk.raw_pk() != keys().raw_pk()) {
+                            ESP_LOGE(TAG, "This gate is registered to a different keymaker.");
                             return p2p::error::invalid;
                         }
                         if (r->id == id) {
@@ -293,9 +297,41 @@ namespace ka {
         return gate_status::unknown;
     }
 
-    gate_info keymaker::get_gate_info(gate_id id) const {
-        if (const auto *gd = (*this)[id]; gd != nullptr) {
-            return gate_info{gd->id, gd->status, gd->notes, gd->gate_pub_key};
+    gate_info keymaker::inspect_gate(gate_id id) const {
+        std::optional<pub_key> exp_pk = std::nullopt;
+        bool not_our_gate = false;
+        if (id == std::numeric_limits<gate_id>::max()) {
+            ESP_LOGI(TAG, "Bring closer a gate...");
+            void([&]() -> p2p::r<> {
+                TRY_RESULT_AS(open_gate_channel(), r_chn) {
+                    TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                        const auto pk_s = mlab::data_to_hex_string(r_rg->get().peer_pub_key().raw_pk());
+                        ESP_LOGI(TAG, "Detected gate with public key %s.", pk_s.c_str());
+                        exp_pk = r_rg->get().peer_pub_key();
+                        TRY_RESULT(r_rg->get().get_registration_info()) {
+                            if (r->id != std::numeric_limits<gate_id>::max()) {
+                                id = r->id;
+                                not_our_gate = r->km_pk.raw_pk() != keys().raw_pk();
+                                ESP_LOGI(TAG, "This gate is configured as gate %lu with %s keymaker.",
+                                         std::uint32_t{r->id}, not_our_gate ? "another" : "this");
+                            } else {
+                                ESP_LOGI(TAG, "This gate is not configured.");
+                            }
+                        }
+                    }
+                }
+                return mlab::result_success;
+            }());
+        }
+        if (id != std::numeric_limits<gate_id>::max() and not not_our_gate) {
+            if (const auto *gd = (*this)[id]; gd != nullptr) {
+                if (exp_pk and exp_pk->raw_pk() != gd->gate_pub_key.raw_pk()) {
+                    ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
+                }
+                return gate_info{gd->id, gd->status, gd->notes, gd->gate_pub_key};
+            } else {
+                ESP_LOGW(TAG, "Gate not found.");
+            }
         }
         return gate_info{id, gate_status::unknown, {}, {}};
     }
@@ -350,8 +386,10 @@ namespace ka {
 
     void keymaker::register_commands(ka::cmd::shell &sh) {
         device::register_commands(sh);
-        sh.register_command("gate-register", *this, &keymaker::register_gate, {{"notes", {}, ""}});
-        sh.register_command("gate-get-info", *this, &keymaker::get_gate_info, {{"gate-id", "gid"}});
+        sh.register_command("gate-configure", *this, &keymaker::configure_gate, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+        sh.register_command("gate-delete", *this, &keymaker::delete_gate, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+        sh.register_command("gate-register", *this, &keymaker::register_gate, {{"notes", {}, ""}, cmd::flag{"configure", true}});
+        sh.register_command("gate-inspect", *this, &keymaker::inspect_gate, {{"gate-id", "gid", std::numeric_limits<gate_id>::max()}});
         sh.register_command("gate-set-notes", *this, &keymaker::set_gate_notes, {{"gate-id", "gid"}, {"notes"}});
         sh.register_command("gate-get-status", *this, &keymaker::get_gate_status, {{"gate-id", "gid"}});
         sh.register_command("gate-list", *this, &keymaker::print_gates, {});
