@@ -164,7 +164,7 @@ release:
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   dependencies:
     # NOTE: explicitly list all environments here for which to create a release
-    - upload esp32 app firmware
+    - upload esp32 keymaker firmware
   script:
     # NOTE: explicitly list all environments here for which to create a release, both elf and bin
     # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
