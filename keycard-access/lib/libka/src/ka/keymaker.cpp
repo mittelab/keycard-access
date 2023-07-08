@@ -2,19 +2,22 @@
 // Created by spak on 6/14/23.
 //
 
+#include <desfire/fs.hpp>
+#include <esp_log.h>
 #include <ka/console.hpp>
 #include <ka/keymaker.hpp>
 #include <mlab/strutils.hpp>
-#include <esp_log.h>
 
 #define TAG "KEYM"
+#undef DESFIRE_FS_LOG_PREFIX
+#define DESFIRE_FS_LOG_PREFIX TAG
 
 namespace ka {
 
     using namespace ka::cmd_literals;
 
     const char *to_string(gate_status gs) {
-        switch (gs)  {
+        switch (gs) {
             case gate_status::initialized:
                 return "initialized";
             case gate_status::configured:
@@ -28,10 +31,10 @@ namespace ka {
 
 
     keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
-            : device{partition}, _ctrl{std::move(ctrl)} {}
+        : device{partition}, _ctrl{std::move(ctrl)} {}
 
     keymaker::keymaker(key_pair kp)
-            : device{kp} {}
+        : device{kp} {}
 
     class keymaker::gate_channel {
         std::unique_ptr<pn532::p2p::pn532_target> _raw_target = {};
@@ -39,6 +42,7 @@ namespace ka {
         std::unique_ptr<p2p::remote_gate_base> _remote_gate = {};
         unsigned _remote_proto_version = std::numeric_limits<unsigned>::max();
         unsigned _active_proto_version = std::numeric_limits<unsigned>::max();
+
     public:
         gate_channel() = default;
 
@@ -119,26 +123,28 @@ namespace ka {
         }
 
         template <p2p::remote_gate_protocol Proto = p2p::remote_gate_base>
-        [[nodiscard]] Proto const &remote_gate() const {
+        [[nodiscard]] p2p::r<std::reference_wrapper<Proto const>> remote_gate() const {
             if (not *this) {
                 ESP_LOGE(TAG, "You should check that the channel is open first.");
-                std::abort();
+                return p2p::error::invalid;
             }
             if constexpr (std::is_same_v<Proto, p2p::remote_gate_base>) {
                 return *_remote_gate;
-            } else if (auto *prg = dynamic_cast<Proto *>(_remote_gate.get()); prg != nullptr) {
-                return *prg;
-            } else {
-                ESP_LOGE(TAG, "You should make sure this version of the protocol is supported!");
-                std::abort();
+            } else if constexpr (std::is_same_v<Proto, p2p::v0::remote_gate>) {
+                if (active_proto_version() == 0) {
+                    return std::cref(reinterpret_cast<Proto const &>(*_remote_gate));
+                }
             }
+            ESP_LOGE(TAG, "You should make sure this version of the protocol is supported!");
+            return p2p::error::invalid;
         }
 
         template <p2p::remote_gate_protocol Proto = p2p::remote_gate_base>
-        [[nodiscard]] Proto &remote_gate() {
-            return const_cast<Proto &>(static_cast<gate_channel const *>(this)->remote_gate<Proto>());
+        [[nodiscard]] p2p::r<std::reference_wrapper<Proto>> remote_gate() {
+            TRY_RESULT(static_cast<gate_channel const *>(this)->remote_gate<Proto>()) {
+                return std::ref(const_cast<Proto &>(r->get()));
+            }
         }
-
     };
 
     [[nodiscard]] p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() {
@@ -154,10 +160,115 @@ namespace ka {
         }
     }
 
-    gate_id keymaker::register_gate(std::string notes) {
+    p2p::r<> keymaker::configure_gate_internal(gate_data &gd) {
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY_RESULT(r_rg->get().get_registration_info()) {
+                    if (r->id != std::numeric_limits<gate_id>::max()) {
+                        const bool is_mine = r->km_pk.raw_pk() == keys().raw_pk();
+                        ESP_LOGE(TAG, "This gate was already configured as gate %lu with %s keymaker.",
+                                 std::uint32_t{r->id}, is_mine ? "this" : "another");
+                        if (gd.gate_pub_key.raw_pk() != r_chn->remote_gate().peer_pub_key().raw_pk()) {
+                            ESP_LOGE(TAG, "The gate status is out of sync, you should reset this gate.");
+                        }
+                        return p2p::error::invalid;
+                    }
+                }
+                TRY_RESULT(r_rg->get().register_gate(gd.id)) {
+                    gd.gate_pub_key = r_chn->remote_gate().peer_pub_key();
+                    gd.app_base_key = *r;
+                    gd.status = gate_status::configured;
+                }
+            }
+        }
+        return mlab::result_success;
+    }
+
+    gate_id keymaker::register_gate(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
         _gates.push_back(gate_data{id, std::move(notes), ka::gate_status::initialized, {}, {}});
+        if (configure) {
+            ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
+            if (configure_gate_internal(_gates.back())) {
+                ESP_LOGI(TAG, "Gate configured.");
+            }
+        } else {
+            ESP_LOGI(TAG, "Gate registered but not configured.");
+            ESP_LOGW(TAG, "Run gate-configure --gate-id %lu", std::uint32_t{id});
+        }
         return id;
+    }
+
+    bool keymaker::configure_gate(ka::gate_id id, bool force) {
+        if (std::uint32_t{id} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
+            return false;
+        }
+        auto &gd = _gates[std::uint32_t{id}];
+        if (gd.status != gate_status::initialized) {
+            ESP_LOG_LEVEL(force ? ESP_LOG_WARN : ESP_LOG_ERROR, TAG, "Gate status is %s.", to_string(gd.status));
+            if (not force) {
+                return false;
+            }
+        }
+        ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
+        if (configure_gate_internal(gd)) {
+            ESP_LOGI(TAG, "Gate configured.");
+            return true;
+        }
+        return false;
+    }
+
+    bool keymaker::delete_gate(ka::gate_id id, bool force) {
+        if (std::uint32_t{id} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
+            return false;
+        }
+        auto &gd = _gates[std::uint32_t{id}];
+        if (gd.status == gate_status::initialized) {
+            ESP_LOGW(TAG, "The gate was never configured!");
+            gd.status = gate_status::deleted;
+            return true;
+        }
+        if (gd.status == gate_status::deleted) {
+            ESP_LOGW(TAG, "The gate was already deleted.");
+            if (not force) {
+                return true;
+            }
+        }
+        auto pk_s = mlab::data_to_hex_string(gd.gate_pub_key.raw_pk());
+        ESP_LOGI(TAG, "Bring closer a gate with public key %s...", pk_s.c_str());
+        auto open_and_reset = [&]() -> p2p::r<> {
+            TRY_RESULT_AS(open_gate_channel(), r_chn) {
+                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                    TRY_RESULT(r_rg->get().get_registration_info()) {
+                        if (r->id != std::numeric_limits<gate_id>::max() or r->id != id) {
+                            ESP_LOGE(TAG, "This is not gate %lu, it's gate %lu.", std::uint32_t{id}, std::uint32_t{r->id});
+                            return p2p::error::invalid;
+                        }
+                        if (r_chn->remote_gate().peer_pub_key().raw_pk() != gd.gate_pub_key.raw_pk()) {
+                            ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
+                            return p2p::error::invalid;
+                        }
+                        if (r->id == id) {
+                            ESP_LOGW(TAG, "Resetting gate %lu...", std::uint32_t{id});
+                            TRY(r_rg->get().reset_gate());
+                        }
+                    }
+                }
+            }
+            return mlab::result_success;
+        };
+        if (const auto r = open_and_reset(); not r) {
+            if (force) {
+                ESP_LOGW(TAG, "The gate was not found or could not be reset, but we will force-delete it.");
+            } else {
+                ESP_LOGE(TAG, "The gate was not found or could not be reset.");
+                return false;
+            }
+        }
+        gd.status = gate_status::deleted;
+        return true;
     }
 
     gate_data const *keymaker::operator[](gate_id id) const {

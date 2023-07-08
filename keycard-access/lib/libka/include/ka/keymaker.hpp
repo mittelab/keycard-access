@@ -48,6 +48,8 @@ namespace ka {
         class gate_channel;
 
         [[nodiscard]] p2p::r<gate_channel> open_gate_channel();
+
+        [[nodiscard]] p2p::r<> configure_gate_internal(gate_data &gd);
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
@@ -68,7 +70,10 @@ namespace ka {
 
         [[nodiscard]] gate_data const *operator[](gate_id id) const;
 
-        gate_id register_gate(std::string notes = "");
+        gate_id register_gate(std::string notes = "", bool configure = false);
+        bool configure_gate(gate_id id, bool force = false);
+        bool delete_gate(gate_id id, bool force = false);
+
         void set_gate_notes(gate_id id, std::string notes);
         [[nodiscard]] gate_status get_gate_status(gate_id id) const;
         [[nodiscard]] gate_info get_gate_info(gate_id id) const;
