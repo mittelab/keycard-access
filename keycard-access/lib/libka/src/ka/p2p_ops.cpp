@@ -152,10 +152,6 @@ namespace ka::p2p {
     }
 
 
-    pub_key remote_gate_base::peer_pub_key() const {
-        return pub_key{local_interface().peer_pub_key()};
-    }
-
     r<gate_fw_info> remote_gate_base::hello() {
         return command_parse_response<gate_fw_info>(bits::command_hello);
     }

@@ -36,7 +36,7 @@ namespace ka {
      */
     struct gate_info {
         gate_id id = {};
-        gate_status  status = gate_status::unknown;
+        gate_status status = gate_status::unknown;
         std::string_view notes = {};
         pub_key public_key = {};
     };
@@ -50,6 +50,9 @@ namespace ka {
         [[nodiscard]] p2p::r<gate_channel> open_gate_channel() const;
 
         [[nodiscard]] p2p::r<> configure_gate_internal(gate_data &gd);
+
+        [[nodiscard]] p2p::r<gate_id, bool> check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const;
+
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
@@ -73,10 +76,13 @@ namespace ka {
         gate_id register_gate(std::string notes = "", bool configure = false);
         bool configure_gate(gate_id id, bool force = false);
         bool delete_gate(gate_id id, bool force = false);
-
+        std::optional<p2p::v0::update_settings> get_gate_update_settings();
+        std::optional<p2p::v0::wifi_status> get_gate_wifi_status();
+        bool set_gate_update_settings(std::string_view update_channel = "", bool automatic_updates = true);
+        bool connect_gate_wifi(std::string_view ssid, std::string_view password);
         void set_gate_notes(gate_id id, std::string notes);
         [[nodiscard]] gate_status get_gate_status(gate_id id) const;
-        [[nodiscard]] gate_info inspect_gate(gate_id id = std::numeric_limits<gate_id>::max()) const;
+        [[nodiscard]] std::optional<gate_info> inspect_gate(gate_id id = std::numeric_limits<gate_id>::max()) const;
         void print_gates() const;
 
         [[nodiscard]] inline std::vector<gate_data> const &gates() const;
