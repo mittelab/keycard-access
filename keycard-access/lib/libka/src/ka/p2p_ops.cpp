@@ -229,7 +229,7 @@ namespace ka::p2p {
         if (not g().is_configured()) {
             return error::invalid;
         }
-        if (local_interface().peer_pub_key() != g().keymaker_pk().raw_pk()) {
+        if (local_interface().peer_pub_key() != g().keymaker_pk()) {
             return error::unauthorized;
         }
         return mlab::result_success;
@@ -428,7 +428,7 @@ namespace ka::p2p {
             if (g().is_configured()) {
                 return error::invalid;
             }
-            if (const auto bk = g().configure(requested_id, pub_key{local_interface().peer_pub_key()}); not bk) {
+            if (const auto bk = g().configure(requested_id, local_interface().peer_pub_key()); not bk) {
                 return error::invalid;
             } else {
                 return *bk;
@@ -477,15 +477,6 @@ namespace mlab {
         return bd << lsb32 << std::uint32_t(gid);
     }
 
-    bin_stream &operator>>(bin_stream &s, ka::raw_pub_key &pk) {
-        s >> static_cast<std::array<std::uint8_t, ka::raw_pub_key::array_size> &>(pk);
-        return s;
-    }
-
-    bin_data &operator<<(bin_data &bd, ka::raw_pub_key const &pk) {
-        return bd << static_cast<std::array<std::uint8_t, ka::raw_pub_key::array_size> const &>(pk);
-    }
-
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::registration_info &rinfo) {
         s >> rinfo.id >> rinfo.km_pk;
         return s;
@@ -511,19 +502,6 @@ namespace mlab {
 
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings) {
         return bd << length_encoded << wfsettings.ssid << wfsettings.operational;
-    }
-
-    bin_stream &operator>>(bin_stream &s, ka::pub_key &pk) {
-        ka::raw_pub_key rpk{};
-        s >> rpk;
-        if (not s.bad()) {
-            pk = ka::pub_key{rpk};
-        }
-        return s;
-    }
-
-    bin_data &operator<<(bin_data &bd, ka::pub_key const &pk) {
-        return bd << pk.raw_pk();
     }
 
     bin_data &operator<<(encode_length<bin_data> w, std::string_view s) {

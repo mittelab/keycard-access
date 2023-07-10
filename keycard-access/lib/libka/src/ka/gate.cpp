@@ -139,31 +139,21 @@ namespace ka {
                 } else if (r.error() == nvs::error::not_found) {
                     return false; // Set up as new gate
                 } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "gate id", to_string(r.error()));
+                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "gate id", to_string(r.error()));
                 }
-                if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
-                    if (r->size() == raw_pub_key::array_size) {
-                        _km_pk = pub_key{r->data_view()};
-                    } else {
-                        ESP_LOGE(TAG, "Invalid %s size.", "public key");
-                        return false;
-                    }
+                if (const auto r = _gate_ns->get_parse_blob<pub_key>("keymaker-pubkey"); r) {
+                    _km_pk = *r;
                 } else if (r.error() == nvs::error::not_found) {
                     return false; // Set up as new gate
                 } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "public key", to_string(r.error()));
+                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "public key", to_string(r.error()));
                 }
-                if (const auto r = _gate_ns->get_blob("base-key"); r) {
-                    if (r->size() == gate_base_key::array_size) {
-                        std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
-                    } else {
-                        ESP_LOGE(TAG, "Invalid %s size.", "app base key");
-                        return false;
-                    }
+                if (const auto r = _gate_ns->get_parse_blob<gate_base_key>("base-key"); r) {
+                    _base_key = *r;
                 } else if (r.error() == nvs::error::not_found) {
                     return false; // Set up as new gate
                 } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "app base key", to_string(r.error()));
+                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "app base key", to_string(r.error()));
                 }
                 return true;
             };
@@ -225,7 +215,7 @@ namespace ka {
 #endif
             auto update_nvs = [&]() -> nvs::r<> {
                 TRY(_gate_ns->set_u32("id", std::uint32_t(_id)));
-                TRY(_gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk.raw_pk())));
+                TRY(_gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk)));
                 TRY(_gate_ns->set_blob("base-key", mlab::bin_data::chain(_base_key)));
                 TRY(_gate_ns->commit());
                 return mlab::result_success;

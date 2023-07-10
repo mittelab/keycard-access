@@ -69,6 +69,13 @@ namespace ka {
         return _pk;
     }
 
+    bool pub_key::operator==(pub_key const &pk) const {
+        return raw_pk() == pk.raw_pk();
+    }
+    bool pub_key::operator!=(pub_key const &pk) const {
+        return raw_pk() != pk.raw_pk();
+    }
+
     raw_sec_key const &sec_key::raw_sk() const {
         return _sk;
     }
@@ -263,3 +270,33 @@ namespace ka {
     }
 
 }// namespace ka
+
+namespace mlab {
+
+    bin_data &operator<<(bin_data &bd, ka::pub_key const &pk) {
+        return bd << pk.raw_pk();
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::pub_key &pk) {
+        ka::raw_pub_key rpk{};
+        s >> rpk;
+        if (not s.bad()) {
+            pk = ka::pub_key{rpk};
+        }
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::key_pair const &kp) {
+        return bd << kp.raw_sk();
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::key_pair &kp) {
+        ka::raw_sec_key rsk{};
+        s >> rsk;
+        if (not s.bad()) {
+            kp = ka::key_pair{rsk};
+        }
+        return s;
+    }
+
+}

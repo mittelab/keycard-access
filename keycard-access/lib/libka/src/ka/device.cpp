@@ -20,13 +20,8 @@ namespace ka {
             _device_ns = partition->open_namespc("ka-device");
         }
         if (_device_ns) {
-            if (const auto r = _device_ns->get_blob("secret-key"); r) {
-                if (r->size() == raw_sec_key::array_size) {
-                    _kp = key_pair{r->data_view()};
-                } else {
-                    ESP_LOGE(TAG, "Invalid key length, resetting...");
-                    generate_keys();
-                }
+            if (const auto r = _device_ns->get_parse_blob<key_pair>("secret-key"); r) {
+                _kp = *r;
             } else if (r.error() == nvs::error::not_found) {
                 generate_keys();
             } else {

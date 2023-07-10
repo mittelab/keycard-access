@@ -86,7 +86,7 @@ namespace ut {
             }
 
             ka::p2p::r<ka::p2p::v0::registration_info> get_registration_info() override {
-                return ka::p2p::v0::registration_info{ka::gate_id{32}, ka::pub_key{g().keys().raw_pk()}};
+                return ka::p2p::v0::registration_info{ka::gate_id{32}, g().keys().drop_secret_key()};
             }
 
             ka::p2p::r<ka::gate_base_key> register_gate(ka::gate_id requested_id) override {
@@ -156,7 +156,7 @@ namespace ut {
             TEST_ASSERT(r);
             if (r) {
                 TEST_ASSERT(r->id == ka::gate_id{32});
-                TEST_ASSERT(r->km_pk.raw_pk() == g.keys().raw_pk());
+                TEST_ASSERT(r->km_pk == g.keys());
             }
         }
         {

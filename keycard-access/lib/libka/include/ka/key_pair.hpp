@@ -15,10 +15,6 @@ namespace ka {
     using raw_pub_key = mlab::tagged_array<pub_key_tag, 32>;
     using raw_sec_key = mlab::tagged_array<sec_key_tag, 32>;
 
-
-    /**
-     * @todo Makre sure that slicing is done without calling raw_pk
-     */
     class pub_key {
     public:
         pub_key() = default;
@@ -26,6 +22,9 @@ namespace ka {
         explicit pub_key(mlab::range<std::uint8_t const *> pub_key_raw);
 
         [[nodiscard]] raw_pub_key const &raw_pk() const;
+
+        [[nodiscard]] bool operator==(pub_key const &pk) const;
+        [[nodiscard]] bool operator!=(pub_key const &pk) const;
 
     protected:
         raw_pub_key _pk{};
@@ -90,5 +89,12 @@ namespace ka {
     };
 
 }// namespace ka
+
+namespace mlab {
+    bin_data &operator<<(bin_data &bd, ka::pub_key const &pk);
+    bin_stream &operator>>(bin_stream &s, ka::pub_key &pk);
+    bin_data &operator<<(bin_data &bd, ka::key_pair const &pk);
+    bin_stream &operator>>(bin_stream &s, ka::key_pair &pk);
+}
 
 #endif//KEYCARDACCESS_KEY_PAIR_HPP

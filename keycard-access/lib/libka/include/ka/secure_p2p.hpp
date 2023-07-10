@@ -34,7 +34,7 @@ namespace ka::p2p {
         bool _did_handshake = false;
         key_pair _kp{};
         mlab::bin_data _buffer{};
-        raw_pub_key _peer_pk{};
+        pub_key _peer_pk{};
 
     public:
         secure_initiator() = default;
@@ -45,10 +45,10 @@ namespace ka::p2p {
 
         secure_initiator(initiator &raw_layer, key_pair kp);
 
-        result<raw_pub_key> handshake(ms timeout = 1s);
+        result<pub_key> handshake(ms timeout = 1s);
 
         [[nodiscard]] inline bool did_handshake() const;
-        [[nodiscard]] inline raw_pub_key const &peer_pub_key() const;
+        [[nodiscard]] inline pub_key const &peer_pub_key() const;
 
         [[nodiscard]] result<mlab::bin_data> communicate(mlab::bin_data const &data, ms timeout) override;
     };
@@ -61,7 +61,7 @@ namespace ka::p2p {
         bool _did_handshake = false;
         key_pair _kp{};
         mlab::bin_data _buffer{};
-        raw_pub_key _peer_pk{};
+        pub_key _peer_pk{};
 
     public:
         secure_target() = default;
@@ -72,10 +72,10 @@ namespace ka::p2p {
 
         secure_target(target &raw_layer, key_pair kp);
 
-        result<raw_pub_key> handshake(ms timeout = 1s);
+        result<pub_key> handshake(ms timeout = 1s);
 
         [[nodiscard]] inline bool did_handshake() const;
-        [[nodiscard]] inline raw_pub_key const &peer_pub_key() const;
+        [[nodiscard]] inline pub_key const &peer_pub_key() const;
 
         [[nodiscard]] result<mlab::bin_data> receive(ms timeout) override;
         result<> send(mlab::bin_data const &data, ms timeout) override;
@@ -88,13 +88,13 @@ namespace ka::p2p {
     bool secure_target::did_handshake() const {
         return _did_handshake;
     }
-    raw_pub_key const &secure_target::peer_pub_key() const {
+    pub_key const &secure_target::peer_pub_key() const {
         return _peer_pk;
     }
     bool secure_initiator::did_handshake() const {
         return _did_handshake;
     }
-    raw_pub_key const &secure_initiator::peer_pub_key() const {
+    pub_key const &secure_initiator::peer_pub_key() const {
         return _peer_pk;
     }
 }// namespace ka::p2p

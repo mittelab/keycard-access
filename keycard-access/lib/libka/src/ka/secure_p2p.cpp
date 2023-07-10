@@ -17,7 +17,7 @@ namespace ka::p2p {
     secure_target::secure_target(target &raw_layer, key_pair kp)
         : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
-    result<raw_pub_key> secure_target::handshake(ms timeout) {
+    result<pub_key> secure_target::handshake(ms timeout) {
         if (_did_handshake) {
             return peer_pub_key();
         } else if (_raw_layer == nullptr) {
@@ -30,14 +30,16 @@ namespace ka::p2p {
         // Retrieve public key
         if (const auto r = _raw_layer->receive(rt.remaining()); not r) {
             return r.error();
-        } else if (r->size() != raw_pub_key::array_size) {
-            ESP_LOGE("KA", "Invalid %s size %d.", "initiator pubkey", r->size());
-            return pn532::channel_error::malformed;
         } else {
-            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
+            mlab::bin_stream s{*r};
+            s >> _peer_pk;
+            if (s.bad() or not s.eof()) {
+                ESP_LOGE("KA", "Invalid %s size %d.", "initiator pubkey", r->size());
+                return pn532::channel_error::malformed;
+            }
         }
         // Send our public key
-        if (const auto r = _raw_layer->send(mlab::bin_data::chain(_kp.raw_pk()), rt.remaining()); not r) {
+        if (const auto r = _raw_layer->send(mlab::bin_data::chain(_kp.drop_secret_key()), rt.remaining()); not r) {
             return r.error();
         }
         // Receive the initiator header
@@ -50,7 +52,7 @@ namespace ka::p2p {
         }
         // Derive the keys
         if (0 != crypto_kx_client_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.raw_pk().data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel_error::app_error;
         }
@@ -67,7 +69,7 @@ namespace ka::p2p {
         }
     }
 
-    result<raw_pub_key> secure_initiator::handshake(ms timeout) {
+    result<pub_key> secure_initiator::handshake(ms timeout) {
         if (_did_handshake) {
             return peer_pub_key();
         } else if (_raw_layer == nullptr) {
@@ -78,17 +80,19 @@ namespace ka::p2p {
         rx_key rx{};
         header target_header{};
         // Send our public key and retrieve the target's
-        if (const auto r = _raw_layer->communicate(mlab::bin_data::chain(_kp.raw_pk()), rt.remaining()); not r) {
+        if (const auto r = _raw_layer->communicate(mlab::bin_data::chain(_kp.drop_secret_key()), rt.remaining()); not r) {
             return r.error();
-        } else if (r->size() != raw_pub_key::array_size) {
-            ESP_LOGE("KA", "Invalid %s size %d.", "target pubkey", r->size());
-            return pn532::channel_error::malformed;
         } else {
-            std::copy_n(std::begin(*r), raw_pub_key::array_size, std::begin(_peer_pk));
+            mlab::bin_stream s{*r};
+            s >> _peer_pk;
+            if (s.bad() or not s.eof()) {
+                ESP_LOGE("KA", "Invalid %s size %d.", "target pubkey", r->size());
+                return pn532::channel_error::malformed;
+            }
         }
         // Derive the keys
         if (0 != crypto_kx_server_session_keys(
-                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.data())) {
+                         rx.data(), tx.data(), _kp.raw_pk().data(), _kp.raw_sk().data(), _peer_pk.raw_pk().data())) {
             ESP_LOGE("KA", "Suspicious %s public key!", "initiator");
             return pn532::channel_error::app_error;
         }

@@ -44,7 +44,7 @@ namespace ut {
 
         ka::key_pair const k2{k.raw_sk()};
         TEST_ASSERT(k2.is_valid());
-        TEST_ASSERT(k.raw_pk() == k2.raw_pk());
+        TEST_ASSERT(k == k2);
     }
 
     void test_nvs() {

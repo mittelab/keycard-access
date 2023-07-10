@@ -228,8 +228,6 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, semver::version &v);
     bin_stream &operator>>(encode_length<bin_stream> w, std::string &str);
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid);
-    bin_stream &operator>>(bin_stream &s, ka::raw_pub_key &pk);
-    bin_stream &operator>>(bin_stream &s, ka::pub_key &pk);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::registration_info &rinfo);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_settings &usettings);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
@@ -238,8 +236,6 @@ namespace mlab {
     bin_data &operator<<(bin_data &bd, semver::version const &v);
     bin_data &operator<<(encode_length<bin_data> w, std::string_view s);
     bin_data &operator<<(bin_data &bd, ka::gate_id const &gid);
-    bin_data &operator<<(bin_data &bd, ka::raw_pub_key const &pk);
-    bin_data &operator<<(bin_data &bd, ka::pub_key const &pk);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::registration_info const &rinfo);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_settings const &usettings);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings);

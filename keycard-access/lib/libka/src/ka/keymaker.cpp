@@ -71,7 +71,7 @@ namespace ka {
 
         [[nodiscard]] pub_key peer_pub_key() const {
             if (_sec_target) {
-                return pub_key{_sec_target->peer_pub_key()};
+                return _sec_target->peer_pub_key();
             }
             return {};
         }
@@ -93,7 +93,6 @@ namespace ka {
             if (_raw_target == nullptr) {
                 return p2p::error::invalid;
             }
-            static constexpr auto nbytes = std::min(raw_pub_key::array_size, pn532::nfcid_3t::array_size);
             std::array<std::uint8_t, 5> nfcid_data{};
             std::copy_n(std::begin(kp.raw_pk()), nfcid_data.size(), std::begin(nfcid_data));
             if (const auto r_rf_on = _ctrl->rf_configuration_field(false, true); not r_rf_on) {
@@ -102,7 +101,7 @@ namespace ka {
             if (const auto r_init = _raw_target->init_as_dep_target(nfcid_data); r_init) {
                 _sec_target = std::make_unique<p2p::secure_target>(*_raw_target, kp);
                 if (const auto r_hshake = _sec_target->handshake(); r_hshake) {
-                    const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key());
+                    const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key().raw_pk());
                     ESP_LOGI(TAG, "Connected to peer with public key %s", pk_s.c_str());
                     // Try build a remote_channel
                     _remote_gate = std::make_unique<p2p::remote_gate_base>(*_sec_target);
@@ -205,7 +204,7 @@ namespace ka {
                     if (r_ours->first != std::numeric_limits<gate_id>::max()) {
                         if (not r_ours->second) {
                             ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
-                        } else if (gd.gate_pub_key.raw_pk() != r_chn->peer_pub_key().raw_pk()) {
+                        } else if (gd.gate_pub_key != r_chn->peer_pub_key()) {
                             if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
                                 ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
                             }
@@ -290,7 +289,7 @@ namespace ka {
         auto open_and_reset = [&]() -> p2p::r<> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
                 TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    if (r_chn->peer_pub_key().raw_pk() != gd.gate_pub_key.raw_pk()) {
+                    if (r_chn->peer_pub_key() != gd.gate_pub_key) {
                         ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
                         return p2p::error::invalid;
                     }
@@ -359,7 +358,7 @@ namespace ka {
         TRY_RESULT(rg.get_registration_info()) {
             if (r->id != std::numeric_limits<gate_id>::max()) {
                 gid = r->id;
-                ours = r->km_pk.raw_pk() == keys().raw_pk();
+                ours = r->km_pk == keys();
                 ESP_LOGI(TAG, "This gate is configured as gate %lu with %s keymaker.",
                          std::uint32_t{r->id}, ours ? "this" : "another");
             } else {
@@ -464,7 +463,7 @@ namespace ka {
             return gate_info{id, gate_status::unknown, {}, *exp_pk};
         }
         if (const auto *gd = (*this)[id]; gd != nullptr) {
-            if (exp_pk and exp_pk->raw_pk() != gd->gate_pub_key.raw_pk()) {
+            if (exp_pk and *exp_pk != gd->gate_pub_key) {
                 ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
             }
             return gate_info{gd->id, gd->status, gd->notes, gd->gate_pub_key};
@@ -561,9 +560,8 @@ namespace ka {
 
 
     nvs::r<> gate_data::save_to(nvs::namespc &ns) const {
-        const mlab::bin_data blob = mlab::bin_data::chain(*this);
         const auto key = get_nvs_key(id);
-        TRY(ns.set_blob(key.c_str(), blob));
+        TRY(ns.set_encode_blob(key.c_str(), *this));
         TRY(ns.commit());
         return mlab::result_success;
     }
@@ -578,18 +576,7 @@ namespace ka {
 
     nvs::r<gate_data> gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
         const auto key = get_nvs_key(gid);
-        TRY_RESULT_SILENT(ns.get_blob(key.c_str())) {
-            mlab::bin_stream s{*r};
-            gate_data gd{};
-            s >> gd;
-            if (s.bad()) {
-                return nvs::error::fail;
-            }
-            if (not s.eof()) {
-                return nvs::error::invalid_length;
-            }
-            return gd;
-        }
+        return ns.get_parse_blob<gate_data>(key.c_str());
     }
 
     std::vector<gate_data> gate_data::load_from(nvs::const_namespc const &ns) {
@@ -611,7 +598,7 @@ namespace ka {
 namespace mlab {
     bin_data &operator<<(bin_data &bd, ka::gate_data const &gd) {
         const auto sz = 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4 + gd.notes.size();
-        return bd << prealloc(sz) << gd.id << gd.status << gd.gate_pub_key.raw_pk() << gd.app_base_key << length_encoded << gd.notes;
+        return bd << prealloc(sz) << gd.id << gd.status << gd.gate_pub_key << gd.app_base_key << length_encoded << gd.notes;
     }
 
     bin_stream &operator>>(bin_stream &s, ka::gate_data &gd) {
@@ -619,20 +606,12 @@ namespace mlab {
             s.set_bad();
             return s;
         }
-        ka::gate_id gid = std::numeric_limits<ka::gate_id>::max();
-        ka::gate_status gs{};
-        ka::raw_pub_key pk{};
-        ka::gate_base_key bk{};
-        std::string notes{};
-        s >> gid >> gs >> pk >> bk >> length_encoded >> notes;
+        ka::gate_data new_gd{};
+        s >> new_gd.id >> new_gd.status >> new_gd.gate_pub_key >> new_gd.app_base_key >> length_encoded >> new_gd.notes;
         if (s.bad()) {
             return s;
         }
-        gd.id = gid;
-        gd.status = gs;
-        gd.gate_pub_key = ka::pub_key{pk};
-        gd.app_base_key = bk;
-        gd.notes = std::move(notes);
+        gd = new_gd;
         return s;
     }
 
