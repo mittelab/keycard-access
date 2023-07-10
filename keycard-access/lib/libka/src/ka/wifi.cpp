@@ -396,7 +396,12 @@ namespace ka {
             static_assert(std::is_same_v<decltype(wifi_sta_config_t::ssid), std::uint8_t[32]>);
             auto end = begin + sizeof(cfg.sta.ssid);
             std::string retval{begin, end};
-            retval.shrink_to_fit();
+            /**
+             * WHY, WHY, WHY C uses null-terminated strings. So now every time we need to do
+             * *literally anything* with a C-style string we need to run a linear-time algorithm
+             * to ensure we do not go out of bounds.
+             */
+            retval.erase(retval.find_first_of('\0'));
             if (not retval.empty()) {
                 return retval;
             }
