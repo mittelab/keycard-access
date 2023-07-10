@@ -48,7 +48,7 @@ extern "C" void app_main() {
     auto controller = std::make_shared<pn532::controller>(hsu_chn);
 
     // Do initial setup of the PN532
-    if (not controller->init_and_test()) {
+    if (not hsu_chn.wake() or not controller->init_and_test()) {
         // Is this a new fw? Roll back
         if (ka::fw_info::is_running_fw_pending_verification()) {
             ESP_LOGE(LOG_PFX, "Could not start the PN532 with the new firmware. Will roll back in 5s.");
