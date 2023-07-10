@@ -200,7 +200,9 @@ namespace ka {
                         if (not r_ours->second) {
                             ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
                         } else if (gd.gate_pub_key.raw_pk() != r_chn->peer_pub_key().raw_pk()) {
-                            ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
+                            if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
+                                ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
+                            }
                         } else {
                             ESP_LOGE(TAG, "This gate is already configured.");
                         }
