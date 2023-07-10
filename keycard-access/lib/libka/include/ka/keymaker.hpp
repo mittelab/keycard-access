@@ -14,8 +14,8 @@ namespace ka {
         class shell;
     }
 
-    enum struct gate_status {
-        unknown,
+    enum struct gate_status : std::uint8_t {
+        unknown = 0,
         initialized,
         configured,
         deleted
@@ -29,6 +29,11 @@ namespace ka {
         gate_status status = gate_status::unknown;
         pub_key gate_pub_key = {};
         gate_base_key app_base_key = {};
+
+        [[nodiscard]] nvs::r<> save_to(nvs::namespc &ns) const;
+        [[nodiscard]] static std::string get_nvs_key(gate_id gid);
+        [[nodiscard]] static nvs::r<gate_data> load_from(nvs::const_namespc const &ns, gate_id gid);
+        [[nodiscard]] static std::vector<gate_data> load_from(nvs::const_namespc const &ns);
     };
 
     /**
@@ -44,6 +49,7 @@ namespace ka {
     class keymaker : public device {
         std::shared_ptr<pn532::controller> _ctrl;
         std::vector<gate_data> _gates;
+        std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
 
         class gate_channel;
 
@@ -52,6 +58,8 @@ namespace ka {
         [[nodiscard]] p2p::r<> configure_gate_internal(gate_data &gd);
 
         [[nodiscard]] p2p::r<gate_id, bool> check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const;
+
+        nvs::r<> save_gate(gate_data const &gd);
 
     public:
         /**
@@ -93,6 +101,10 @@ namespace ka {
 
 }// namespace ka
 
+namespace mlab {
+    bin_data &operator<<(bin_data &bd, ka::gate_data const &gd);
+    bin_stream &operator>>(bin_stream &s, ka::gate_data &gd);
+}
 
 namespace ka {
     std::vector<gate_data> const &keymaker::gates() const {

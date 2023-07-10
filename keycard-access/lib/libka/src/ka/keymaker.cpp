@@ -40,6 +40,12 @@ namespace ka {
                 return mlab::result_success;
             }());
         }
+        if (not partition) {
+            return;
+        }
+        if (_gate_ns = partition->open_namespc("ka-gates"); _gate_ns) {
+            _gates = gate_data::load_from(*_gate_ns);
+        }
     }
 
     keymaker::keymaker(key_pair kp)
@@ -213,6 +219,9 @@ namespace ka {
                     gd.gate_pub_key = r_chn->peer_pub_key();
                     gd.app_base_key = *r;
                     gd.status = gate_status::configured;
+                    if (not save_gate(_gates.back())) {
+                        return p2p::error::invalid;
+                    }
                 }
             }
         }
@@ -232,6 +241,7 @@ namespace ka {
                 return std::numeric_limits<gate_id>::max();
             }
         } else {
+            save_gate(_gates.back());
             ESP_LOGI(TAG, "Gate registered but not configured.");
             ESP_LOGW(TAG, "Run gate-configure --gate-id %lu", std::uint32_t{id});
         }
@@ -267,7 +277,7 @@ namespace ka {
         if (gd.status == gate_status::initialized) {
             ESP_LOGW(TAG, "The gate was never configured!");
             gd.status = gate_status::deleted;
-            return true;
+            return bool(save_gate(gd));
         }
         if (gd.status == gate_status::deleted) {
             ESP_LOGW(TAG, "The gate was already deleted.");
@@ -310,7 +320,7 @@ namespace ka {
             }
         }
         gd.status = gate_status::deleted;
-        return true;
+        return bool(save_gate(gd));
     }
 
     gate_data const *keymaker::operator[](gate_id id) const {
@@ -325,6 +335,7 @@ namespace ka {
         if (auto const *gd = (*this)[id]; gd != nullptr) {
             // Const-casting so we don't have to repeat the operator[] code.
             const_cast<gate_data *>(gd)->notes = std::move(notes);
+            save_gate(*gd);
         }
     }
 
@@ -333,6 +344,13 @@ namespace ka {
             return gd->status;
         }
         return gate_status::unknown;
+    }
+
+    nvs::r<> keymaker::save_gate(gate_data const &gd) {
+        if (_gate_ns) {
+            TRY(gd.save_to(*_gate_ns));
+        }
+        return mlab::result_success;
     }
 
     p2p::r<gate_id, bool> keymaker::check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const {
@@ -541,4 +559,81 @@ namespace ka {
         sh.register_command("gate-list", *this, &keymaker::print_gates, {});
     }
 
+
+    nvs::r<> gate_data::save_to(nvs::namespc &ns) const {
+        const mlab::bin_data blob = mlab::bin_data::chain(*this);
+        const auto key = get_nvs_key(id);
+        TRY(ns.set_blob(key.c_str(), blob));
+        TRY(ns.commit());
+        return mlab::result_success;
+    }
+
+    std::string gate_data::get_nvs_key(gate_id gid) {
+        std::string buffer;
+        buffer.resize(9);
+        std::snprintf(buffer.data(), buffer.size(), "%08lx", std::uint32_t{gid});
+        buffer.resize(8);
+        return buffer;
+    }
+
+    nvs::r<gate_data> gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
+        const auto key = get_nvs_key(gid);
+        TRY_RESULT_SILENT(ns.get_blob(key.c_str())) {
+            mlab::bin_stream s{*r};
+            gate_data gd{};
+            s >> gd;
+            if (s.bad()) {
+                return nvs::error::fail;
+            }
+            if (not s.eof()) {
+                return nvs::error::invalid_length;
+            }
+            return gd;
+        }
+    }
+
+    std::vector<gate_data> gate_data::load_from(nvs::const_namespc const &ns) {
+        std::vector<gate_data> retval;
+        for (gate_id gid = std::numeric_limits<gate_id>::min(); gid < std::numeric_limits<gate_id>::max(); gid = gate_id{gid + 1}) {
+            if (const auto r = load_from(ns, gid); r) {
+                retval.push_back(*r);
+            } else if (r.error() == nvs::error::not_found) {
+                break;
+            } else {
+                ESP_LOGE(TAG, "Unable to load gate %lu, error %s", std::uint32_t{gid}, to_string(r.error()));
+                retval.push_back(gate_data{gid, {}, gate_status::unknown, {}, {}});
+            }
+        }
+        return retval;
+    }
 }// namespace ka
+
+namespace mlab {
+    bin_data &operator<<(bin_data &bd, ka::gate_data const &gd) {
+        const auto sz = 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4 + gd.notes.size();
+        return bd << prealloc(sz) << gd.id << gd.status << gd.gate_pub_key.raw_pk() << gd.app_base_key << length_encoded << gd.notes;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::gate_data &gd) {
+        if (s.remaining() < 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4) {
+            s.set_bad();
+            return s;
+        }
+        ka::gate_id gid = std::numeric_limits<ka::gate_id>::max();
+        ka::gate_status gs{};
+        ka::raw_pub_key pk{};
+        ka::gate_base_key bk{};
+        std::string notes{};
+        s >> gid >> gs >> pk >> bk >> length_encoded >> notes;
+        if (s.bad()) {
+            return s;
+        }
+        gd.id = gid;
+        gd.status = gs;
+        gd.gate_pub_key = ka::pub_key{pk};
+        gd.app_base_key = bk;
+        gd.notes = std::move(notes);
+        return s;
+    }
+
+}// namespace mlab
