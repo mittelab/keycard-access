@@ -633,7 +633,7 @@ namespace ka {
             if (auto r_args = parse(std::index_sequence_for<Args...>{}, values); r_args) {
                 if constexpr (std::is_void_v<R>) {
                     invoke(std::index_sequence_for<Args...>{}, std::move(r_args));
-                    return {};
+                    return {""};
                 } else {
                     return parser<R>::to_string(invoke(std::index_sequence_for<Args...>{}, std::move(r_args)));
                 }
