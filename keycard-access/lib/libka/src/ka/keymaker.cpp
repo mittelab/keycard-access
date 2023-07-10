@@ -71,9 +71,9 @@ namespace ka {
                 return p2p::error::invalid;
             }
             static constexpr auto nbytes = std::min(raw_pub_key::array_size, pn532::nfcid_3t::array_size);
-            pn532::nfcid_3t nfcid{};
-            std::copy_n(std::begin(kp.raw_pk()), nbytes, std::begin(nfcid));
-            if (const auto r_init = _raw_target->init_as_dep_target(nfcid); r_init) {
+            std::array<std::uint8_t, 5> nfcid_data{};
+            std::copy_n(std::begin(kp.raw_pk()), nfcid_data.size(), std::begin(nfcid_data));
+            if (const auto r_init = _raw_target->init_as_dep_target(nfcid_data); r_init) {
                 _sec_target = std::make_unique<p2p::secure_target>(*_raw_target, kp);
                 if (const auto r_hshake = _sec_target->handshake(); r_hshake) {
                     const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key());
