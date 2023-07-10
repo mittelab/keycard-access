@@ -31,12 +31,22 @@ namespace ka {
 
 
     keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
-        : device{partition}, _ctrl{std::move(ctrl)} {}
+        : device{partition},
+          _ctrl{std::move(ctrl)} {
+        // Turn off the field, we will turn it on on-demand
+        if (_ctrl) {
+            void([&]() -> pn532::result<> {
+                TRY(_ctrl->rf_configuration_field(false, false));
+                return mlab::result_success;
+            }());
+        }
+    }
 
     keymaker::keymaker(key_pair kp)
         : device{kp} {}
 
     class keymaker::gate_channel {
+        std::shared_ptr<pn532::controller> _ctrl = {};
         std::unique_ptr<pn532::p2p::pn532_target> _raw_target = {};
         std::unique_ptr<p2p::secure_target> _sec_target = {};
         std::unique_ptr<p2p::remote_gate_base> _remote_gate = {};
@@ -46,8 +56,11 @@ namespace ka {
     public:
         gate_channel() = default;
 
-        explicit gate_channel(pn532::controller &ctrl) {
-            _raw_target = std::make_unique<pn532::p2p::pn532_target>(ctrl);
+        explicit gate_channel(std::shared_ptr<pn532::controller> ctrl) {
+            _ctrl = std::move(ctrl);
+            if (_ctrl) {
+                _raw_target = std::make_unique<pn532::p2p::pn532_target>(*_ctrl);
+            }
         }
 
         [[nodiscard]] pub_key peer_pub_key() const {
@@ -64,6 +77,10 @@ namespace ka {
             if (_remote_gate != nullptr) {
                 _remote_gate->bye();
             }
+            if (_ctrl != nullptr) {
+                // Turn RF off
+                _ctrl->rf_configuration_field(false, false);
+            }
         }
 
         [[nodiscard]] p2p::r<> connect(key_pair const &kp) {
@@ -73,6 +90,9 @@ namespace ka {
             static constexpr auto nbytes = std::min(raw_pub_key::array_size, pn532::nfcid_3t::array_size);
             std::array<std::uint8_t, 5> nfcid_data{};
             std::copy_n(std::begin(kp.raw_pk()), nfcid_data.size(), std::begin(nfcid_data));
+            if (const auto r_rf_on = _ctrl->rf_configuration_field(false, true); not r_rf_on) {
+                return p2p::channel_error_to_p2p_error(r_rf_on.error());
+            }
             if (const auto r_init = _raw_target->init_as_dep_target(nfcid_data); r_init) {
                 _sec_target = std::make_unique<p2p::secure_target>(*_raw_target, kp);
                 if (const auto r_hshake = _sec_target->handshake(); r_hshake) {
@@ -164,7 +184,7 @@ namespace ka {
             ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
             std::abort();
         }
-        gate_channel chn{*_ctrl};
+        gate_channel chn{_ctrl};
         if (const auto r = chn.connect(keys()); r) {
             return chn;
         } else {
