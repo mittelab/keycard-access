@@ -37,7 +37,8 @@ namespace ka::nvs {
         remove_failed = ESP_ERR_NVS_REMOVE_FAILED,
         fail = ESP_FAIL,
         invalid_handle = ESP_ERR_NVS_INVALID_HANDLE,
-        other
+        other,
+        parsing
     };
 
     [[nodiscard]] const char *to_string(error e);
@@ -138,6 +139,9 @@ namespace ka::nvs {
         [[nodiscard]] r<std::string> get_str(const char *key) const;
         [[nodiscard]] r<mlab::bin_data> get_blob(const char *key) const;
 
+        template <mlab::is_extractable T>
+        [[nodiscard]] r<T> get_parse_blob(const char *key) const;
+
         [[nodiscard]] std::size_t used_entries() const;
 
         template <class T>
@@ -186,6 +190,9 @@ namespace ka::nvs {
         r<> set_i64(const char *key, std::int64_t value);
         r<> set_str(const char *key, std::string const &value);
         r<> set_blob(const char *key, mlab::bin_data const &value);
+
+        template <mlab::is_injectable T>
+        r<> set_encode_blob(const char *key, T &&obj);
 
         template <class T>
         r<> set(const char *key, T const &value);
@@ -252,6 +259,29 @@ namespace ka::nvs {
 
     std::shared_ptr<const_namespc> partition::open_namespc(const char *nsname) const {
         return open_const_namespc(nsname);
+    }
+
+    template <mlab::is_extractable T>
+    [[nodiscard]] r<T> const_namespc::get_parse_blob(const char *key) const {
+        if (const auto r = get_blob(key); r) {
+            mlab::bin_stream s{*r};
+            T t{};
+            s >> t;
+            if (s.bad() or not s.eof()) {
+                return error::parsing;
+            }
+            return t;
+        } else {
+            return r.error();
+        }
+    }
+
+
+    template <mlab::is_injectable T>
+    r<> namespc::set_encode_blob(const char *key, T &&obj) {
+        mlab::bin_data bd{};
+        bd << obj;
+        return set_blob(key, bd);
     }
 }// namespace ka::nvs
 

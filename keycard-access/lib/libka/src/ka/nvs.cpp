@@ -105,6 +105,8 @@ namespace ka::nvs {
                 return "fail";
             case error::invalid_handle:
                 return "invalid handle";
+            case error::parsing:
+                return "parsing";
             default:
                 return "UNKNOWN";
         }
