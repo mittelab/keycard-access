@@ -39,19 +39,19 @@ namespace ka::nvs {
 #endif
     }
 
-    std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure) {
+    std::shared_ptr<partition> nvs::open_partition(std::string_view label, bool secure) {
         std::unique_lock<std::mutex> lock{_partitions_mutex};
         auto &part_wptr = _open_partitions[std::string(label)];
         if (part_wptr.expired()) {
             // Attempt at finding the partition
             esp_partition_t const *part = esp_partition_find_first(
-                    ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, label);
+                    ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, label.data());
             if (part != nullptr) {
                 auto part_sptr = std::shared_ptr<partition>{new partition{*part, secure}};
                 part_wptr = part_sptr;
                 return part_sptr;
             } else {
-                ESP_LOGW("NVS", "Partition %s not found.", label);
+                ESP_LOGW("NVS", "Partition %s not found.", label.data());
             }
             return nullptr;
         } else {
@@ -138,9 +138,9 @@ namespace ka::nvs {
     }
 
     template <class T, const_namespc::nvs_getter_t<T> GetFn>
-    [[nodiscard]] r<T> const_namespc::get_known_type(const char *key) const {
+    [[nodiscard]] r<T> const_namespc::get_known_type(std::string_view key) const {
         T value{};
-        if (const auto e = GetFn(_hdl, key, &value); e == ESP_OK) {
+        if (const auto e = GetFn(_hdl, key.data(), &value); e == ESP_OK) {
             return value;
         } else {
             return from_esp_error(e);
@@ -148,30 +148,30 @@ namespace ka::nvs {
     }
 
     template <class T, class U, const_namespc::nvs_sized_getter_t<U> GetFn>
-    [[nodiscard]] r<T> const_namespc::get_known_sized_type(const char *key) const {
+    [[nodiscard]] r<T> const_namespc::get_known_sized_type(std::string_view key) const {
         std::size_t length = 0;
-        if (const auto e = GetFn(_hdl, key, nullptr, &length); e != ESP_OK) {
+        if (const auto e = GetFn(_hdl, key.data(), nullptr, &length); e != ESP_OK) {
             return from_esp_error(e);
         }
         T value{};
         value.resize(length);
-        if (const auto e = GetFn(_hdl, key, value.data(), &length); e != ESP_OK) {
+        if (const auto e = GetFn(_hdl, key.data(), value.data(), &length); e != ESP_OK) {
             return from_esp_error(e);
         }
         return value;
     }
 
     template <class T, namespc::nvs_setter_t<T> SetFn>
-    r<> namespc::set_known_type(const char *key, T const &value) {
-        if (const auto e = SetFn(_hdl, key, value); e != ESP_OK) {
+    r<> namespc::set_known_type(std::string_view key, T const &value) {
+        if (const auto e = SetFn(_hdl, key.data(), value); e != ESP_OK) {
             return from_esp_error(e);
         }
         return mlab::result_success;
     }
 
     template <class T, class U, namespc::nvs_sized_setter_t<U> SetFn>
-    r<> namespc::set_known_sized_type(const char *key, T const &value) {
-        if (const auto e = SetFn(_hdl, key, value.data(), value.size()); e != ESP_OK) {
+    r<> namespc::set_known_sized_type(std::string_view key, T const &value) {
+        if (const auto e = SetFn(_hdl, key.data(), value.data(), value.size()); e != ESP_OK) {
             return from_esp_error(e);
         }
         return mlab::result_success;
@@ -189,33 +189,33 @@ namespace ka::nvs {
         return std::const_pointer_cast<partition>(const_namespc::get_partition());
     }
 
-    r<std::uint8_t> const_namespc::get_u8(const char *key) const {
+    r<std::uint8_t> const_namespc::get_u8(std::string_view key) const {
         return get_known_type<std::uint8_t, nvs_get_u8>(key);
     }
-    r<std::uint16_t> const_namespc::get_u16(const char *key) const {
+    r<std::uint16_t> const_namespc::get_u16(std::string_view key) const {
         return get_known_type<std::uint16_t, nvs_get_u16>(key);
     }
-    r<std::uint32_t> const_namespc::get_u32(const char *key) const {
+    r<std::uint32_t> const_namespc::get_u32(std::string_view key) const {
         return get_known_type<std::uint32_t, nvs_get_u32>(key);
     }
-    r<std::uint64_t> const_namespc::get_u64(const char *key) const {
+    r<std::uint64_t> const_namespc::get_u64(std::string_view key) const {
         return get_known_type<std::uint64_t, nvs_get_u64>(key);
     }
 
-    r<std::int8_t> const_namespc::get_i8(const char *key) const {
+    r<std::int8_t> const_namespc::get_i8(std::string_view key) const {
         return get_known_type<std::int8_t, nvs_get_i8>(key);
     }
-    r<std::int16_t> const_namespc::get_i16(const char *key) const {
+    r<std::int16_t> const_namespc::get_i16(std::string_view key) const {
         return get_known_type<std::int16_t, nvs_get_i16>(key);
     }
-    r<std::int32_t> const_namespc::get_i32(const char *key) const {
+    r<std::int32_t> const_namespc::get_i32(std::string_view key) const {
         return get_known_type<std::int32_t, nvs_get_i32>(key);
     }
-    r<std::int64_t> const_namespc::get_i64(const char *key) const {
+    r<std::int64_t> const_namespc::get_i64(std::string_view key) const {
         return get_known_type<std::int64_t, nvs_get_i64>(key);
     }
 
-    r<std::string> const_namespc::get_str(const char *key) const {
+    r<std::string> const_namespc::get_str(std::string_view key) const {
         return get_known_sized_type<std::string, char, nvs_get_str>(key);
     }
 
@@ -226,37 +226,37 @@ namespace ka::nvs {
         return used_entries + 1;
     }
 
-    r<mlab::bin_data> const_namespc::get_blob(const char *key) const {
+    r<mlab::bin_data> const_namespc::get_blob(std::string_view key) const {
         return get_known_sized_type<mlab::bin_data, void, nvs_get_blob>(key);
     }
-    r<> namespc::set_u8(const char *key, std::uint8_t value) {
+    r<> namespc::set_u8(std::string_view key, std::uint8_t value) {
         return set_known_type<std::uint8_t, nvs_set_u8>(key, value);
     }
-    r<> namespc::set_u16(const char *key, std::uint16_t value) {
+    r<> namespc::set_u16(std::string_view key, std::uint16_t value) {
         return set_known_type<std::uint16_t, nvs_set_u16>(key, value);
     }
-    r<> namespc::set_u32(const char *key, std::uint32_t value) {
+    r<> namespc::set_u32(std::string_view key, std::uint32_t value) {
         return set_known_type<std::uint32_t, nvs_set_u32>(key, value);
     }
-    r<> namespc::set_u64(const char *key, std::uint64_t value) {
+    r<> namespc::set_u64(std::string_view key, std::uint64_t value) {
         return set_known_type<std::uint64_t, nvs_set_u64>(key, value);
     }
-    r<> namespc::set_i8(const char *key, std::int8_t value) {
+    r<> namespc::set_i8(std::string_view key, std::int8_t value) {
         return set_known_type<std::int8_t, nvs_set_i8>(key, value);
     }
-    r<> namespc::set_i16(const char *key, std::int16_t value) {
+    r<> namespc::set_i16(std::string_view key, std::int16_t value) {
         return set_known_type<std::int16_t, nvs_set_i16>(key, value);
     }
-    r<> namespc::set_i32(const char *key, std::int32_t value) {
+    r<> namespc::set_i32(std::string_view key, std::int32_t value) {
         return set_known_type<std::int32_t, nvs_set_i32>(key, value);
     }
-    r<> namespc::set_i64(const char *key, std::int64_t value) {
+    r<> namespc::set_i64(std::string_view key, std::int64_t value) {
         return set_known_type<std::int64_t, nvs_set_i64>(key, value);
     }
-    r<> namespc::set_str(const char *key, std::string const &value) {
-        return set_known_type<const char *, nvs_set_str>(key, value.c_str());
+    r<> namespc::set_str(std::string_view key, std::string_view value) {
+        return set_known_type<const char *, nvs_set_str>(key, value.data());
     }
-    r<> namespc::set_blob(const char *key, mlab::bin_data const &value) {
+    r<> namespc::set_blob(std::string_view key, mlab::bin_data const &value) {
         return set_known_sized_type<mlab::bin_data, const void, nvs_set_blob>(key, value);
     }
 
@@ -267,8 +267,8 @@ namespace ka::nvs {
         return mlab::result_success;
     }
 
-    r<> namespc::erase(const char *key) {
-        if (const auto e = nvs_erase_key(_hdl, key); e != ESP_OK) {
+    r<> namespc::erase(std::string_view key) {
+        if (const auto e = nvs_erase_key(_hdl, key.data()); e != ESP_OK) {
             return from_esp_error(e);
         }
         return mlab::result_success;
@@ -297,18 +297,18 @@ namespace ka::nvs {
         return s;
     }
 
-    std::shared_ptr<namespc> partition::open_namespc(const char *nsname) {
+    std::shared_ptr<namespc> partition::open_namespc(std::string_view nsname) {
         std::unique_lock<std::mutex> lock{_ns_mutex};
         auto &ns_wptr = _open_ns[std::string(nsname)];
         if (ns_wptr.expired()) {
             // Attempt at finding the namespace
             nvs_handle_t hdl{};
-            if (const auto e = nvs_open_from_partition(_part->label, nsname, NVS_READWRITE, &hdl); e == ESP_OK) {
+            if (const auto e = nvs_open_from_partition(_part->label, nsname.data(), NVS_READWRITE, &hdl); e == ESP_OK) {
                 auto ns_sptr = std::shared_ptr<namespc>{new namespc{shared_from_this(), hdl}};
                 ns_wptr = ns_sptr;
                 return ns_sptr;
             } else {
-                ESP_LOGW("NVS", "Namespace %s not found: %s", nsname, esp_err_to_name(e));
+                ESP_LOGW("NVS", "Namespace %s not found: %s", nsname.data(), esp_err_to_name(e));
             }
             return nullptr;
         } else {
@@ -317,7 +317,7 @@ namespace ka::nvs {
     }
 
 
-    std::shared_ptr<const_namespc> partition::open_const_namespc(const char *nsname) const {
+    std::shared_ptr<const_namespc> partition::open_const_namespc(std::string_view nsname) const {
         std::unique_lock<std::mutex> lock{_cns_mutex};
         auto &ns_wptr = _open_cns[std::string(nsname)];
         if (ns_wptr.expired()) {
@@ -329,12 +329,12 @@ namespace ka::nvs {
             }
             // Attempt at finding the namespace
             nvs_handle_t hdl{};
-            if (const auto e = nvs_open_from_partition(_part->label, nsname, NVS_READONLY, &hdl); e == ESP_OK) {
+            if (const auto e = nvs_open_from_partition(_part->label, nsname.data(), NVS_READONLY, &hdl); e == ESP_OK) {
                 auto ns_sptr = std::shared_ptr<const_namespc>{new const_namespc{shared_from_this(), hdl}};
                 ns_wptr = ns_sptr;
                 return ns_sptr;
             } else {
-                ESP_LOGW("NVS", "Namespace %s not found: %s", nsname, esp_err_to_name(e));
+                ESP_LOGW("NVS", "Namespace %s not found: %s", nsname.data(), esp_err_to_name(e));
             }
             return nullptr;
         } else {

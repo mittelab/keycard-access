@@ -215,8 +215,8 @@ namespace ka {
 #endif
             auto update_nvs = [&]() -> nvs::r<> {
                 TRY(_gate_ns->set_u32("id", std::uint32_t(_id)));
-                TRY(_gate_ns->set_blob("keymaker-pubkey", mlab::bin_data::chain(_km_pk)));
-                TRY(_gate_ns->set_blob("base-key", mlab::bin_data::chain(_base_key)));
+                TRY(_gate_ns->set_encode_blob("keymaker-pubkey", _km_pk));
+                TRY(_gate_ns->set_encode_blob("base-key", _base_key));
                 TRY(_gate_ns->commit());
                 return mlab::result_success;
             };

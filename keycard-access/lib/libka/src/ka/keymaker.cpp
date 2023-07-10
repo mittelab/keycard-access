@@ -560,8 +560,7 @@ namespace ka {
 
 
     nvs::r<> gate_data::save_to(nvs::namespc &ns) const {
-        const auto key = get_nvs_key(id);
-        TRY(ns.set_encode_blob(key.c_str(), *this));
+        TRY(ns.set_encode_blob(get_nvs_key(id), *this));
         TRY(ns.commit());
         return mlab::result_success;
     }

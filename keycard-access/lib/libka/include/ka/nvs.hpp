@@ -66,7 +66,7 @@ namespace ka::nvs {
         nvs &operator=(nvs &&) = delete;
         ~nvs();
 
-        [[nodiscard]] std::shared_ptr<partition> open_partition(const char *label, bool secure);
+        [[nodiscard]] std::shared_ptr<partition> open_partition(std::string_view label, bool secure);
         [[nodiscard]] std::shared_ptr<partition> open_default_partition();
     };
 
@@ -80,7 +80,7 @@ namespace ka::nvs {
         std::mutex _ns_mutex;
         mutable std::mutex _cns_mutex;
 
-        friend std::shared_ptr<partition> nvs::open_partition(const char *label, bool secure);
+        friend std::shared_ptr<partition> nvs::open_partition(std::string_view label, bool secure);
 
         explicit partition(esp_partition_t const &part, bool secure);
 
@@ -88,15 +88,13 @@ namespace ka::nvs {
         ~partition();
 
         partition(partition const &) = delete;
-        partition(partition &&) noexcept = default;
         partition &operator=(partition const &) = delete;
-        partition &operator=(partition &&) noexcept = default;
 
         [[nodiscard]] nvs_stats_t get_stats() const;
 
-        [[nodiscard]] std::shared_ptr<namespc> open_namespc(const char *nsname);
-        [[nodiscard]] inline std::shared_ptr<const_namespc> open_namespc(const char *nsname) const;
-        [[nodiscard]] std::shared_ptr<const_namespc> open_const_namespc(const char *nsname) const;
+        [[nodiscard]] std::shared_ptr<namespc> open_namespc(std::string_view nsname);
+        [[nodiscard]] inline std::shared_ptr<const_namespc> open_namespc(std::string_view nsname) const;
+        [[nodiscard]] std::shared_ptr<const_namespc> open_const_namespc(std::string_view nsname) const;
     };
 
     class const_namespc {
@@ -105,16 +103,16 @@ namespace ka::nvs {
         nvs_handle_t _hdl{};
 
         template <class T>
-        using nvs_getter_t = esp_err_t (*)(nvs_handle_t, const char *, T *);
+        using nvs_getter_t = esp_err_t (*)(nvs_handle_t, const char * , T *);
 
         template <class T>
-        using nvs_sized_getter_t = esp_err_t (*)(nvs_handle_t, const char *, T *, std::size_t *);
+        using nvs_sized_getter_t = esp_err_t (*)(nvs_handle_t, const char * , T *, std::size_t *);
 
         template <class T, nvs_getter_t<T> GetFn>
-        [[nodiscard]] r<T> get_known_type(const char *key) const;
+        [[nodiscard]] r<T> get_known_type(std::string_view key) const;
 
         template <class T, class U, nvs_sized_getter_t<U> GetFn>
-        [[nodiscard]] r<T> get_known_sized_type(const char *key) const;
+        [[nodiscard]] r<T> get_known_sized_type(std::string_view key) const;
 
         friend class partition;
         const_namespc(std::shared_ptr<const partition> part, nvs_handle_t hdl);
@@ -128,24 +126,24 @@ namespace ka::nvs {
 
         [[nodiscard]] std::shared_ptr<const partition> get_partition() const;
 
-        [[nodiscard]] r<std::uint8_t> get_u8(const char *key) const;
-        [[nodiscard]] r<std::uint16_t> get_u16(const char *key) const;
-        [[nodiscard]] r<std::uint32_t> get_u32(const char *key) const;
-        [[nodiscard]] r<std::uint64_t> get_u64(const char *key) const;
-        [[nodiscard]] r<std::int8_t> get_i8(const char *key) const;
-        [[nodiscard]] r<std::int16_t> get_i16(const char *key) const;
-        [[nodiscard]] r<std::int32_t> get_i32(const char *key) const;
-        [[nodiscard]] r<std::int64_t> get_i64(const char *key) const;
-        [[nodiscard]] r<std::string> get_str(const char *key) const;
-        [[nodiscard]] r<mlab::bin_data> get_blob(const char *key) const;
+        [[nodiscard]] r<std::uint8_t> get_u8(std::string_view key) const;
+        [[nodiscard]] r<std::uint16_t> get_u16(std::string_view key) const;
+        [[nodiscard]] r<std::uint32_t> get_u32(std::string_view key) const;
+        [[nodiscard]] r<std::uint64_t> get_u64(std::string_view key) const;
+        [[nodiscard]] r<std::int8_t> get_i8(std::string_view key) const;
+        [[nodiscard]] r<std::int16_t> get_i16(std::string_view key) const;
+        [[nodiscard]] r<std::int32_t> get_i32(std::string_view key) const;
+        [[nodiscard]] r<std::int64_t> get_i64(std::string_view key) const;
+        [[nodiscard]] r<std::string> get_str(std::string_view key) const;
+        [[nodiscard]] r<mlab::bin_data> get_blob(std::string_view key) const;
 
         template <mlab::is_extractable T>
-        [[nodiscard]] r<T> get_parse_blob(const char *key) const;
+        [[nodiscard]] r<T> get_parse_blob(std::string_view key) const;
 
         [[nodiscard]] std::size_t used_entries() const;
 
         template <class T>
-        [[nodiscard]] r<T> get(const char *key) const;
+        [[nodiscard]] r<T> get(std::string_view key) const;
 
         ~const_namespc();
     };
@@ -156,16 +154,16 @@ namespace ka::nvs {
      */
     class namespc : public const_namespc {
         template <class T>
-        using nvs_setter_t = esp_err_t (*)(nvs_handle_t, const char *, T);
+        using nvs_setter_t = esp_err_t (*)(nvs_handle_t, const char * , T);
 
         template <class T>
-        using nvs_sized_setter_t = esp_err_t (*)(nvs_handle_t, const char *, T *, std::size_t);
+        using nvs_sized_setter_t = esp_err_t (*)(nvs_handle_t, const char * , T *, std::size_t);
 
         template <class T, nvs_setter_t<T> SetFn>
-        r<> set_known_type(const char *key, T const &value);
+        r<> set_known_type(std::string_view key, T const &value);
 
         template <class T, class U, nvs_sized_setter_t<U> SetFn>
-        r<> set_known_sized_type(const char *key, T const &value);
+        r<> set_known_sized_type(std::string_view key, T const &value);
 
         friend class partition;
         namespc(std::shared_ptr<partition> part, nvs_handle_t hdl);
@@ -180,32 +178,32 @@ namespace ka::nvs {
         using const_namespc::get_partition;
         [[nodiscard]] std::shared_ptr<partition> get_partition();
 
-        r<> set_u8(const char *key, std::uint8_t value);
-        r<> set_u16(const char *key, std::uint16_t value);
-        r<> set_u32(const char *key, std::uint32_t value);
-        r<> set_u64(const char *key, std::uint64_t value);
-        r<> set_i8(const char *key, std::int8_t value);
-        r<> set_i16(const char *key, std::int16_t value);
-        r<> set_i32(const char *key, std::int32_t value);
-        r<> set_i64(const char *key, std::int64_t value);
-        r<> set_str(const char *key, std::string const &value);
-        r<> set_blob(const char *key, mlab::bin_data const &value);
+        r<> set_u8(std::string_view key, std::uint8_t value);
+        r<> set_u16(std::string_view key, std::uint16_t value);
+        r<> set_u32(std::string_view key, std::uint32_t value);
+        r<> set_u64(std::string_view key, std::uint64_t value);
+        r<> set_i8(std::string_view key, std::int8_t value);
+        r<> set_i16(std::string_view key, std::int16_t value);
+        r<> set_i32(std::string_view key, std::int32_t value);
+        r<> set_i64(std::string_view key, std::int64_t value);
+        r<> set_str(std::string_view key, std::string_view value);
+        r<> set_blob(std::string_view key, mlab::bin_data const &value);
 
         template <mlab::is_injectable T>
-        r<> set_encode_blob(const char *key, T &&obj);
+        r<> set_encode_blob(std::string_view key, T &&obj);
 
         template <class T>
-        r<> set(const char *key, T const &value);
+        r<> set(std::string_view key, T &&value);
 
         r<> commit();
-        r<> erase(const char *key);
+        r<> erase(std::string_view key);
         r<> clear();
     };
 }// namespace ka::nvs
 
 namespace ka::nvs {
     template <class T>
-    r<T> const_namespc::get(const char *key) const {
+    r<T> const_namespc::get(std::string_view key) const {
         if constexpr (std::is_same_v<T, std::uint8_t>) {
             return get_u8(key);
         } else if constexpr (std::is_same_v<T, std::uint16_t>) {
@@ -224,45 +222,45 @@ namespace ka::nvs {
             return get_i64(key);
         } else if constexpr (std::is_same_v<T, std::string>) {
             return get_str(key);
-        } else {
-            static_assert(std::is_same_v<T, mlab::bin_data>,
-                          "You must use one of the supported types.");
+        } else if constexpr (std::is_same_v<T, mlab::bin_data>) {
             return get_blob(key);
+        } else {
+            return get_parse_blob<T>(key);
         }
     }
     template <class T>
-    r<> namespc::set(const char *key, T const &value) {
-        if constexpr (std::is_same_v<T, std::uint8_t>) {
+    r<> namespc::set(std::string_view key, T &&value) {
+        if constexpr (std::is_same_v<std::decay_t<T>, std::uint8_t>) {
             return set_u8(key, value);
-        } else if constexpr (std::is_same_v<T, std::uint16_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::uint16_t>) {
             return set_u16(key, value);
-        } else if constexpr (std::is_same_v<T, std::uint32_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::uint32_t>) {
             return set_u32(key, value);
-        } else if constexpr (std::is_same_v<T, std::uint64_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::uint64_t>) {
             return set_u64(key, value);
-        } else if constexpr (std::is_same_v<T, std::int8_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::int8_t>) {
             return set_i8(key, value);
-        } else if constexpr (std::is_same_v<T, std::int16_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::int16_t>) {
             return set_i16(key, value);
-        } else if constexpr (std::is_same_v<T, std::int32_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::int32_t>) {
             return set_i32(key, value);
-        } else if constexpr (std::is_same_v<T, std::int64_t>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::int64_t>) {
             return set_i64(key, value);
-        } else if constexpr (std::is_same_v<T, std::string>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
             return set_str(key, value);
-        } else {
-            static_assert(std::is_same_v<T, mlab::bin_data>,
-                          "You must use one of the supported types.");
+        } else if constexpr (std::is_same_v<std::decay_t<T>, mlab::bin_data>) {
             return set_blob(key, value);
+        } else {
+            return set_encode_blob(key, value);
         }
     }
 
-    std::shared_ptr<const_namespc> partition::open_namespc(const char *nsname) const {
+    std::shared_ptr<const_namespc> partition::open_namespc(std::string_view nsname) const {
         return open_const_namespc(nsname);
     }
 
     template <mlab::is_extractable T>
-    [[nodiscard]] r<T> const_namespc::get_parse_blob(const char *key) const {
+    [[nodiscard]] r<T> const_namespc::get_parse_blob(std::string_view key) const {
         if (const auto r = get_blob(key); r) {
             mlab::bin_stream s{*r};
             T t{};
@@ -278,7 +276,7 @@ namespace ka::nvs {
 
 
     template <mlab::is_injectable T>
-    r<> namespc::set_encode_blob(const char *key, T &&obj) {
+    r<> namespc::set_encode_blob(std::string_view key, T &&obj) {
         mlab::bin_data bd{};
         bd << obj;
         return set_blob(key, bd);

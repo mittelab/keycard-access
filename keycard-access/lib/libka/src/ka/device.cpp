@@ -64,7 +64,7 @@ namespace ka {
             ESP_LOGW(TAG, "Encryption is disabled!");
 #endif
             auto update_nvs = [&]() -> nvs::r<> {
-                TRY(_device_ns->set_blob("secret-key", mlab::bin_data::chain(_kp.raw_sk())));
+                TRY(_device_ns->set_encode_blob("secret-key", _kp));
                 TRY(_device_ns->commit());
                 return mlab::result_success;
             };
@@ -122,7 +122,7 @@ namespace ka {
         _ota->set_update_channel(channel);
         if (_device_ns) {
             void([&]() -> nvs::r<> {
-                TRY(_device_ns->set_str("update-channel", std::string{channel}));
+                TRY(_device_ns->set_str("update-channel", channel));
                 TRY(_device_ns->commit());
                 return mlab::result_success;
             }());
