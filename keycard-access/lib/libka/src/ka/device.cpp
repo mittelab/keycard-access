@@ -20,30 +20,40 @@ namespace ka {
             _device_ns = partition->open_namespc("ka-device");
         }
         if (_device_ns) {
-            auto load_from_nvs = [&]() -> nvs::r<> {
-                TRY_RESULT(_device_ns->get_str("update-channel")) {
-                    _ota->set_update_channel(*r);
+            if (const auto r = _device_ns->get_blob("secret-key"); r) {
+                if (r->size() == raw_sec_key::array_size) {
+                    _kp = key_pair{r->data_view()};
+                } else {
+                    ESP_LOGE(TAG, "Invalid key length, resetting...");
+                    generate_keys();
                 }
-                TRY_RESULT(_device_ns->get_u8("update-enabled")) {
-                    if (*r != 0) {
-                        _ota->start();
-                    }
-                }
-                TRY_RESULT(_device_ns->get_blob("secret-key")) {
-                    if (r->size() == raw_sec_key::array_size) {
-                        _kp = key_pair{r->data_view()};
-                    } else {
-                        return nvs::error::invalid_length;
-                    }
-                }
-                return mlab::result_success;
-            };
-            if (load_from_nvs()) {
-                return;
+            } else if (r.error() == nvs::error::not_found) {
+                generate_keys();
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "secret key", to_string(r.error()));
+                generate_keys();
             }
+            // Now get update stuff
+            if (const auto r = _device_ns->get_str("update-channel"); r) {
+                _ota->set_update_channel(*r);
+            } else if (r.error() == nvs::error::not_found) {
+                set_update_channel(update_channel(), false);
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update channel", to_string(r.error()));
+            }
+
+            if (const auto r = _device_ns->get_u8("update-enabled"); r) {
+                if (*r != 0) {
+                    _ota->start();
+                }
+            } else if (r.error() == nvs::error::not_found) {
+                set_update_automatically(updates_automatically());
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update enable flag", to_string(r.error()));
+            }
+        } else {
+            generate_keys();
         }
-        // Else: generate new keys
-        generate_keys();
     }
 
     device::device(key_pair kp) {
