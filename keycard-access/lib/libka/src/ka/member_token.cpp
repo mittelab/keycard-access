@@ -4,11 +4,16 @@
 
 #include <desfire/bits.hpp>
 #include <desfire/esp32/utils.hpp>
+#include <desfire/fs.hpp>
 #include <desfire/kdf.hpp>
-#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/member_token.hpp>
+#include <mlab/result_macro.hpp>
+
+#define TAG "KA"
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
     using namespace mlab_literals;
@@ -25,7 +30,7 @@ namespace ka {
             desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
             if (const auto r = tag.select_application(aid); not r) {
                 if (r.error() != desfire::error::app_not_found or expect_exists) {
-                    DESFIRE_FAIL_MSG("tag().select_application(aid)", r);
+                    MLAB_FAIL_MSG("tag().select_application(aid)", r);
                 }
                 return r.error();
             }
@@ -38,13 +43,13 @@ namespace ka {
                 if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                     return false;
                 }
-                DESFIRE_FAIL_CMD("tag().authenticate(key)", r);
+                MLAB_FAIL_CMD("tag().authenticate(key)", r);
             }
             return true;
         }
 
         /**
-         * @note DESFIRE_FAIL_CMD/DESFIRE_FAIL_MSG only allowed with direct tag calls
+         * @note MLAB_FAIL_CMD/MLAB_FAIL_MSG only allowed with direct tag calls
          * @note Do not suppress unless you use tag directly
          */
     }// namespace
@@ -112,7 +117,7 @@ namespace ka {
         }
         if (const auto r = tag().get_app_settings(); r) {
             if (r->rights.create_delete_without_master_key or r->rights.dir_access_without_auth) {
-                ESP_LOGW("KA", "Invalid root settings: apps w/o mkey=%c, dir w/o auth=%c",
+                ESP_LOGW(TAG, "Invalid root settings: apps w/o mkey=%c, dir w/o auth=%c",
                          boolalpha(r->rights.create_delete_without_master_key),
                          boolalpha(r->rights.dir_access_without_auth));
                 return false;
@@ -122,7 +127,7 @@ namespace ka {
             // Silent failure in this case: the permissions are not right
             return false;
         } else {
-            DESFIRE_FAIL_CMD("tag().get_app_settings()", r);
+            MLAB_FAIL_CMD("tag().get_app_settings()", r);
         }
     }
 
@@ -134,14 +139,14 @@ namespace ka {
         TRY_SILENT(silent_select_application(tag(), aid, expect_exists))
         if (const auto r = tag().get_app_settings(); r) {
             if (r->crypto != desfire::app_crypto::aes_128 or r->max_num_keys != gate_id::gates_per_app + 1) {
-                ESP_LOGW("KA", "App %02x%02x%02x, insecure settings detected: crypto=%s, max keys=%d.",
+                ESP_LOGW(TAG, "App %02x%02x%02x, insecure settings detected: crypto=%s, max keys=%d.",
                          aid[0], aid[1], aid[2], desfire::to_string(r->crypto), r->max_num_keys);
                 return false;
             }
             if (r->rights != gate_app_rights) {
-                ESP_LOGW("KA", "App %02x%02x%02x, insecure settings detected: "
-                               "change mkey=%c, dir w/o auth=%c, files w/o mkey=%c, "
-                               "change cfg=%c, change actor=%c.",
+                ESP_LOGW(TAG, "App %02x%02x%02x, insecure settings detected: "
+                              "change mkey=%c, dir w/o auth=%c, files w/o mkey=%c, "
+                              "change cfg=%c, change actor=%c.",
                          aid[0], aid[1], aid[2],
                          boolalpha(r->rights.master_key_changeable),
                          boolalpha(r->rights.dir_access_without_auth),
@@ -155,7 +160,7 @@ namespace ka {
             // Silent failure in this case: the permissions are not right
             return false;
         } else {
-            DESFIRE_FAIL_CMD("tag().get_app_settings()", r);
+            MLAB_FAIL_CMD("tag().get_app_settings()", r);
         }
     }
 
@@ -166,26 +171,26 @@ namespace ka {
         if (auto r = tag().get_file_settings(fid); not r) {
             if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                 // App settings are incorrect
-                ESP_LOGW("KA", "App %02x%02x%02x: does not allow public file settings retrieval.", aid[0], aid[1], aid[2]);
+                ESP_LOGW(TAG, "App %02x%02x%02x: does not allow public file settings retrieval.", aid[0], aid[1], aid[2]);
                 return desfire::error::app_integrity_error;
             }
             if (r.error() != desfire::error::file_not_found or expect_exists) {
-                DESFIRE_FAIL_MSG("tag().get_file_settings(fid)", r);
+                MLAB_FAIL_MSG("tag().get_file_settings(fid)", r);
             }
             return r.error();
         } else {
             if (r->type() != desfire::file_type::standard) {
-                ESP_LOGW("KA", "App %02x%02x%02x, file %02x, invalid file type %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(r->type()));
+                ESP_LOGW(TAG, "App %02x%02x%02x, file %02x, invalid file type %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(r->type()));
                 return false;
             }
             const auto &gs = r->common_settings();
             if (gs.security != desfire::file_security::encrypted) {
-                ESP_LOGW("KA", "App %02x%02x%02x, file %02x, invalid security mode %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(gs.security));
+                ESP_LOGW(TAG, "App %02x%02x%02x, file %02x, invalid security mode %s.", aid[0], aid[1], aid[2], fid, desfire::to_string(gs.security));
                 return false;
             }
             if (gs.rights.read_write != desfire::no_key or gs.rights.change != desfire::no_key or gs.rights.write != desfire::no_key or
                 gs.rights.read != key_no) {
-                ESP_LOGW("KA", "App %02x%02x%02x, file %02x, invalid rights: r=%c, w=%c, rw=%c, c=%c.",
+                ESP_LOGW(TAG, "App %02x%02x%02x, file %02x, invalid rights: r=%c, w=%c, rw=%c, c=%c.",
                          aid[0], aid[1], aid[2], fid,
                          gs.rights.read.describe(),
                          gs.rights.write.describe(),
@@ -266,10 +271,10 @@ namespace ka {
         if (auto r = tag().read_data(fid, desfire::comm_mode::ciphered); not r) {
             if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error or r.error() == desfire::error::crypto_error) {
                 // File settings are incorrect
-                ESP_LOGW("KA", "App %02x%02x%02x, file %02x: does not allow reading with key %d.", aid[0], aid[1], aid[2], fid, key.key_number());
+                ESP_LOGW(TAG, "App %02x%02x%02x, file %02x: does not allow reading with key %d.", aid[0], aid[1], aid[2], fid, key.key_number());
                 return desfire::error::file_integrity_error;
             } else if (r.error() != desfire::error::file_not_found) {
-                DESFIRE_FAIL_MSG("tag().read_data(fid, desfire::cipher_mode::ciphered)", r);
+                MLAB_FAIL_MSG("tag().read_data(fid, desfire::cipher_mode::ciphered)", r);
             }
             return r.error();
         } else {
@@ -383,7 +388,7 @@ namespace ka {
         const auto def_key = key_type{}.with_key_number(key.key_number());
         TRY_RESULT_SILENT(silent_try_authenticate(tag(), def_key)) {
             if (not *r) {
-                ESP_LOGW("KA", "App %02x%02x%02x, key %d: unable to recover previous key.", aid[0], aid[1], aid[2], key.key_number());
+                ESP_LOGW(TAG, "App %02x%02x%02x, key %d: unable to recover previous key.", aid[0], aid[1], aid[2], key.key_number());
                 return desfire::error::app_integrity_error;
             }
         }
@@ -397,10 +402,10 @@ namespace ka {
         if (const auto r = tag().change_key(def_key, key); not r) {
             if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                 // The app settings are incorrect because they do not allow key change
-                ESP_LOGW("KA", "App %02x%02x%02x: does not allow changing key with master key.", aid[0], aid[1], aid[2]);
+                ESP_LOGW(TAG, "App %02x%02x%02x: does not allow changing key with master key.", aid[0], aid[1], aid[2]);
                 return desfire::error::app_integrity_error;
             }
-            DESFIRE_FAIL_CMD("tag().change_key(mkey, key.key_number(), key)", r);
+            MLAB_FAIL_CMD("tag().change_key(mkey, key.key_number(), key)", r);
         }
         return mlab::result_success;
     }
@@ -415,7 +420,7 @@ namespace ka {
                     if (r.error() == desfire::error::app_not_found) {
                         return mlab::result_success;
                     }
-                    DESFIRE_FAIL_CMD("check_gate_app(aid, false)", r);
+                    MLAB_FAIL_CMD("check_gate_app(aid, false)", r);
                 } else if (not *r) {
                     continue;
                 }
@@ -424,7 +429,7 @@ namespace ka {
                     if (r.error() == desfire::error::app_not_found) {
                         return mlab::result_success;
                     }
-                    DESFIRE_FAIL_CMD("tag().select_application(aid)", r);
+                    MLAB_FAIL_CMD("tag().select_application(aid)", r);
                 }
             }
             suppress.restore();
@@ -572,10 +577,10 @@ namespace ka {
             return std::find(std::begin(*r), std::end(*r), fid) != std::end(*r);
         } else if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
             // Incorrectly set up app, should allow this
-            ESP_LOGW("KA", "App %02x%02x%02x: does not allow public file listing.", aid[0], aid[1], aid[2]);
+            ESP_LOGW(TAG, "App %02x%02x%02x: does not allow public file listing.", aid[0], aid[1], aid[2]);
             return desfire::error::app_integrity_error;
         } else {
-            DESFIRE_FAIL_CMD("tag().get_file_ids()", r);
+            MLAB_FAIL_CMD("tag().get_file_ids()", r);
         }
     }
 
@@ -605,21 +610,21 @@ namespace ka {
                                     // We simply move on to the next file/app
                                     continue;
                                 }
-                                DESFIRE_FAIL_CMD("check_gate_file_internal(fid, gid.key_no(), true)", r_check);
+                                MLAB_FAIL_CMD("check_gate_file_internal(fid, gid.key_no(), true)", r_check);
                             } else if (not *r_check) {
                                 continue;
                             }
                         }
                         gates.emplace_back(gid);
                     } else {
-                        ESP_LOGW("KA", "App %02x%02x%02x: non-gate file %02x.", fid, aid[0], aid[1], aid[2]);
+                        ESP_LOGW(TAG, "App %02x%02x%02x: non-gate file %02x.", fid, aid[0], aid[1], aid[2]);
                     }
                 }
             } else if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
                 // This would normally be an app integrity failure
-                ESP_LOGW("KA", "App %02x%02x%02x: does not allow public file listing.", aid[0], aid[1], aid[2]);
+                ESP_LOGW(TAG, "App %02x%02x%02x: does not allow public file listing.", aid[0], aid[1], aid[2]);
             } else {
-                DESFIRE_FAIL_CMD("tag().get_file_ids()", r);
+                MLAB_FAIL_CMD("tag().get_file_ids()", r);
             }
             return mlab::result_success;
         }));

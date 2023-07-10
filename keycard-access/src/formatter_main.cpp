@@ -9,9 +9,13 @@
 #include <esp_log.h>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
+#include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 
-#define LOG_PFX "KA-FMT"
+#define TAG "KA-FMT"
+
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
     namespace {
@@ -74,49 +78,49 @@ namespace ka {
                         desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
                         desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
                 const auto s_nfcid = mlab::data_to_hex_string(current_id);
-                ESP_LOGI(LOG_PFX, "Attempting to recover root key for ID %s", s_nfcid.c_str());
+                ESP_LOGI(TAG, "Attempting to recover root key for ID %s", s_nfcid.c_str());
                 TRY(tag.select_application());
                 for (auto const &key : keys_to_test) {
                     const auto key_body = key.get_packed_key_body();
                     const auto s_key_body = mlab::data_to_hex_string(key_body);
-                    ESP_LOGI(LOG_PFX, "Trying %s...", s_key_body.c_str());
+                    ESP_LOGI(TAG, "Trying %s...", s_key_body.c_str());
                     auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
                     if (tag.authenticate(key)) {
                         suppress.restore();
-                        ESP_LOGI(LOG_PFX, "Found the right key, changing to default.");
+                        ESP_LOGI(TAG, "Found the right key, changing to default.");
                         TRY(tag.change_key(default_k));
                         TRY(tag.authenticate(default_k));
-                        ESP_LOGI(LOG_PFX, "NFC ID: %s", s_nfcid.c_str());
+                        ESP_LOGI(TAG, "NFC ID: %s", s_nfcid.c_str());
                         TRY_RESULT(tag.get_info()) {
                             const auto s_serial = mlab::data_to_hex_string(r->serial_no);
-                            ESP_LOGI(LOG_PFX, "Serial: %s", s_nfcid.c_str());
+                            ESP_LOGI(TAG, "Serial: %s", s_nfcid.c_str());
                         }
                         TRY_RESULT(tag.get_card_uid()) {
                             const auto s_card_uid = mlab::data_to_hex_string(*r);
-                            ESP_LOGI(LOG_PFX, "CardID: %s", s_nfcid.c_str());
+                            ESP_LOGI(TAG, "CardID: %s", s_nfcid.c_str());
                         }
                         TRY_RESULT(tag.get_application_ids()) {
                             if (r->empty()) {
-                                ESP_LOGI(LOG_PFX, "  Apps: none");
+                                ESP_LOGI(TAG, "  Apps: none");
                             } else {
                                 for (std::size_t i = 0; i < r->size(); ++i) {
-                                    ESP_LOGI(LOG_PFX, "  %s %2d. %02x%2x%2x", (i == 0 ? "Apps:" : "     "), i + 1, (*r)[i][0], (*r)[i][1], (*r)[i][2]);
+                                    ESP_LOGI(TAG, "  %s %2d. %02x%2x%2x", (i == 0 ? "Apps:" : "     "), i + 1, (*r)[i][0], (*r)[i][1], (*r)[i][2]);
                                 }
                             }
                         }
                         TRY(tag.format_picc());
-                        ESP_LOGI(LOG_PFX, "Formatted.");
+                        ESP_LOGI(TAG, "Formatted.");
                         return mlab::result_success;
                     }
                 }
-                ESP_LOGE(LOG_PFX, "I do not know the key...");
+                ESP_LOGE(TAG, "I do not know the key...");
                 return mlab::result_success;
             }
 
             pn532::post_interaction interact_with_tag(desfire::tag &tag) override {
-                ESP_LOGI(LOG_PFX, "Beginning interaction.");
+                ESP_LOGI(TAG, "Beginning interaction.");
                 const auto success = bool(interact_with_tag_internal(tag));
-                ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_WARN), LOG_PFX, "Interaction complete.");
+                ESP_LOG_LEVEL_LOCAL((success ? ESP_LOG_INFO : ESP_LOG_WARN), TAG, "Interaction complete.");
                 return pn532::post_interaction::reject;
             }
         };

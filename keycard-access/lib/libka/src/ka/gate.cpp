@@ -3,10 +3,10 @@
 //
 
 #include <desfire/esp32/utils.hpp>
-#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
+#include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <sdkconfig.h>
@@ -14,8 +14,8 @@
 #include <sodium/randombytes.h>
 
 #define TAG "GATE"
-#undef DESFIRE_FS_LOG_PREFIX
-#define DESFIRE_FS_LOG_PREFIX TAG
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 using namespace std::chrono_literals;
 
@@ -137,21 +137,21 @@ namespace ka {
                 if (const auto r = _gate_ns->get_u32("id"); r) {
                     _id = gate_id{*r};
                 } else if (r.error() == nvs::error::not_found) {
-                    return false; // Set up as new gate
+                    return false;// Set up as new gate
                 } else {
                     ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "gate id", to_string(r.error()));
                 }
                 if (const auto r = _gate_ns->get_parse_blob<pub_key>("keymaker-pubkey"); r) {
                     _km_pk = *r;
                 } else if (r.error() == nvs::error::not_found) {
-                    return false; // Set up as new gate
+                    return false;// Set up as new gate
                 } else {
                     ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "public key", to_string(r.error()));
                 }
                 if (const auto r = _gate_ns->get_parse_blob<gate_base_key>("base-key"); r) {
                     _base_key = *r;
                 } else if (r.error() == nvs::error::not_found) {
-                    return false; // Set up as new gate
+                    return false;// Set up as new gate
                 } else {
                     ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "app base key", to_string(r.error()));
                 }

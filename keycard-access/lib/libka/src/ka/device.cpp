@@ -4,13 +4,13 @@
 
 #include <ka/console.hpp>
 #include <ka/device.hpp>
-#include <desfire/fs.hpp>
+#include <mlab/result_macro.hpp>
 
 using namespace ka::cmd_literals;
 
 #define TAG "KADEV"
-#undef DESFIRE_FS_LOG_PREFIX
-#define DESFIRE_FS_LOG_PREFIX TAG
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
 

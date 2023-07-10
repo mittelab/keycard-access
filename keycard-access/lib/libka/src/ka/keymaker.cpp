@@ -2,15 +2,16 @@
 // Created by spak on 6/14/23.
 //
 
-#include <desfire/fs.hpp>
 #include <esp_log.h>
 #include <ka/console.hpp>
 #include <ka/keymaker.hpp>
+#include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 
 #define TAG "KEYM"
-#undef DESFIRE_FS_LOG_PREFIX
-#define DESFIRE_FS_LOG_PREFIX TAG
+
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
 

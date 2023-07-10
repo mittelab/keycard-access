@@ -3,18 +3,18 @@
 //
 
 #include <desfire/esp32/utils.hpp>
-#include <ka/desfire_fs.hpp>
 #include <ka/gate.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
+#include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
-#include <pn532/p2p.hpp>
 
 #define TAG "P2P"
-#undef DESFIRE_FS_LOG_PREFIX
-#define DESFIRE_FS_LOG_PREFIX TAG
+
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka::p2p {
     namespace bits {

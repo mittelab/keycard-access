@@ -8,14 +8,14 @@
 #include <pn532/esp32/hsu.hpp>
 
 // Override the log prefix
-#define LOG_PFX "KA"
+#define TAG "KA"
 
 using namespace std::chrono_literals;
 
 void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
     ka::keymaker km{ka::nvs::instance().open_default_partition(), std::move(ctrl)};
 
-    ESP_LOGI(LOG_PFX, "Waiting 2s to ensure the serial is attached and visible...");
+    ESP_LOGI(TAG, "Waiting 2s to ensure the serial is attached and visible...");
     std::this_thread::sleep_for(2s);
 
     ka::console console;
@@ -23,11 +23,11 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
     sh.register_help_command();
     km.register_commands(sh);
 
-    ESP_LOGI(LOG_PFX, "Entering shell, type 'help' for help:");
+    ESP_LOGI(TAG, "Entering shell, type 'help' for help:");
 
     sh.repl(console);
 
-    ESP_LOGI(LOG_PFX, "Exiting shell.");
+    ESP_LOGI(TAG, "Exiting shell.");
 }
 
 [[noreturn]] void gate_main(std::shared_ptr<pn532::controller> const &ctrl) {
@@ -51,15 +51,15 @@ extern "C" void app_main() {
     if (not hsu_chn.wake() or not controller->init_and_test()) {
         // Is this a new fw? Roll back
         if (ka::fw_info::is_running_fw_pending_verification()) {
-            ESP_LOGE(LOG_PFX, "Could not start the PN532 with the new firmware. Will roll back in 5s.");
+            ESP_LOGE(TAG, "Could not start the PN532 with the new firmware. Will roll back in 5s.");
             std::this_thread::sleep_for(5s);
             ka::fw_info::running_fw_rollback();
         }
-        ESP_LOGE(LOG_PFX, "Power cycle the device to try again.");
+        ESP_LOGE(TAG, "Power cycle the device to try again.");
         return;
     }
 
-    ESP_LOGI(LOG_PFX, "Self-test passed.");
+    ESP_LOGI(TAG, "Self-test passed.");
 
 #if defined(KEYCARD_ACCESS_GATE)
     gate_main(controller);
