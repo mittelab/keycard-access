@@ -458,6 +458,9 @@ namespace ka {
         template <>
         struct parser<gate_id> {
             [[nodiscard]] static std::string to_string(gate_id gid) {
+                if (gid == std::numeric_limits<gate_id>::max()) {
+                    return "gate_id: invalid";
+                }
                 return mlab::concatenate({"gate-id: ", parser<std::uint32_t>::to_string(std::uint32_t{gid})});
             }
             [[nodiscard]] static ka::cmd::r<gate_id> parse(std::string_view s) {
