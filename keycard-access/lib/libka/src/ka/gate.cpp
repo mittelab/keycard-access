@@ -118,14 +118,6 @@ namespace ka {
         ESP_LOGV("GATE", "Scan failed  with error: %s", pn532::to_string(err));
     }
 
-    void gate::log_public_gate_info() const {
-        ESP_LOGI(TAG, "Gate %lu", std::uint32_t(this->id()));
-        ESP_LOGI(TAG, "Gate public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, keys().raw_pk().data(), keys().raw_pk().size(), ESP_LOG_INFO);
-        ESP_LOGI(TAG, "Keymaker public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pk().raw_pk().data(), keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
-    }
-
     bool gate::is_configured() const {
         return _id != std::numeric_limits<gate_id>::max();
     }

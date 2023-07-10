@@ -88,17 +88,6 @@ namespace ka {
         [[nodiscard]] inline std::vector<gate_data> const &gates() const;
 
 
-        [[deprecated]] [[nodiscard]] std::vector<gate_config> gate_configs() const {
-            std::vector<gate_config> cfgs;
-            cfgs.reserve(_gates.size());
-            for (auto const &gd : _gates) {
-                if (gd.status == gate_status::configured) {
-                    cfgs.emplace_back(gate_config{gate_credentials{gd.gate_pub_key, gd.app_base_key}, gd.id});
-                }
-            }
-            return cfgs;
-        }
-
         void register_commands(ka::cmd::shell &sh) override;
     };
 

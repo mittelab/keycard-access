@@ -134,8 +134,6 @@ namespace ka {
         using device::keys;
 
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
-
-        [[deprecated]] void log_public_gate_info() const;
     };
 }// namespace ka
 
