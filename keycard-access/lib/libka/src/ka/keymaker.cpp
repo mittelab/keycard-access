@@ -204,6 +204,10 @@ namespace ka {
             ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
             if (configure_gate_internal(_gates.back())) {
                 ESP_LOGI(TAG, "Gate configured.");
+            } else {
+                _gates.pop_back();
+                ESP_LOGE(TAG, "Unable to configure gate.");
+                return std::numeric_limits<gate_id>::max();
             }
         } else {
             ESP_LOGI(TAG, "Gate registered but not configured.");
