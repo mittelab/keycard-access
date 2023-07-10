@@ -141,26 +141,41 @@ namespace ka {
             _gate_ns = partition->open_namespc("ka-gate");
         }
         if (_gate_ns) {
-            auto load_from_nvs = [&]() -> nvs::r<> {
-                TRY_RESULT(_gate_ns->get_u32("id")) {
+            auto load_from_nvs = [&]() -> bool {
+                if (const auto r = _gate_ns->get_u32("id"); r) {
                     _id = gate_id{*r};
+                } else if (r.error() == nvs::error::not_found) {
+                    return false; // Set up as new gate
+                } else {
+                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "gate id", to_string(r.error()));
                 }
-                TRY_RESULT(_gate_ns->get_blob("keymaker-pubkey")) {
+                if (const auto r = _gate_ns->get_blob("keymaker-pubkey"); r) {
                     if (r->size() == raw_pub_key::array_size) {
                         _km_pk = pub_key{r->data_view()};
                     } else {
-                        return nvs::error::invalid_length;
+                        ESP_LOGE(TAG, "Invalid %s size.", "public key");
+                        return false;
                     }
+                } else if (r.error() == nvs::error::not_found) {
+                    return false; // Set up as new gate
+                } else {
+                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "public key", to_string(r.error()));
                 }
-                TRY_RESULT(_gate_ns->get_blob("base-key")) {
+                if (const auto r = _gate_ns->get_blob("base-key"); r) {
                     if (r->size() == gate_base_key::array_size) {
                         std::copy_n(std::begin(*r), gate_base_key::array_size, std::begin(_base_key));
                     } else {
-                        return nvs::error::invalid_length;
+                        ESP_LOGE(TAG, "Invalid %s size.", "app base key");
+                        return false;
                     }
+                } else if (r.error() == nvs::error::not_found) {
+                    return false; // Set up as new gate
+                } else {
+                    ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "app base key", to_string(r.error()));
                 }
-                return mlab::result_success;
+                return true;
             };
+
             if (not load_from_nvs()) {
                 // Reset
                 _id = std::numeric_limits<gate_id>::max();
