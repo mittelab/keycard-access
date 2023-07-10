@@ -70,6 +70,7 @@ namespace ka {
     std::vector<pn532::target_type> gate_responder::get_scan_target_types(pn532::scanner &) const {
         // Allow both DEP targets (gates to be configured) and Mifare targets
         return {pn532::target_type::dep_passive_424kbps, pn532::target_type::dep_passive_212kbps, pn532::target_type::dep_passive_106kbps,
+                pn532::target_type::dep_active_424kbps, pn532::target_type::dep_active_212kbps, pn532::target_type::dep_active_106kbps,
                 pn532::target_type::passive_106kbps_iso_iec_14443_4_typea};
     }
 
@@ -234,6 +235,9 @@ namespace ka {
     void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory) {
         pn532::p2p::pn532_initiator raw_initiator{ctrl, logical_idx};
         p2p::secure_initiator sec_initiator{raw_initiator, keys()};
+        if (not sec_initiator.handshake()) {
+            ESP_LOGE(TAG, "Unable to handshake with P2P peer.");
+        }
         auto proto = factory(sec_initiator, *this);
         if (not proto) {
             ESP_LOGE(TAG, "Broken factory!");
