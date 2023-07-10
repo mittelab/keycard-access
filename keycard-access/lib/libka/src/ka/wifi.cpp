@@ -286,19 +286,19 @@ namespace ka {
                 _is_started = true;
                 ESP_ERROR_CHECK(esp_wifi_start());
             }
-            ESP_ERROR_CHECK(esp_wifi_connect());
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_connect());
         } else if (_status == wifi_status::failure) {
             _attempts = 0;
             _status = wifi_status::connecting;
             _status_change.notify_all();
-            ESP_ERROR_CHECK(esp_wifi_connect());
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_connect());
         }
     }
 
     void wifi::disconnect() {
         std::lock_guard<std::recursive_mutex> guard{_mutex};
         if (wifi_status_is_on(_status)) {
-            ESP_ERROR_CHECK(esp_wifi_disconnect());
+            ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_disconnect());
         }
     }
 
