@@ -52,8 +52,10 @@ namespace ka {
         std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
 
         class gate_channel;
+        class card_channel;
 
         [[nodiscard]] p2p::r<gate_channel> open_gate_channel() const;
+        [[nodiscard]] pn532::result<card_channel> open_card_channel() const;
 
         [[nodiscard]] p2p::r<> configure_gate_internal(gate_data &gd);
 

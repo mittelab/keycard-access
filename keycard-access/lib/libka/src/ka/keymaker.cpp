@@ -52,6 +52,50 @@ namespace ka {
     keymaker::keymaker(key_pair kp)
         : device{kp} {}
 
+    class keymaker::card_channel {
+        std::shared_ptr<pn532::controller> _ctrl = {};
+        std::shared_ptr<pn532::desfire_pcd> _pcd = {};
+        std::unique_ptr<desfire::tag> _tag = {};
+    public:
+        card_channel() = default;
+
+        explicit card_channel(std::shared_ptr<pn532::controller> ctrl) {
+            _ctrl = std::move(ctrl);
+        }
+
+        [[nodiscard]] pn532::result<> scan() {
+            if (_ctrl == nullptr) {
+                return pn532::channel_error::app_error;
+            }
+            TRY(_ctrl->rf_configuration_field(false, true));
+            ESP_LOGI(TAG, "Bring forward a member card...");
+            TRY_RESULT(_ctrl->initiator_list_passive_kbps106_typea(1)) {
+                if (r->size() != 1) {
+                    ESP_LOGW(TAG, "Place only one token within the field.");
+                    return pn532::channel_error::hw_error;
+                }
+                const auto nfcid_s = mlab::data_to_hex_string(r->front().nfcid);
+                ESP_LOGI(TAG, "Found a %s tag with NFC id %s", to_string(pn532::target_type::passive_106kbps_iso_iec_14443_4_typea), nfcid_s.c_str());
+                _tag = std::make_unique<desfire::tag>(desfire::tag::make<desfire::esp32::default_cipher_provider>(*_ctrl, r->front().logical_index));
+            }
+            return mlab::result_success;
+        }
+
+        [[nodiscard]] explicit operator bool() const {
+            return _tag != nullptr;
+        }
+
+        [[nodiscard]] desfire::tag &tag() {
+            assert(_tag != nullptr);
+            return *_tag;
+        }
+
+        [[nodiscard]] desfire::tag const &tag() const {
+            assert(_tag != nullptr);
+            return *_tag;
+        }
+    };
+
     class keymaker::gate_channel {
         std::shared_ptr<pn532::controller> _ctrl = {};
         std::unique_ptr<pn532::p2p::pn532_target> _raw_target = {};
@@ -153,10 +197,12 @@ namespace ka {
         }
 
         [[nodiscard]] p2p::remote_gate_base &remote_gate() {
+            assert(_remote_gate != nullptr);
             return *_remote_gate;
         }
 
         [[nodiscard]] p2p::remote_gate_base const &remote_gate() const {
+            assert(_remote_gate != nullptr);
             return *_remote_gate;
         }
 
@@ -185,13 +231,26 @@ namespace ka {
         }
     };
 
-    [[nodiscard]] p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() const {
+    p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() const {
         if (not _ctrl) {
             ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
             std::abort();
         }
         gate_channel chn{_ctrl};
         if (const auto r = chn.connect(keys()); r) {
+            return chn;
+        } else {
+            return r.error();
+        }
+    }
+
+    pn532::result<keymaker::card_channel> keymaker::open_card_channel() const {
+        if (not _ctrl) {
+            ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
+            std::abort();
+        }
+        card_channel chn{_ctrl};
+        if (const auto r = chn.scan(); r) {
             return chn;
         } else {
             return r.error();
