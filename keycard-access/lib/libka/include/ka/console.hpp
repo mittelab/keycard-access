@@ -133,6 +133,7 @@ namespace ka {
         struct parser {
             [[nodiscard]] static r<T> parse(std::string_view value);
             [[nodiscard]] static std::string to_string(T const &value);
+            [[nodiscard]] static std::string type_description();
         };
 
         template <class T>
@@ -151,6 +152,20 @@ namespace ka {
         template <class T>
         struct parser<std::optional<T>> {
             [[nodiscard]] static std::string to_string(std::optional<T> const &value);
+        };
+
+        template <>
+        struct parser<std::string> {
+            [[nodiscard]] static inline r<std::string> parse(std::string_view value);
+            [[nodiscard]] static inline std::string to_string(std::string const &value);
+            [[nodiscard]] static inline std::string type_description();
+        };
+
+        template <>
+        struct parser<std::string_view> {
+            [[nodiscard]] static inline r<std::string_view> parse(std::string_view value);
+            [[nodiscard]] static inline std::string to_string(std::string_view const &value);
+            [[nodiscard]] static inline std::string type_description();
         };
 
         template <parsable T>
@@ -180,17 +195,6 @@ namespace ka {
             [[nodiscard]] std::string help_string() const;
             [[nodiscard]] std::string signature_string() const;
         };
-
-        namespace traits {
-            template <class T>
-            struct is_typed_argument : std::false_type {};
-
-            template <class T>
-            struct is_typed_argument<typed_argument<T>> : std::true_type {};
-        }// namespace traits
-
-        template <class T>
-        concept is_typed_argument_v = traits::is_typed_argument<T>::value;
 
         template <class... Args>
         using typed_arguments_tuple_t = std::tuple<typed_argument<Args>...>;
@@ -289,11 +293,11 @@ namespace ka {
                 }
 
                 /**
-             * @note It's possible to automatically deduct the size when passing string literals as follows:
-             * @code
-             *  constexpr fixed_size_string(const char s[N]);
-             * @endcode
-             */
+                 * @note It's possible to automatically deduct the size when passing string literals as follows:
+                 * @code
+                 *  constexpr fixed_size_string(const char s[N]);
+                 * @endcode
+                 */
                 constexpr explicit fixed_size_string(const char *s) : data{} {
                     std::size_t i = 0;
                     for (; i < N - 1; ++i) {
@@ -432,7 +436,7 @@ namespace ka {
 
         template <parsable T>
         std::string typed_argument<T>::help_string() const {
-            return argument::help_string(traits::type_name<T>().data, default_value ? parser<T>::to_string(*default_value) : "");
+            return argument::help_string(parser<T>::type_description(), default_value ? parser<T>::to_string(*default_value) : "");
         }
 
         template <parsable T>
@@ -440,7 +444,7 @@ namespace ka {
             if (default_value) {
                 return argument::signature_string(parser<T>::to_string(*default_value));
             } else {
-                return argument::signature_string(traits::type_name<T>().data);
+                return argument::signature_string(parser<T>::type_description());
             }
         }
 
@@ -485,8 +489,7 @@ namespace ka {
                             std::is_same_v<T, unsigned int> or std::is_same_v<T, unsigned long> or
                             std::is_same_v<T, long long> or std::is_same_v<T, unsigned long long> or
                             std::is_same_v<T, float> or std::is_same_v<T, double> or
-                            std::is_same_v<T, bool> or std::is_same_v<T, std::string> or
-                            std::is_same_v<T, std::string_view>,
+                            std::is_same_v<T, bool>,
                     "You must implement a specialization of parser<T>::parse for this type.");
 
             // We need the c_str
@@ -531,10 +534,6 @@ namespace ka {
                 if (const auto r = std::strtod(p, &p_end); p_end != p) {
                     return r;
                 }
-            } else if constexpr (std::is_same_v<T, std::string>) {
-                return std::string{value};
-            } else if constexpr (std::is_same_v<T, std::string_view>) {
-                return value;
             } else if constexpr (std::is_same_v<T, bool>) {
                 std::string v{p};
                 std::transform(std::begin(v), std::end(v), std::begin(v), ::tolower);
@@ -563,12 +562,14 @@ namespace ka {
                 return value ? "true" : "false";
             } else if constexpr (util::is_std_to_stringable<T>) {
                 return std::to_string(value);
-            } else if constexpr (std::is_same_v<T, std::string_view>) {
-                // Requires explicit conversion
-                return std::string{value};
             } else {
                 return value;
             }
+        }
+
+        template <class T>
+        std::string parser<T>::type_description() {
+            return traits::type_name<T>().data;
         }
 
         template <class T>
@@ -578,6 +579,30 @@ namespace ka {
                 return parser<T>::to_string(*value);
             }
             return "<no value>";
+        }
+
+        r<std::string> parser<std::string>::parse(std::string_view value) {
+            return std::string{value};
+        }
+
+        std::string parser<std::string>::to_string(std::string const &value) {
+            return value;
+        }
+
+        std::string parser<std::string>::type_description() {
+            return "string";
+        }
+
+        r<std::string_view> parser<std::string_view>::parse(std::string_view value) {
+            return value;
+        }
+
+        std::string parser<std::string_view>::to_string(std::string_view const &value) {
+            return std::string{value};
+        }
+
+        std::string parser<std::string_view>::type_description() {
+            return "string";
         }
 
         template <parse_can_output R, class T, parsable... Args>

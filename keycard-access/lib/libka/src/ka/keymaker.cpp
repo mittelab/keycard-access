@@ -570,6 +570,10 @@ namespace ka {
                 }
                 return mlab::concatenate({"gate-id: ", parser<std::uint32_t>::to_string(std::uint32_t{gid})});
             }
+            [[nodiscard]] static std::string type_description() {
+                return "gate-id";
+            }
+
             [[nodiscard]] static ka::cmd::r<gate_id> parse(std::string_view s) {
                 if (const auto r = parser<std::uint32_t>::parse(s); r) {
                     return gate_id{*r};
@@ -638,6 +642,11 @@ namespace ka {
             [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
                 return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(k.get_packed_key_body())});
             }
+
+            [[nodiscard]] static std::string type_description() {
+                return "<aes|des|3des2k|3des>:<hex key>";
+            }
+
             [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
                 auto parse_internal = [&]() -> std::optional<desfire::any_key> {
                     const auto colon_pos = s.find_first_of(':');
