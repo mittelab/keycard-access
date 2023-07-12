@@ -46,7 +46,7 @@ namespace ka {
             return;
         }
         if (_gate_ns = partition->open_namespc("ka-gates"); _gate_ns) {
-            _gates = gate_data::load_from(*_gate_ns);
+            _gates = keymaker_gate_data::load_from(*_gate_ns);
         }
     }
 
@@ -265,14 +265,14 @@ namespace ka {
         }
     }
 
-    p2p::r<> keymaker::configure_gate_internal(gate_data &gd) {
+    p2p::r<> keymaker::configure_gate_internal(keymaker_gate_data &gd) {
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
                 TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
                     if (r_ours->first != std::numeric_limits<gate_id>::max()) {
                         if (not r_ours->second) {
                             ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
-                        } else if (gd.gate_pub_key != r_chn->peer_pub_key()) {
+                        } else if (gd.pk != r_chn->peer_pub_key()) {
                             if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
                                 ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
                             }
@@ -283,8 +283,8 @@ namespace ka {
                     }
                 }
                 TRY_RESULT(r_rg->get().register_gate(gd.id)) {
-                    gd.gate_pub_key = r_chn->peer_pub_key();
-                    gd.app_base_key = *r;
+                    gd.pk = r_chn->peer_pub_key();
+                    gd.bk = *r;
                     gd.status = gate_status::configured;
                     if (not save_gate(_gates.back())) {
                         return p2p::error::invalid;
@@ -297,7 +297,7 @@ namespace ka {
 
     gate_id keymaker::register_gate(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
-        _gates.push_back(gate_data{id, std::move(notes), ka::gate_status::initialized, {}, {}});
+        _gates.push_back(keymaker_gate_data{id, {}, {}, gate_status::initialized, std::move(notes)});
         if (configure) {
             ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
             if (configure_gate_internal(_gates.back())) {
@@ -352,12 +352,12 @@ namespace ka {
                 return true;
             }
         }
-        auto pk_s = mlab::data_to_hex_string(gd.gate_pub_key.raw_pk());
+        auto pk_s = mlab::data_to_hex_string(gd.pk.raw_pk());
         ESP_LOGI(TAG, "Bring closer a gate with public key %s...", pk_s.c_str());
         auto open_and_reset = [&]() -> p2p::r<> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
                 TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    if (r_chn->peer_pub_key() != gd.gate_pub_key) {
+                    if (r_chn->peer_pub_key() != gd.pk) {
                         ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
                         return p2p::error::invalid;
                     }
@@ -390,7 +390,7 @@ namespace ka {
         return bool(save_gate(gd));
     }
 
-    gate_data const *keymaker::operator[](gate_id id) const {
+    keymaker_gate_data const *keymaker::operator[](gate_id id) const {
         const auto i = std::uint32_t(id);
         if (i < gates().size()) {
             return &gates()[i];
@@ -401,7 +401,7 @@ namespace ka {
     void keymaker::set_gate_notes(gate_id id, std::string notes) {
         if (auto const *gd = (*this)[id]; gd != nullptr) {
             // Const-casting so we don't have to repeat the operator[] code.
-            const_cast<gate_data *>(gd)->notes = std::move(notes);
+            const_cast<keymaker_gate_data *>(gd)->notes = std::move(notes);
             save_gate(*gd);
         }
     }
@@ -413,7 +413,7 @@ namespace ka {
         return gate_status::unknown;
     }
 
-    nvs::r<> keymaker::save_gate(gate_data const &gd) {
+    nvs::r<> keymaker::save_gate(keymaker_gate_data const &gd) {
         if (_gate_ns) {
             TRY(gd.save_to(*_gate_ns));
         }
@@ -504,7 +504,7 @@ namespace ka {
         return r and *r;
     }
 
-    std::optional<gate_info> keymaker::inspect_gate(gate_id id) const {
+    std::optional<keymaker_gate_info> keymaker::inspect_gate(gate_id id) const {
         std::optional<pub_key> exp_pk = std::nullopt;
         bool ours = true;
         if (id == std::numeric_limits<gate_id>::max()) {
@@ -528,13 +528,13 @@ namespace ka {
             return std::nullopt;
         }
         if (not ours) {
-            return gate_info{id, gate_status::unknown, {}, *exp_pk};
+            return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
         }
         if (const auto *gd = (*this)[id]; gd != nullptr) {
-            if (exp_pk and *exp_pk != gd->gate_pub_key) {
+            if (exp_pk and *exp_pk != gd->pk) {
                 ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
             }
-            return gate_info{gd->id, gd->status, gd->notes, gd->gate_pub_key};
+            return keymaker_gate_info{gd->id, gd->pk, gd->status, gd->notes};
         } else {
             ESP_LOGW(TAG, "Gate not found.");
             return std::nullopt;
@@ -543,11 +543,11 @@ namespace ka {
 
     namespace cmd {
         template <>
-        struct parser<gate_info> {
-            [[nodiscard]] static std::string to_string(gate_info const &gi) {
+        struct parser<keymaker_gate_info> {
+            [[nodiscard]] static std::string to_string(keymaker_gate_info const &gi) {
                 if (gi.status == gate_status::configured) {
                     return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
-                                              "Configured, PK ", mlab::data_to_hex_string(gi.public_key.raw_pk()), "\n",
+                                              "Configured, PK ", mlab::data_to_hex_string(gi.pk.raw_pk()), "\n",
                                               "Notes: ", gi.notes.empty() ? "n/a" : gi.notes});
                 } else {
                     return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
@@ -697,7 +697,7 @@ namespace ka {
             auto const &g = gates()[i];
             std::printf("%2d. Gate %lu (%s)", i + 1, std::uint32_t{g.id}, to_string(g.status));
             if (g.status == gate_status::configured) {
-                auto s = mlab::data_to_hex_string(g.gate_pub_key.raw_pk());
+                auto s = mlab::data_to_hex_string(g.pk.raw_pk());
                 std::printf(" PK: %s", s.c_str());
             }
             std::printf("\n");
@@ -770,13 +770,13 @@ namespace ka {
     }
 
 
-    nvs::r<> gate_data::save_to(nvs::namespc &ns) const {
+    nvs::r<> keymaker_gate_data::save_to(nvs::namespc &ns) const {
         TRY(ns.set_encode_blob(get_nvs_key(id), *this));
         TRY(ns.commit());
         return mlab::result_success;
     }
 
-    std::string gate_data::get_nvs_key(gate_id gid) {
+    std::string keymaker_gate_data::get_nvs_key(gate_id gid) {
         std::string buffer;
         buffer.resize(9);
         std::snprintf(buffer.data(), buffer.size(), "%08lx", std::uint32_t{gid});
@@ -784,13 +784,12 @@ namespace ka {
         return buffer;
     }
 
-    nvs::r<gate_data> gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
-        const auto key = get_nvs_key(gid);
-        return ns.get_parse_blob<gate_data>(key.c_str());
+    nvs::r<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
+        return ns.get_parse_blob<keymaker_gate_data>(get_nvs_key(gid));
     }
 
-    std::vector<gate_data> gate_data::load_from(nvs::const_namespc const &ns) {
-        std::vector<gate_data> retval;
+    std::vector<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns) {
+        std::vector<keymaker_gate_data> retval;
         for (gate_id gid = std::numeric_limits<gate_id>::min(); gid < std::numeric_limits<gate_id>::max(); gid = gate_id{gid + 1}) {
             if (const auto r = load_from(ns, gid); r) {
                 retval.push_back(*r);
@@ -798,7 +797,7 @@ namespace ka {
                 break;
             } else {
                 ESP_LOGE(TAG, "Unable to load gate %lu, error %s", std::uint32_t{gid}, to_string(r.error()));
-                retval.push_back(gate_data{gid, {}, gate_status::unknown, {}, {}});
+                retval.push_back(keymaker_gate_data{gid, {}, {}, gate_status::unknown, {}});
             }
         }
         return retval;
@@ -806,18 +805,18 @@ namespace ka {
 }// namespace ka
 
 namespace mlab {
-    bin_data &operator<<(bin_data &bd, ka::gate_data const &gd) {
+    bin_data &operator<<(bin_data &bd, ka::keymaker_gate_data const &gd) {
         const auto sz = 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4 + gd.notes.size();
-        return bd << prealloc(sz) << gd.id << gd.status << gd.gate_pub_key << gd.app_base_key << length_encoded << gd.notes;
+        return bd << prealloc(sz) << gd.id << gd.status << gd.pk << gd.bk << length_encoded << gd.notes;
     }
 
-    bin_stream &operator>>(bin_stream &s, ka::gate_data &gd) {
+    bin_stream &operator>>(bin_stream &s, ka::keymaker_gate_data &gd) {
         if (s.remaining() < 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4) {
             s.set_bad();
             return s;
         }
-        ka::gate_data new_gd{};
-        s >> new_gd.id >> new_gd.status >> new_gd.gate_pub_key >> new_gd.app_base_key >> length_encoded >> new_gd.notes;
+        ka::keymaker_gate_data new_gd{};
+        s >> new_gd.id >> new_gd.status >> new_gd.pk >> new_gd.bk >> length_encoded >> new_gd.notes;
         if (s.bad()) {
             return s;
         }

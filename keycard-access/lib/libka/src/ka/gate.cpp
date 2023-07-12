@@ -38,8 +38,16 @@ namespace ka {
         return gate_token_key{key_no, derived_key_data};
     }
 
+    gate_pub_info gate::public_info() const {
+        return gate_pub_info{id(), keys().drop_secret_key()};
+    }
+
+    r<identity, token_id> gate::read_encrypted_gate_file(member_token &token, bool check_app, bool check_file) const {
+        return token.read_encrypted_gate_file(id(), keys(), _base_key, keymaker_pk(), check_app, check_file);
+    }
+
     void gate::try_authenticate(member_token &token, gate_auth_responder &responder) const {
-        if (const auto r = token.read_encrypted_gate_file(*this, true, true); r) {
+        if (const auto r = read_encrypted_gate_file(token, true, true); r) {
             ESP_LOGI(TAG, "Authenticated as %s.", r->first.holder.c_str());
             responder.on_authentication_success(r->first);
         } else {

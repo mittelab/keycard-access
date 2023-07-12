@@ -10,6 +10,10 @@
 #include <ka/ota.hpp>
 #include <ka/wifi.hpp>
 
+namespace ut {
+    struct secure_p2p_loopback;
+}
+
 namespace ka {
     namespace cmd {
         class shell;
@@ -24,6 +28,7 @@ namespace ka {
 
         void generate_keys();
 
+        friend struct ut::secure_p2p_loopback;
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
 

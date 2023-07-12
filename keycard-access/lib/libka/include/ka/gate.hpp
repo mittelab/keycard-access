@@ -25,13 +25,17 @@ namespace ka {
 
     class gate;
 
-    struct gate_credentials {
-        pub_key gate_pub_key = {};
-        gate_base_key app_base_key = {};
+    struct gate_pub_info {
+        gate_id id{};
+        pub_key pk{};
     };
 
-    struct gate_config : gate_credentials {
-        gate_id id{};
+    struct gate_sec_info : gate_pub_info {
+        gate_base_key bk = {};
+
+        gate_sec_info() = default;
+        gate_sec_info(gate_id id_, pub_key pk_, gate_base_key bk_) : gate_pub_info{id_, pk_}, bk{bk_} {}
+        gate_sec_info(gate_pub_info pi_, gate_base_key bk_) : gate_pub_info{pi_}, bk{bk_} {}
     };
 
     /**
@@ -108,7 +112,6 @@ namespace ka {
         /**
          * Resets this gate to the original status, keeping wifi and update settings.
          * @warning This will render all cards with this gate enrolled unusable on this gate!
-         * @todo In @ref keymaker, have a mechanism to realise a gate has been revoked and delete the app/file from the card.
          */
         void reset();
 
@@ -128,11 +131,9 @@ namespace ka {
         [[nodiscard]] bool is_configured() const;
         [[nodiscard]] pub_key const &keymaker_pk() const;
 
-        /**
-         * @todo Make private?
-         */
-        using device::keys;
+        [[nodiscard]] gate_pub_info public_info() const;
 
+        [[nodiscard]] r<identity, token_id> read_encrypted_gate_file(member_token &token, bool check_app, bool check_file) const;
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
     };
 }// namespace ka

@@ -45,23 +45,27 @@ namespace ut {
                 return t2i_data;
             }
         };
+    }
 
-        struct secure_p2p_loopback : p2p_loopback {
-            ka::p2p::secure_initiator initiator;
-            ka::p2p::secure_target target;
+    struct secure_p2p_loopback : p2p_loopback {
+        ka::p2p::secure_initiator initiator;
+        ka::p2p::secure_target target;
 
-            secure_p2p_loopback(ka::key_pair const &km_keys, ka::key_pair const &g_keys)
-                : p2p_loopback{},
-                  initiator{*this, g_keys},
-                  target{*this, km_keys} {
-                std::thread t{[&]() {
-                    TEST_ASSERT(initiator.handshake(5s));
-                }};
-                TEST_ASSERT(target.handshake(5s));
-                t.join();
-            }
-        };
+        secure_p2p_loopback(ka::key_pair const &km_keys, ka::key_pair const &g_keys)
+            : p2p_loopback{},
+              initiator{*this, g_keys},
+              target{*this, km_keys} {
+            std::thread t{[&]() {
+                TEST_ASSERT(initiator.handshake(5s));
+            }};
+            TEST_ASSERT(target.handshake(5s));
+            t.join();
+        }
 
+        secure_p2p_loopback(ka::keymaker const &km, ka::gate const &g) : secure_p2p_loopback{km.keys(), g.keys()} {}
+    };
+
+    namespace {
         struct assertive_local_gate : public ka::p2p::v0::local_gate {
             using local_gate::local_gate;
 
@@ -86,7 +90,7 @@ namespace ut {
             }
 
             ka::p2p::r<ka::p2p::v0::registration_info> get_registration_info() override {
-                return ka::p2p::v0::registration_info{ka::gate_id{32}, g().keys().drop_secret_key()};
+                return ka::p2p::v0::registration_info{ka::gate_id{32}, g().public_info().pk};
             }
 
             ka::p2p::r<ka::gate_base_key> register_gate(ka::gate_id requested_id) override {
@@ -103,9 +107,9 @@ namespace ut {
     }// namespace
 
     void test_p2p_comm() {
-        ka::gate g{bundle.g0.keys()};
+        ka::gate g{bundle.g0_kp};
         ka::keymaker km{bundle.km_kp};
-        secure_p2p_loopback loop{km.keys(), g.keys()};
+        secure_p2p_loopback loop{km, g};
         assertive_local_gate lg{loop.initiator, g};
         ka::p2p::v0::remote_gate rg{loop.target};
 
@@ -156,7 +160,7 @@ namespace ut {
             TEST_ASSERT(r);
             if (r) {
                 TEST_ASSERT(r->id == ka::gate_id{32});
-                TEST_ASSERT(r->km_pk == g.keys());
+                TEST_ASSERT(r->km_pk == bundle.g0_kp);
             }
         }
         {
@@ -185,10 +189,10 @@ namespace ut {
 
         ka::keymaker km1{bundle.km_kp};
         ka::keymaker km2{ka::key_pair{ka::pwhash, "foobar"}};
-        ka::gate g{bundle.g0.keys()};
+        ka::gate g{bundle.g0_kp};
 
-        secure_p2p_loopback loop1{km1.keys(), g.keys()};
-        secure_p2p_loopback loop2{km2.keys(), g.keys()};
+        secure_p2p_loopback loop1{km1, g};
+        secure_p2p_loopback loop2{km2, g};
 
         ka::p2p::v0::remote_gate rg1{loop1.target};
         ka::p2p::v0::local_gate lg1{loop1.initiator, g};

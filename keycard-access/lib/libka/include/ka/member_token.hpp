@@ -15,7 +15,8 @@ namespace ka {
     class gate;
     class key_pair;
     class pub_key;
-    struct gate_config;
+    struct gate_pub_info;
+    struct gate_sec_info;
     class keymaker;
 
     /**
@@ -175,7 +176,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt @p id
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<bool> check_encrypted_gate_file_internal(gate_token_key const &key, key_pair const &kp, gate_config const &g, identity const &id, bool check_app, bool check_file) const;
+        [[nodiscard]] r<bool> check_encrypted_gate_file_internal(gate_token_key const &key, key_pair const &kp, gate_pub_info const &g, identity const &id, bool check_app, bool check_file) const;
 
         /**
          * @param key_no only used when @p check_file is true
@@ -503,7 +504,7 @@ namespace ka {
          * for the given @p g, and then write the encrypted content through @ref write_gate_file.
          * In case of encryption failure, @ref desfire::error::crypto_error is returned.
          * @see check_gate_file
-         * @param km Keymaker.
+         * @param km_kp Keymaker's keypair.
          * @param g Public gate configuration.
          * @param id Identity to write.
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
@@ -516,7 +517,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        r<token_id> write_encrypted_gate_file(keymaker const &km, gate_config const &g, identity const &id, bool check_app);
+        r<token_id> write_encrypted_gate_file(key_pair const &km_kp, gate_pub_info const &g, identity const &id, bool check_app);
 
         /**
          * @brief Writes the given identity encrypted into the master file.
@@ -526,7 +527,7 @@ namespace ka {
          * for the given @p km, and then write the encrypted content through @ref write_master_file.
          * In case of encryption failure, @ref desfire::error::crypto_error is returned.
          * @see check_gate_file
-         * @param km Keymaker.
+         * @param km_kp Keymaker's keypair.
          * @param id Identity to write.
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
          *  @ref desfire::error::app_integrity_error.
@@ -538,7 +539,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        r<token_id> write_encrypted_master_file(keymaker const &km, identity const &id, bool check_app);
+        r<token_id> write_encrypted_master_file(key_pair const &km_kp, identity const &id, bool check_app);
         /**
          * @}
          */
@@ -602,7 +603,10 @@ namespace ka {
          * through @ref read_gate_file, and then decrypt the content using @ref gate::keys.
          * In case of decryption failure, @ref desfire::error::crypto_error is returned.
          * In case of parsing error, @ref desfire::error::malformed is returned.
-         * @param g Gate. Must be configured, otherwise @ref desfire::error::parameter_error is returned.
+         * @param gid Gate ID.
+         * @param gate_kp Key pair of the gate.
+         * @param bk App base key of the gate
+         * @param km_pk Public key of the keymaker that configured the gate.
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
          *  @ref desfire::error::app_integrity_error.
          * @param check_file If true, it will call @ref check_gate_file on @ref gate_id::file and in case of failure, it will return
@@ -617,7 +621,7 @@ namespace ka {
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<identity, token_id> read_encrypted_gate_file(gate const &g, bool check_app, bool check_file) const;
+        [[nodiscard]] r<identity, token_id> read_encrypted_gate_file(gate_id gid, key_pair const &gate_kp, gate_base_key const &bk, pub_key const &km_pk, bool check_app, bool check_file) const;
 
         /**
          * @brief Reads the identity from master file, i.e. file 0 at @ref gate_id::aid_range_begin.
@@ -628,7 +632,7 @@ namespace ka {
          * through @ref read_master_file, and then decrypt the content using @ref keymaker::keys.
          * In case of decryption failure, @ref desfire::error::crypto_error is returned.
          * In case of parsing error, @ref desfire::error::malformed is returned.
-         * @param km Keymaker.
+         * @param km_kp Keymaker's keypair.
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
          *  @ref desfire::error::app_integrity_error.
          * @param check_file If true, it will call @ref check_gate_file on @ref gate_id::file and in case of failure, it will return
@@ -643,17 +647,17 @@ namespace ka {
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<identity, token_id> read_encrypted_master_file(keymaker const &km, bool check_app, bool check_file) const;
+        [[nodiscard]] r<identity, token_id> read_encrypted_master_file(key_pair const &km_kp, bool check_app, bool check_file) const;
 
         /**
          * @brief Checks that the gate file has the expected content
          * This method will retrieve the @ref token_id with @ref get_id, then derive the correct @ref gate_token_key
-         * from @ref gate_config::base_key using @ref gate_base_key::derive_token_key, encrypt the identity
+         * from @ref gate_sec_info::bk using @ref gate_base_key::derive_token_key, encrypt the identity
          * for the given @p g, and then read the encrypted content through @ref read_gate_file, and compare the final
          * content with the expect data.
          * In case of encryption failure, @ref desfire::error::crypto_error is returned.
          * @see check_gate_file
-         * @param km Keymaker.
+         * @param km_kp Keymaker's keypair.
          * @param g Public gate configuration.
          * @param id Identity to check.
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
@@ -671,12 +675,12 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt @p id
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<bool, token_id> check_encrypted_gate_file(keymaker const &km, gate_config const &g, identity const &id, bool check_app, bool check_file) const;
+        [[nodiscard]] r<bool, token_id> check_encrypted_gate_file(key_pair const &km_kp, gate_sec_info const &g, identity const &id, bool check_app, bool check_file) const;
 
         /**
          * @brief Checks that @p g is enrolled correctly.
          * This method will retrieve the @ref token_id with @ref get_id, then derive the correct @ref gate_token_key
-         * from @ref gate_config::base_key using @ref gate_base_key::derive_token_key, as well as @ref gate_app_master_key
+         * from @ref gate_sec_info::bk using @ref gate_base_key::derive_token_key, as well as @ref gate_app_master_key
          * using @ref sec_key::derive_gate_app_master_key, then read the master file via @ref read_encrypted_master_file,
          * encrypt the identity for the given @p g, and then read the raw content through @ref read_gate_file, and compare the final
          * content with the expect data.
@@ -693,7 +697,7 @@ namespace ka {
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<bool, token_id> is_gate_enrolled_correctly(keymaker const &km, gate_config const &g) const;
+        [[nodiscard]] r<bool, token_id> is_gate_enrolled_correctly(key_pair const &km_kp, gate_sec_info const &g) const;
 
         /**
          * @brief Performs @ref check_root and @ref read_encrypted_master_file.
@@ -711,7 +715,7 @@ namespace ka {
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<token_id> is_deployed_correctly(keymaker const &km) const;
+        [[nodiscard]] r<token_id> is_deployed_correctly(key_pair const &km_kp) const;
 
 
         /**
@@ -726,7 +730,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        r<token_id> deploy(keymaker const &km, identity const &id);
+        r<token_id> deploy(key_pair const &km_kp, identity const &id);
 
         /**
          * @brief Format the card, install the correct root settings, root key, create the master app and master file.
@@ -740,7 +744,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        r<token_id> deploy(keymaker const &km, identity const &id, desfire::any_key const &previous_rkey);
+        r<token_id> deploy(key_pair const &km_kp, identity const &id, desfire::any_key const &previous_rkey);
 
         /**
          * @brief Enrolls a gate by setting up the appropriate app, key and file.
@@ -749,10 +753,10 @@ namespace ka {
          *      If the obtained identity does not match @p id, @ref desfire::error::parameter_error is returned.
          *   2. The gate app for @p g is created, if it does not exist. If it exists, it is checked via @ref check_gate_app/
          *      This is done via @ref ensure_gate_app.
-         *   3. The gate token key is derived from @ref gate_config::app_base_key via @ref gate_base_key::derive_token_key.
+         *   3. The gate token key is derived from @ref gate_sec_info::bk via @ref gate_base_key::derive_token_key.
          *   4. The @ref gate_token_key is enrolled via @ref enroll_gate_key.
          *   5. The encrypted file is created with @ref write_encrypted_gate_file.
-         * @param km Keymaker.
+         * @param km_kp Keymaker's keypair.
          * @param g Public gate configuration.
          * @param id Identity to enroll.
          * @return The token id that was used to generate keys, or
@@ -767,7 +771,7 @@ namespace ka {
          *  - @ref desfire::error::parameter_error if @p id is different from the master identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        r<token_id> enroll_gate(keymaker const &km, gate_config const &g, identity const &id);
+        r<token_id> enroll_gate(key_pair const &km_kp, gate_sec_info const &g, identity const &id);
 
         /**
          * @}
