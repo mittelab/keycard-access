@@ -2,6 +2,7 @@
 // Created by spak on 6/14/23.
 //
 
+#include <desfire/esp32/utils.hpp>
 #include <esp_log.h>
 #include <ka/console.hpp>
 #include <ka/keymaker.hpp>
@@ -56,6 +57,8 @@ namespace ka {
         std::shared_ptr<pn532::controller> _ctrl = {};
         std::shared_ptr<pn532::desfire_pcd> _pcd = {};
         std::unique_ptr<desfire::tag> _tag = {};
+        token_id _tkid = {};
+
     public:
         card_channel() = default;
 
@@ -76,6 +79,7 @@ namespace ka {
                 }
                 const auto nfcid_s = mlab::data_to_hex_string(r->front().nfcid);
                 ESP_LOGI(TAG, "Found a %s tag with NFC id %s", to_string(pn532::target_type::passive_106kbps_iso_iec_14443_4_typea), nfcid_s.c_str());
+                _tkid = id_from_nfc_id(r->front().nfcid);
                 _tag = std::make_unique<desfire::tag>(desfire::tag::make<desfire::esp32::default_cipher_provider>(*_ctrl, r->front().logical_index));
             }
             return mlab::result_success;
@@ -93,6 +97,10 @@ namespace ka {
         [[nodiscard]] desfire::tag const &tag() const {
             assert(_tag != nullptr);
             return *_tag;
+        }
+
+        [[nodiscard]] token_id const &id() const {
+            return _tkid;
         }
     };
 
@@ -588,6 +596,100 @@ namespace ka {
                                           ws.operational ? ", operational" : ", not operational"});
             }
         };
+        template <>
+        struct parser<desfire::cipher_type> {
+            [[nodiscard]] static std::string to_string(desfire::cipher_type ct) {
+                switch (ct) {
+                    case desfire::cipher_type::aes128:
+                        return "aes";
+                    case desfire::cipher_type::des:
+                        return "des";
+                    case desfire::cipher_type::des3_2k:
+                        return "3des2k";
+                    case desfire::cipher_type::des3_3k:
+                        return "3des";
+                    case desfire::cipher_type::none:
+                        return "none";
+                    default:
+                        return "invalid";
+                }
+            }
+
+            [[nodiscard]] static ka::cmd::r<desfire::cipher_type> parse(std::string_view s) {
+                std::string lc_s{s};
+                std::transform(std::begin(lc_s), std::end(lc_s), std::begin(lc_s), ::tolower);
+                if (lc_s == "aes") {
+                    return desfire::cipher_type::aes128;
+                } else if (lc_s == "des") {
+                    return desfire::cipher_type::des;
+                } else if (lc_s == "3des2k") {
+                    return desfire::cipher_type::des3_2k;
+                } else if (lc_s == "3des") {
+                    return desfire::cipher_type::des3_3k;
+                } else if (lc_s == "none") {
+                    return desfire::cipher_type::none;
+                } else {
+                    return ka::cmd::error::parse;
+                }
+            }
+        };
+        template <>
+        struct parser<desfire::any_key> {
+            [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
+                return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(k.get_packed_key_body())});
+            }
+            [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
+                auto parse_internal = [&]() -> std::optional<desfire::any_key> {
+                    const auto colon_pos = s.find_first_of(':');
+                    if (colon_pos == std::string_view::npos) {
+                        return std::nullopt;
+                    }
+                    auto opt_ct = parser<desfire::cipher_type>::parse(s.substr(0, colon_pos));
+                    if (not opt_ct) {
+                        return std::nullopt;
+                    }
+                    auto hex_str = std::string{s.substr(colon_pos + 1)};
+                    if (hex_str.size() % 2 != 0) {
+                        hex_str.insert(std::begin(hex_str), '0');
+                    }
+                    auto body = mlab::data_from_hex_string(hex_str);
+                    bool matches_size = true;
+                    auto pad_body = [&](std::size_t sz) {
+                        if (body.size() > sz) {
+                            matches_size = false;
+                            return;
+                        }
+                        body.insert(std::begin(body), sz - body.size(), 0);
+                    };
+                    switch (*opt_ct) {
+                        case desfire::cipher_type::des:
+                            pad_body(desfire::key<desfire::cipher_type::des>::size);
+                            break;
+                        case desfire::cipher_type::des3_2k:
+                            pad_body(desfire::key<desfire::cipher_type::des3_2k>::size);
+                            break;
+                        case desfire::cipher_type::des3_3k:
+                            pad_body(desfire::key<desfire::cipher_type::des3_3k>::size);
+                            break;
+                        case desfire::cipher_type::aes128:
+                            pad_body(desfire::key<desfire::cipher_type::aes128>::size);
+                            break;
+                        default:
+                            break;
+                    }
+                    if (not matches_size) {
+                        return std::nullopt;
+                    }
+                    return desfire::any_key(*opt_ct, body.data_view());
+                };
+                if (const auto opt_k = parse_internal(); opt_k) {
+                    return *opt_k;
+                } else {
+                    ESP_LOGW(TAG, "Keys must be in the format <cipher type>:<hex string>, where cipher type is aes|des|3des2k|3des.");
+                    return cmd::error::parse;
+                }
+            }
+        };
     }// namespace cmd
 
     void keymaker::print_gates() const {
@@ -599,6 +701,54 @@ namespace ka {
                 std::printf(" PK: %s", s.c_str());
             }
             std::printf("\n");
+        }
+    }
+
+    std::optional<desfire::any_key> keymaker::recover_card_root_key() const {
+        static constexpr std::uint8_t secondary_keys_version = 0x10;
+        static constexpr std::array<std::uint8_t, 8> secondary_des_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe};
+        static constexpr std::array<std::uint8_t, 16> secondary_des3_2k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e};
+        static constexpr std::array<std::uint8_t, 24> secondary_des3_3k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e};
+        static constexpr std::array<std::uint8_t, 16> secondary_aes_key = {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
+        static key_pair test_kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
+        static key_pair demo_kp{ka::pwhash, "foobar"};
+
+        auto recover_key = [&]() -> desfire::result<desfire::any_key> {
+            auto channel = open_card_channel();
+            if (not channel) {
+                MLAB_FAIL_MSG("open_card_channel()", channel);
+                return desfire::error::controller_error;
+            }
+            auto const &token_id = channel->id();
+            auto &tag = channel->tag();
+            const std::array<desfire::any_key, 10> keys_to_test = {
+                    desfire::any_key{desfire::cipher_type::des},
+                    test_kp.derive_token_root_key(token_id),
+                    demo_kp.derive_token_root_key(token_id),
+                    desfire::any_key{desfire::cipher_type::des3_2k},
+                    desfire::any_key{desfire::cipher_type::des3_3k},
+                    desfire::any_key{desfire::cipher_type::aes128},
+                    desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
+                    desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
+                    desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
+                    desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
+            ESP_LOGI(TAG, "Attempting to recover root key...");
+            TRY(tag.select_application());
+            auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
+            for (auto const &key : keys_to_test) {
+                if (tag.authenticate(key)) {
+                    return key;
+                }
+            }
+            return desfire::error::authentication_error;
+        };
+
+        if (const auto r = recover_key(); r) {
+            return *r;
+        } else {
+            ESP_LOGW(TAG, "Unable to find root key.");
+            return std::nullopt;
         }
     }
 
@@ -616,6 +766,7 @@ namespace ka {
         sh.register_command("gate-updates-set-config", *this, &keymaker::set_gate_update_settings,
                             {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
         sh.register_command("gate-list", *this, &keymaker::print_gates, {});
+        sh.register_command("card-recover-root-key", *this, &keymaker::recover_card_root_key, {});
     }
 
 

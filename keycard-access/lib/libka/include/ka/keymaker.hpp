@@ -95,6 +95,8 @@ namespace ka {
         [[nodiscard]] std::optional<gate_info> inspect_gate(gate_id id = std::numeric_limits<gate_id>::max()) const;
         void print_gates() const;
 
+        [[nodiscard]] std::optional<desfire::any_key> recover_card_root_key() const;
+
         [[nodiscard]] inline std::vector<gate_data> const &gates() const;
 
 
