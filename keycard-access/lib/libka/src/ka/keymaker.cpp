@@ -66,6 +66,20 @@ namespace ka {
             _ctrl = std::move(ctrl);
         }
 
+        card_channel(card_channel &&) noexcept = default;
+        card_channel &operator=(card_channel &&) noexcept = default;
+
+
+        ~card_channel() {
+            if (_ctrl) {
+                if (_pcd) {
+                    _ctrl->initiator_release(_pcd->target_logical_index());
+                }
+                // Turn RF off
+                _ctrl->rf_configuration_field(false, false);
+            }
+        }
+
         [[nodiscard]] pn532::result<> scan() {
             if (_ctrl == nullptr) {
                 return pn532::channel_error::app_error;
@@ -252,7 +266,7 @@ namespace ka {
         }
     }
 
-    pn532::result<keymaker::card_channel> keymaker::open_card_channel() const {
+    desfire::result<keymaker::card_channel> keymaker::open_card_channel() const {
         if (not _ctrl) {
             ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
             std::abort();
@@ -261,7 +275,7 @@ namespace ka {
         if (const auto r = chn.scan(); r) {
             return chn;
         } else {
-            return r.error();
+            return desfire::error::controller_error;
         }
     }
 
@@ -644,18 +658,17 @@ namespace ka {
             }
 
             [[nodiscard]] static std::string type_description() {
-                return "<aes|des|3des2k|3des>:<hex key>";
+                return "auto|(aes|des|3des2k|3des:<hex key>)";
             }
 
             [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
                 auto parse_internal = [&]() -> std::optional<desfire::any_key> {
                     const auto colon_pos = s.find_first_of(':');
-                    if (colon_pos == std::string_view::npos) {
-                        return std::nullopt;
-                    }
                     auto opt_ct = parser<desfire::cipher_type>::parse(s.substr(0, colon_pos));
                     if (not opt_ct) {
                         return std::nullopt;
+                    } else if (colon_pos == std::string_view::npos) {
+                        return desfire::any_key{*opt_ct};
                     }
                     auto hex_str = std::string{s.substr(colon_pos + 1)};
                     if (hex_str.size() % 2 != 0) {
@@ -694,7 +707,7 @@ namespace ka {
                 if (const auto opt_k = parse_internal(); opt_k) {
                     return *opt_k;
                 } else {
-                    ESP_LOGW(TAG, "Keys must be in the format <cipher type>:<hex string>, where cipher type is aes|des|3des2k|3des.");
+                    ESP_LOGW(TAG, "Keys must be auto or in the format <cipher type>:<hex string>, where cipher type is aes|des|3des2k|3des.");
                     return cmd::error::parse;
                 }
             }
@@ -713,7 +726,30 @@ namespace ka {
         }
     }
 
-    std::optional<desfire::any_key> keymaker::recover_card_root_key() const {
+    bool keymaker::card_format(desfire::any_key root_key) const {
+        return bool([&]() -> desfire::result<> {
+            TRY_RESULT(open_card_channel()) {
+                if (root_key.type() == desfire::cipher_type::none) {
+                    root_key = keys().derive_token_root_key(r->id());
+                }
+                TRY(r->tag().select_application());
+                TRY(r->tag().authenticate(root_key));
+                ESP_LOGI(TAG, "Changing root key to default.");
+                const auto default_k = desfire::key<desfire::cipher_type::des>{};
+                TRY(r->tag().change_key(default_k));
+                TRY(r->tag().select_application());
+                TRY(r->tag().authenticate(default_k));
+                ESP_LOGW(TAG, "We will now format this key.");
+                for (int i = 5; i > 0; --i) {
+                    ESP_LOGW(TAG, "Formatting in %d...", i);
+                    std::this_thread::sleep_for(1s);
+                }
+                return r->tag().format_picc();
+            }
+        }());
+    }
+
+    desfire::result<desfire::any_key> keymaker::recover_card_root_key_internal(desfire::any_key hint) const {
         static constexpr std::uint8_t secondary_keys_version = 0x10;
         static constexpr std::array<std::uint8_t, 8> secondary_des_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe};
         static constexpr std::array<std::uint8_t, 16> secondary_des3_2k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e};
@@ -722,19 +758,13 @@ namespace ka {
         static key_pair test_kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
                                  0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
         static key_pair demo_kp{ka::pwhash, "foobar"};
-
-        auto recover_key = [&]() -> desfire::result<desfire::any_key> {
-            auto channel = open_card_channel();
-            if (not channel) {
-                MLAB_FAIL_MSG("open_card_channel()", channel);
-                return desfire::error::controller_error;
-            }
-            auto const &token_id = channel->id();
-            auto &tag = channel->tag();
-            const std::array<desfire::any_key, 10> keys_to_test = {
+        TRY_RESULT(open_card_channel()) {
+            const std::array<desfire::any_key, 12> keys_to_test = {
                     desfire::any_key{desfire::cipher_type::des},
-                    test_kp.derive_token_root_key(token_id),
-                    demo_kp.derive_token_root_key(token_id),
+                    std::move(hint),
+                    keys().derive_token_root_key(r->id()),
+                    test_kp.derive_token_root_key(r->id()),
+                    demo_kp.derive_token_root_key(r->id()),
                     desfire::any_key{desfire::cipher_type::des3_2k},
                     desfire::any_key{desfire::cipher_type::des3_3k},
                     desfire::any_key{desfire::cipher_type::aes128},
@@ -742,18 +772,20 @@ namespace ka {
                     desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
                     desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
                     desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
-            ESP_LOGI(TAG, "Attempting to recover root key...");
-            TRY(tag.select_application());
+            TRY(r->tag().select_application());
             auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
             for (auto const &key : keys_to_test) {
-                if (tag.authenticate(key)) {
+                if (r->tag().authenticate(key)) {
                     return key;
                 }
             }
             return desfire::error::authentication_error;
-        };
+        }
+    }
 
-        if (const auto r = recover_key(); r) {
+    std::optional<desfire::any_key> keymaker::recover_card_root_key() const {
+        ESP_LOGI(TAG, "Attempting to recover root key...");
+        if (const auto r = recover_card_root_key_internal(); r) {
             return *r;
         } else {
             ESP_LOGW(TAG, "Unable to find root key.");
@@ -776,6 +808,7 @@ namespace ka {
                             {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
         sh.register_command("gate-list", *this, &keymaker::print_gates, {});
         sh.register_command("card-recover-root-key", *this, &keymaker::recover_card_root_key, {});
+        sh.register_command("card-format", *this, &keymaker::card_format, {{"root-key", desfire::any_key{desfire::cipher_type::des}}});
     }
 
 

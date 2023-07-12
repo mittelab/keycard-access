@@ -55,7 +55,7 @@ namespace ka {
         class card_channel;
 
         [[nodiscard]] p2p::r<gate_channel> open_gate_channel() const;
-        [[nodiscard]] pn532::result<card_channel> open_card_channel() const;
+        [[nodiscard]] desfire::result<card_channel> open_card_channel() const;
 
         [[nodiscard]] p2p::r<> configure_gate_internal(keymaker_gate_data &gd);
 
@@ -63,6 +63,7 @@ namespace ka {
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
 
+        [[nodiscard]] desfire::result<desfire::any_key> recover_card_root_key_internal(desfire::any_key hint = desfire::key<desfire::cipher_type::des>{}) const;
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
@@ -90,9 +91,9 @@ namespace ka {
         void print_gates() const;
 
         [[nodiscard]] std::optional<desfire::any_key> recover_card_root_key() const;
+        [[nodiscard]] bool card_format(desfire::any_key root_key) const;
 
         [[nodiscard]] inline std::vector<keymaker_gate_data> const &gates() const;
-
 
         void register_commands(ka::cmd::shell &sh) override;
     };
