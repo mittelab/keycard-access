@@ -309,7 +309,7 @@ namespace ka {
         return mlab::result_success;
     }
 
-    gate_id keymaker::register_gate(std::string notes, bool configure) {
+    gate_id keymaker::gate_add(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
         _gates.push_back(keymaker_gate_data{id, {}, {}, gate_status::initialized, std::move(notes)});
         if (configure) {
@@ -329,7 +329,7 @@ namespace ka {
         return id;
     }
 
-    bool keymaker::configure_gate(ka::gate_id id, bool force) {
+    bool keymaker::gate_configure(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
             return false;
@@ -349,7 +349,7 @@ namespace ka {
         return false;
     }
 
-    bool keymaker::delete_gate(ka::gate_id id, bool force) {
+    bool keymaker::gate_remove(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
             return false;
@@ -404,27 +404,22 @@ namespace ka {
         return bool(save_gate(gd));
     }
 
-    keymaker_gate_data const *keymaker::operator[](gate_id id) const {
-        const auto i = std::uint32_t(id);
-        if (i < gates().size()) {
-            return &gates()[i];
+    void keymaker::gate_set_notes(gate_id id, std::string notes) {
+        if (std::uint32_t{id} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate not found.");
+            return;
         }
-        return nullptr;
+        auto &gd = _gates[std::uint32_t{id}];
+        gd.notes = std::move(notes);
+        save_gate(gd);
     }
 
-    void keymaker::set_gate_notes(gate_id id, std::string notes) {
-        if (auto const *gd = (*this)[id]; gd != nullptr) {
-            // Const-casting so we don't have to repeat the operator[] code.
-            const_cast<keymaker_gate_data *>(gd)->notes = std::move(notes);
-            save_gate(*gd);
+    gate_status keymaker::gate_get_status(gate_id id) const {
+        if (std::uint32_t{id} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate not found.");
+            return gate_status::unknown;
         }
-    }
-
-    gate_status keymaker::get_gate_status(gate_id id) const {
-        if (const auto *gd = (*this)[id]; gd != nullptr) {
-            return gd->status;
-        }
-        return gate_status::unknown;
+        return _gates[std::uint32_t{id}].status;
     }
 
     nvs::r<> keymaker::save_gate(keymaker_gate_data const &gd) {
@@ -437,10 +432,10 @@ namespace ka {
     p2p::r<gate_id, bool> keymaker::check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const {
         gate_id gid = std::numeric_limits<gate_id>::max();
         bool ours = false;
-        TRY_RESULT(rg.get_registration_info()) {
+        TRY_RESULT(rg.get_public_info()) {
             if (r->id != std::numeric_limits<gate_id>::max()) {
                 gid = r->id;
-                ours = r->km_pk == keys();
+                ours = r->pk == keys();
                 ESP_LOGI(TAG, "This gate is configured as gate %lu with %s keymaker.",
                          std::uint32_t{r->id}, ours ? "this" : "another");
             } else {
@@ -450,9 +445,9 @@ namespace ka {
         return {gid, ours};
     }
 
-    std::optional<p2p::v0::update_settings> keymaker::get_gate_update_settings() {
+    std::optional<p2p::v0::update_config> keymaker::gate_get_update_config() {
         ESP_LOGI(TAG, "Bring closer a gate...");
-        auto get_info = [&]() -> p2p::r<p2p::v0::update_settings> {
+        auto get_info = [&]() -> p2p::r<p2p::v0::update_config> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
                 TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
                     TRY(check_if_detected_gate_is_ours(r_rg->get()));
@@ -467,7 +462,7 @@ namespace ka {
         }
         return std::nullopt;
     }
-    std::optional<p2p::v0::wifi_status> keymaker::get_gate_wifi_status() {
+    std::optional<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() {
         ESP_LOGI(TAG, "Bring closer a gate...");
         auto get_info = [&]() -> p2p::r<p2p::v0::wifi_status> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
@@ -485,7 +480,7 @@ namespace ka {
         return std::nullopt;
     }
 
-    bool keymaker::set_gate_update_settings(std::string_view update_channel, bool automatic_updates) {
+    bool keymaker::gate_set_update_config(std::string_view update_channel, bool automatic_updates) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         auto set_updates = [&]() -> p2p::r<> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
@@ -499,7 +494,7 @@ namespace ka {
         return bool(set_updates());
     }
 
-    bool keymaker::connect_gate_wifi(std::string_view ssid, std::string_view password) {
+    bool keymaker::gate_connect_wifi(std::string_view ssid, std::string_view password) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         auto connect_wifi = [&]() -> p2p::r<bool> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
@@ -518,7 +513,7 @@ namespace ka {
         return r and *r;
     }
 
-    std::optional<keymaker_gate_info> keymaker::inspect_gate(gate_id id) const {
+    std::optional<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
         std::optional<pub_key> exp_pk = std::nullopt;
         bool ours = true;
         if (id == std::numeric_limits<gate_id>::max()) {
@@ -544,15 +539,15 @@ namespace ka {
         if (not ours) {
             return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
         }
-        if (const auto *gd = (*this)[id]; gd != nullptr) {
-            if (exp_pk and *exp_pk != gd->pk) {
-                ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
-            }
-            return keymaker_gate_info{gd->id, gd->pk, gd->status, gd->notes};
-        } else {
-            ESP_LOGW(TAG, "Gate not found.");
+        if (std::uint32_t{id} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate not found.");
             return std::nullopt;
         }
+        auto const &gd = _gates[std::uint32_t{id}];
+        if (exp_pk and *exp_pk != gd.pk) {
+            ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
+        }
+        return keymaker_gate_info{gd.id, gd.pk, gd.status, gd.notes};
     }
 
     namespace cmd {
@@ -598,8 +593,8 @@ namespace ka {
         };
 
         template <>
-        struct parser<p2p::v0::update_settings> {
-            [[nodiscard]] static std::string to_string(p2p::v0::update_settings const &us) {
+        struct parser<p2p::v0::update_config> {
+            [[nodiscard]] static std::string to_string(p2p::v0::update_config const &us) {
                 return mlab::concatenate({us.enable_automatic_update ? "automatic,  from " : "not automatic, from ",
                                           us.update_channel});
             }
@@ -718,34 +713,53 @@ namespace ka {
                 }
             }
         };
+
+        template <>
+        struct parser<std::vector<keymaker_gate_info>> {
+            [[nodiscard]] static std::string to_string(std::vector<keymaker_gate_info> const &gis) {
+                if (gis.empty()) {
+                    return "(none)";
+                }
+                std::vector<std::string> pieces;
+                pieces.reserve(gis.size());
+                for (std::size_t i = 0; i < gis.size(); ++i) {
+                    auto const &g = gis[i];
+                    pieces.emplace_back(mlab::concatenate({i < 9 ? " " : "", std::to_string(i + 1),
+                                                           ". Gate ", std::to_string(std::uint32_t{g.id}), " (", ka::to_string(g.status),
+                                                           g.status != gate_status::configured ? ")" : ") PK: ",
+                                                           g.status != gate_status::configured ? "" : mlab::data_to_hex_string(g.pk.raw_pk())}));
+                }
+                return mlab::concatenate_s(pieces, "\n");
+            }
+        };
     }// namespace cmd
 
-    void keymaker::print_gates() const {
-        for (std::size_t i = 0; i < gates().size(); ++i) {
-            auto const &g = gates()[i];
-            std::printf("%2d. Gate %lu (%s)", i + 1, std::uint32_t{g.id}, to_string(g.status));
-            if (g.status == gate_status::configured) {
-                auto s = mlab::data_to_hex_string(g.pk.raw_pk());
-                std::printf(" PK: %s", s.c_str());
-            }
-            std::printf("\n");
-        }
+    std::vector<keymaker_gate_info> keymaker::gate_list() const {
+        std::vector<keymaker_gate_info> retval;
+        retval.reserve(_gates.size());
+        std::copy(std::begin(_gates), std::end(_gates), std::back_inserter(retval));
+        return retval;
     }
 
-    bool keymaker::card_format(desfire::any_key root_key) const {
+    bool keymaker::card_format(desfire::any_key root_key, desfire::any_key new_root_key) const {
         return bool([&]() -> desfire::result<> {
             TRY_RESULT(open_card_channel()) {
                 if (root_key.type() == desfire::cipher_type::none) {
+                    ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
                     root_key = keys().derive_token_root_key(r->id());
                 }
                 TRY(r->tag().select_application());
                 TRY(r->tag().authenticate(root_key));
-                ESP_LOGI(TAG, "Changing root key to default.");
+                if (new_root_key.type() == desfire::cipher_type::none) {
+                    ESP_LOGI(TAG, "Using token-specific key as a new key.");
+                    new_root_key = keys().derive_token_root_key(r->id());
+                }
+                ESP_LOGI(TAG, "Changing root key...");
                 const auto default_k = desfire::key<desfire::cipher_type::des>{};
                 TRY(r->tag().change_key(default_k));
                 TRY(r->tag().select_application());
                 TRY(r->tag().authenticate(default_k));
-                ESP_LOGW(TAG, "We will now format this key.");
+                ESP_LOGW(TAG, "We will now format this card.");
                 for (int i = 5; i > 0; --i) {
                     ESP_LOGW(TAG, "Formatting in %d...", i);
                     std::this_thread::sleep_for(1s);
@@ -789,7 +803,7 @@ namespace ka {
         }
     }
 
-    std::optional<desfire::any_key> keymaker::recover_card_root_key() const {
+    std::optional<desfire::any_key> keymaker::card_recover_root_key() const {
         ESP_LOGI(TAG, "Attempting to recover root key...");
         if (const auto r = recover_card_root_key_internal(); r) {
             return *r;
@@ -801,20 +815,21 @@ namespace ka {
 
     void keymaker::register_commands(ka::cmd::shell &sh) {
         device::register_commands(sh);
-        sh.register_command("gate-configure", *this, &keymaker::configure_gate, {{"gate-id", "gid"}, cmd::flag{"force", false}});
-        sh.register_command("gate-delete", *this, &keymaker::delete_gate, {{"gate-id", "gid"}, cmd::flag{"force", false}});
-        sh.register_command("gate-register", *this, &keymaker::register_gate, {{"notes", {}, ""}, cmd::flag{"configure", true}});
-        sh.register_command("gate-inspect", *this, &keymaker::inspect_gate, {{"gate-id", "gid", std::numeric_limits<gate_id>::max()}});
-        sh.register_command("gate-set-notes", *this, &keymaker::set_gate_notes, {{"gate-id", "gid"}, {"notes"}});
-        sh.register_command("gate-get-status", *this, &keymaker::get_gate_status, {{"gate-id", "gid"}});
-        sh.register_command("gate-wifi-get-status", *this, &keymaker::get_gate_wifi_status, {});
-        sh.register_command("gate-wifi-connect", *this, &keymaker::connect_gate_wifi, {{"ssid"}, {"password"}});
-        sh.register_command("gate-updates-get-config", *this, &keymaker::get_gate_update_settings, {});
-        sh.register_command("gate-updates-set-config", *this, &keymaker::set_gate_update_settings,
+        sh.register_command("gate-configure", *this, &keymaker::gate_configure, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+        sh.register_command("gate-remove", *this, &keymaker::gate_remove, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+        sh.register_command("gate-add", *this, &keymaker::gate_add, {{"notes", {}, ""}, cmd::flag{"configure", true}});
+        sh.register_command("gate-inspect", *this, &keymaker::gate_inspect, {{"gate-id", "gid", std::numeric_limits<gate_id>::max()}});
+        sh.register_command("gate-set-notes", *this, &keymaker::gate_set_notes, {{"gate-id", "gid"}, {"notes"}});
+        sh.register_command("gate-get-status", *this, &keymaker::gate_get_status, {{"gate-id", "gid"}});
+        sh.register_command("gate-wifi-get-status", *this, &keymaker::gate_get_wifi_status, {});
+        sh.register_command("gate-wifi-connect", *this, &keymaker::gate_connect_wifi, {{"ssid"}, {"password"}});
+        sh.register_command("gate-update-get-config", *this, &keymaker::gate_get_update_config, {});
+        sh.register_command("gate-update-set-config", *this, &keymaker::gate_set_update_config,
                             {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
-        sh.register_command("gate-list", *this, &keymaker::print_gates, {});
-        sh.register_command("card-recover-root-key", *this, &keymaker::recover_card_root_key, {});
-        sh.register_command("card-format", *this, &keymaker::card_format, {{"root-key", desfire::any_key{desfire::cipher_type::des}}});
+        sh.register_command("gate-list", *this, &keymaker::gate_list, {});
+        sh.register_command("card-recover-root-key", *this, &keymaker::card_recover_root_key, {});
+        sh.register_command("card-format", *this, &keymaker::card_format,
+                            {{"old-key", desfire::any_key{desfire::cipher_type::des}}, {"new-key", desfire::any_key{desfire::cipher_type::des}}});
     }
 
 

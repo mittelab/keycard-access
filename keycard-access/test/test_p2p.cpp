@@ -69,8 +69,8 @@ namespace ut {
         struct assertive_local_gate : public ka::p2p::v0::local_gate {
             using local_gate::local_gate;
 
-            ka::p2p::r<ka::p2p::v0::update_settings> get_update_settings() override {
-                return ka::p2p::v0::update_settings{"Foo bar", false};
+            ka::p2p::r<ka::p2p::v0::update_config> get_update_settings() override {
+                return ka::p2p::v0::update_config{"Foo bar", false};
             }
 
             ka::p2p::r<> set_update_settings(std::string_view update_channel, bool automatic_updates) override {
@@ -89,8 +89,8 @@ namespace ut {
                 return false;
             }
 
-            ka::p2p::r<ka::p2p::v0::registration_info> get_registration_info() override {
-                return ka::p2p::v0::registration_info{ka::gate_id{32}, g().public_info().pk};
+            ka::p2p::r<ka::gate_pub_info> get_public_info() override {
+                return ka::gate_pub_info{ka::gate_id{32}, g().public_info().pk};
             }
 
             ka::p2p::r<ka::gate_base_key> register_gate(ka::gate_id requested_id) override {
@@ -156,15 +156,15 @@ namespace ut {
         }
         {
             ESP_LOGI("UT", "Testing %s", "get_registration_info");
-            auto r = rg.get_registration_info();
+            auto r = rg.get_public_info();
             TEST_ASSERT(r);
             if (r) {
                 TEST_ASSERT(r->id == ka::gate_id{32});
-                TEST_ASSERT(r->km_pk == bundle.g0_kp);
+                TEST_ASSERT(r->pk == bundle.g0_kp);
             }
         }
         {
-            ESP_LOGI("UT", "Testing %s", "register_gate");
+            ESP_LOGI("UT", "Testing %s", "gate_add");
             auto r = rg.register_gate(ka::gate_id{13});
             TEST_ASSERT(r);
             if (r) {

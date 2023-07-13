@@ -44,6 +44,7 @@ namespace ka {
         keymaker_gate_info(gate_id id_, pub_key pk_, gate_status s_, std::string notes_)
             : gate_pub_info{id_, pk_}, keymaker_gate_extra_data{s_, std::move(notes_)} {}
 
+        keymaker_gate_info(keymaker_gate_data const &gd) : gate_pub_info{gd}, keymaker_gate_extra_data{gd} {}
     };
 
     class keymaker : public device {
@@ -76,24 +77,20 @@ namespace ka {
          */
         explicit keymaker(key_pair kp);
 
-        [[nodiscard]] keymaker_gate_data const *operator[](gate_id id) const;
+        gate_id gate_add(std::string notes = "", bool configure = false);
+        bool gate_configure(gate_id id, bool force = false);
+        bool gate_remove(gate_id id, bool force = false);
+        std::optional<p2p::v0::update_config> gate_get_update_config();
+        std::optional<p2p::v0::wifi_status> gate_get_wifi_status();
+        bool gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
+        bool gate_connect_wifi(std::string_view ssid, std::string_view password);
+        void gate_set_notes(gate_id id, std::string notes);
+        [[nodiscard]] gate_status gate_get_status(gate_id id) const;
+        [[nodiscard]] std::optional<keymaker_gate_info> gate_inspect(gate_id id = std::numeric_limits<gate_id>::max()) const;
+        [[nodiscard]] std::vector<keymaker_gate_info> gate_list() const;
 
-        gate_id register_gate(std::string notes = "", bool configure = false);
-        bool configure_gate(gate_id id, bool force = false);
-        bool delete_gate(gate_id id, bool force = false);
-        std::optional<p2p::v0::update_settings> get_gate_update_settings();
-        std::optional<p2p::v0::wifi_status> get_gate_wifi_status();
-        bool set_gate_update_settings(std::string_view update_channel = "", bool automatic_updates = true);
-        bool connect_gate_wifi(std::string_view ssid, std::string_view password);
-        void set_gate_notes(gate_id id, std::string notes);
-        [[nodiscard]] gate_status get_gate_status(gate_id id) const;
-        [[nodiscard]] std::optional<keymaker_gate_info> inspect_gate(gate_id id = std::numeric_limits<gate_id>::max()) const;
-        void print_gates() const;
-
-        [[nodiscard]] std::optional<desfire::any_key> recover_card_root_key() const;
-        [[nodiscard]] bool card_format(desfire::any_key root_key) const;
-
-        [[nodiscard]] inline std::vector<keymaker_gate_data> const &gates() const;
+        [[nodiscard]] std::optional<desfire::any_key> card_recover_root_key() const;
+        [[nodiscard]] bool card_format(desfire::any_key old_root_key, desfire::any_key new_root_key) const;
 
         void register_commands(ka::cmd::shell &sh) override;
     };
@@ -104,11 +101,5 @@ namespace mlab {
     bin_data &operator<<(bin_data &bd, ka::keymaker_gate_data const &gd);
     bin_stream &operator>>(bin_stream &s, ka::keymaker_gate_data &gd);
 }// namespace mlab
-
-namespace ka {
-    std::vector<keymaker_gate_data> const &keymaker::gates() const {
-        return _gates;
-    }
-}// namespace ka
 
 #endif//KEYCARD_ACCESS_KEYMAKER_HPP
