@@ -829,6 +829,21 @@ namespace ka {
         }
     }
 
+    r<token_id> member_token::unenroll_gate(key_pair const &km_kp, gate_sec_info const &g) {
+        TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
+            TRY_RESULT_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), true, true)) {
+                if (r->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
+            }
+            const auto key = g.bk.derive_token_key(*r_id, g.id.key_no());
+            TRY_SILENT(unenroll_gate_key(g.id, mkey, key, false));
+            TRY_SILENT(delete_gate_file(g.id, mkey, false));
+            return r_id;
+        }
+    }
+
     r<token_id> member_token::is_deployed_correctly(key_pair const &km_kp) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto rkey = km_kp.derive_token_root_key(*r_id);

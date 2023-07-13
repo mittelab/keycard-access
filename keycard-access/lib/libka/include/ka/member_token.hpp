@@ -833,6 +833,33 @@ namespace ka {
         r<token_id> enroll_gate(key_pair const &km_kp, gate_sec_info const &g, identity const &id);
 
         /**
+         * @brief Unenrolls a gate by deleting the gate file and resetting the key.
+         * This method performs the following sequence of operations:
+         *   1. @ref read_encrypted_master_file is called, with app checks and file checks on.
+         *      If the obtained identity does not match @p id, @ref desfire::error::parameter_error is returned.
+         *   2. The gate token key is derived from @ref gate_sec_info::bk via @ref gate_base_key::derive_token_key.
+         *   3. The @ref gate_token_key is unenrolled via @ref unenroll_gate_key.
+         *   4. The encrypted file is deleted with @ref delete_gate_file.
+         * Note that the app is not deleted if empty.
+         * @param km_kp Keymaker's keypair.
+         * @param g Public gate configuration.
+         * @param id Identity to enroll. Used to check if the declared token identity matches the one we want to write.
+         * @return The token id that was used to generate keys, or
+         *  - @ref desfire::error::app_integrity_error If the master app has incorrect settings or the gate app exists already and
+         *      has incorrect settings.
+         *  - @ref desfire::error::file_integrity_error If the master file has incorrect settings.
+         *  - @ref desfire::error::permission_denied If @ref token_root_key, @ref gate_app_master_key do not open the corresponding apps.
+         *  - @ref desfire::error::app_not_found If the master app was not found
+         *  - @ref desfire::error::file_not_found If the master file was not found
+         *  - @ref desfire::error::crypto_error If it was not possible to decrypt the master identity or encrypt the gate's identity.
+         *  - @ref desfire::error::malformed If it was not possible to parse the master identity.
+         *  - @ref desfire::error::parameter_error if @p id is different from the master identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
+         *  - Any other @ref desfire::error in case of communication failure.
+         */
+        r<token_id> unenroll_gate(key_pair const &km_kp, gate_sec_info const &g);
+
+        /**
          * @}
          */
 

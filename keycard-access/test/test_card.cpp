@@ -739,6 +739,12 @@ namespace ut {
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
         TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
         TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g13_sec_info));
+
+        // Does deleting it work?
+        TEST_ASSERT(token.unenroll_gate(bundle.km_kp, bundle.g13_sec_info));
+        TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
+        // Does it work twice?
+        TEST_ASSERT(token.unenroll_gate(bundle.km_kp, bundle.g13_sec_info));
     }
 
     void token_test_fixture::test_cleanup() {
