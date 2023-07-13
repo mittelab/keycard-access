@@ -405,7 +405,54 @@ namespace ka {
                 ESP_LOGW(TAG, "App %02x%02x%02x: does not allow changing key with master key.", aid[0], aid[1], aid[2]);
                 return desfire::error::app_integrity_error;
             }
-            MLAB_FAIL_CMD("tag().change_key(mkey, key.key_number(), key)", r);
+            MLAB_FAIL_CMD("tag().change_key(def_key, key)", r);
+        }
+        return mlab::result_success;
+    }
+
+    r<> member_token::unenroll_gate_key(gate_id gid, gate_app_master_key const &mkey, gate_token_key const &key, bool check_app) {
+        if (mkey.key_number() != 0 or key.key_number() != gid.key_no()) {
+            return desfire::error::parameter_error;
+        }
+        const auto [aid, fid] = gid.app_and_file();
+        if (check_app) {
+            TRY_RESULT_SILENT(check_gate_app(aid, false)) {
+                if (not *r) {
+                    return desfire::error::app_integrity_error;
+                }
+            }
+        } else {
+            TRY_SILENT(silent_select_application(tag(), aid, false))
+        }
+        // We still need the master key to change it
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), mkey)) {
+            if (not *r) {
+                return desfire::error::permission_denied;
+            }
+        }
+        const auto def_key = key_type{}.with_key_number(key.key_number());
+        // Is the key already set to default?
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), def_key)) {
+            if (*r) {
+                return mlab::result_success;
+            }
+        }
+        // Is the current key correct?
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), key)) {
+            if (not *r) {
+                return desfire::error::app_integrity_error;
+            }
+        }
+        // Unfortunately we need to log in once more
+        TRY(tag().authenticate(mkey));
+        desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
+        if (const auto r = tag().change_key(key, def_key); not r) {
+            if (r.error() == desfire::error::permission_denied or r.error() == desfire::error::authentication_error) {
+                // The app settings are incorrect because they do not allow key change
+                ESP_LOGW(TAG, "App %02x%02x%02x: does not allow changing key with master key.", aid[0], aid[1], aid[2]);
+                return desfire::error::app_integrity_error;
+            }
+            MLAB_FAIL_CMD("tag().change_key(key, def_key)", r);
         }
         return mlab::result_success;
     }

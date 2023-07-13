@@ -439,6 +439,23 @@ namespace ka {
         r<> enroll_gate_key(gate_id gid, gate_app_master_key const &mkey, gate_token_key const &key, bool check_app);
 
         /**
+         * @brief Changes the gate key associated to the gate file @p gid to @p key to default.
+         * @param gid Group ID identifying the gate file.
+         * @param mkey Master key to use to change the gate key. This must have @ref key_type::key_number equal to 0,
+         *  otherwise @ref desfire::error::parameter_error is returned.
+         * @param key Key to update. This must have @ref key_type::key_number equal to @ref gate_id::key_no,
+         *  otherwise @ref desfire::error::parameter_error is returned.
+         * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
+         *  @ref desfire::error::app_integrity_error.
+         * @return
+         *  - @ref desfire::error::parameter_error If @p mkey's key number is not 0
+         *  - @ref desfire::error::permission_denied If @p mkey does not authenticate
+         *  - @ref desfire::error::app_integrity_error If the app settings are incorrect
+         *  - Any other @ref desfire::error in case of communication failure.
+         */
+        r<> unenroll_gate_key(gate_id gid, gate_app_master_key const &mkey, gate_token_key const &key, bool check_app);
+
+        /**
          * @brief Lists all gates app existing on this card.
          * Does not require any password, as the gate apps can be selected one by one.
          * @param check_app If true, it will call @ref check_gate_app on each potential gate app, and skips those that fail the tests.
