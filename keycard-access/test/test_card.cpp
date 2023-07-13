@@ -285,6 +285,8 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, true)));
+            // Except here, here is true
+            TEST_ASSERT(token.delete_gate_file(gid, mkey, true));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, true)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, true, true)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(g.read_encrypted_gate_file(token, true, false)));
@@ -305,6 +307,7 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, false)));
+            TEST_ASSERT(token.delete_gate_file(gid, mkey, false));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, false)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(g.read_encrypted_gate_file(token, false, false)));
@@ -324,9 +327,11 @@ namespace ut {
 
             // These all should fail with permission denied, independently on whether we check the app or not
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_gate_file(gid, mkey, {}, true)));
+            TEST_ASSERT(is_err<desfire::error::permission_denied>(token.delete_gate_file(gid, mkey, true)));
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.enroll_gate_key(gid, mkey, key, true)));
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.unenroll_gate_key(gid, mkey, {gid.key_no(), {}}, true)));
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_gate_file(gid, mkey, {}, false)));
+            TEST_ASSERT(is_err<desfire::error::permission_denied>(token.delete_gate_file(gid, mkey, false)));
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.enroll_gate_key(gid, mkey, key, false)));
             TEST_ASSERT(is_err<desfire::error::permission_denied>(token.unenroll_gate_key(gid, mkey, {gid.key_no(), {}}, false)));
 
@@ -370,6 +375,7 @@ namespace ut {
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_gate_file(gid, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_gate_file(gid, key, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_gate_file(gid, mkey, {}, true)));
+                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.delete_gate_file(gid, mkey, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.is_gate_enrolled(gid, true, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(g.read_encrypted_gate_file(token, true, false)));
@@ -406,6 +412,7 @@ namespace ut {
                     // These pass if we do not check the app
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.read_gate_file(gid, key, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_gate_file(gid, mkey, {}, false)));
+                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.delete_gate_file(gid, mkey, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(g.read_encrypted_gate_file(token, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.enroll_gate_key(gid, mkey, key, false)));
@@ -617,6 +624,7 @@ namespace ut {
             // Note: a key is already enrolled, so this tests that re-enrolling works correctly
             const ka::identity fake_identity{*r_id, "Not me", {}};
 
+            TEST_ASSERT(token.delete_gate_file(bundle.g0.id(), mkey, true));
             TEST_ASSERT(token.write_encrypted_gate_file(bundle.km_kp, bundle.g0.public_info(), fake_identity, true));
             TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(gid, true, true)));
             TEST_ASSERT(ok_and<true>(token.check_gate_file(gid, true, true)));
@@ -645,6 +653,13 @@ namespace ut {
             r_list = token.list_gates(true, true);
             TEST_ASSERT(r_list);
             TEST_ASSERT(r_list->size() == 1 and r_list->front() == gid);
+
+            // Now let's delete it
+            TEST_ASSERT(token.delete_gate_file(bundle.g0.id(), mkey, true));
+            // And check it's not there anymore
+            TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, true, true)));
+            // Get rid of the key too
+            TEST_ASSERT(token.unenroll_gate_key(bundle.g0.id(), mkey, key, true));
         }
     }
 

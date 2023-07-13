@@ -328,9 +328,53 @@ namespace ka {
     }
 
 
+
+    r<> member_token::delete_gate_file_internal(desfire::app_id aid, desfire::file_id fid, gate_app_master_key const &mkey, bool check_app) {
+        if (not gate_id::is_gate_app(aid) or mkey.key_number() != 0) {
+            return desfire::error::parameter_error;
+        }
+        desfire::esp32::suppress_log suppress{DESFIRE_LOG_PREFIX};
+        if (check_app) {
+            if (const auto r = check_gate_app(aid, false); not r) {
+                if (r.error() == desfire::error::app_not_found) {
+                    return mlab::result_success;
+                } else {
+                    return r.error();
+                }
+            } else if (not *r) {
+                return desfire::error::app_integrity_error;
+            }
+        } else {
+            if (const auto r = silent_select_application(tag(), aid, false); not r) {
+                if (r.error() == desfire::error::app_not_found) {
+                    return mlab::result_success;
+                } else {
+                    return r.error();
+                }
+            }
+        }
+        TRY_RESULT_SILENT(silent_try_authenticate(tag(), mkey)) {
+            if (not *r) {
+                return desfire::error::permission_denied;
+            }
+        }
+        /**
+         * @note We authenticated with the master key, so the following operations should not theoretically fail.
+         * Moreover, there is no custom error code that we are supposed to handle.
+         */
+        TRY(desfire::fs::delete_file_if_exists(tag(), fid))
+        return mlab::result_success;
+    }
+
+
     r<> member_token::write_gate_file(gate_id gid, gate_app_master_key const &mkey, mlab::bin_data const &data, bool check_app) {
         const auto [aid, fid] = gid.app_and_file();
         return write_gate_file_internal(aid, fid, mkey, gid.key_no(), data, check_app);
+    }
+
+    r<> member_token::delete_gate_file(gate_id gid, gate_app_master_key const &mkey, bool check_app) {
+        const auto [aid, fid] = gid.app_and_file();
+        return delete_gate_file_internal(aid, fid, mkey, check_app);
     }
 
     r<> member_token::write_master_file(gate_app_master_key const &mkey, mlab::bin_data const &data, bool check_app) {

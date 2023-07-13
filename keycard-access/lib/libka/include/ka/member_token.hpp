@@ -56,6 +56,20 @@ namespace ka {
         /**
          * @param aid App Id
          * @param fid File Id
+         * @param mkey App master key
+         * @param check_app If true, it will run @ref check_gate_app on @p aid
+         * @return
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0 or @p aid does not pass @ref gate_id::is_valid_gate_app
+         *  - @ref desfire::error::app_integrity_error If the app settings are incorrect
+         *  - @ref desfire::error::permission_denied If @p mkey cannot login
+         *  - @ref desfire::error::app_not_found If the app was not found
+         *  - Any other @ref desfire::error in case of communication failure.
+         */
+        r<> delete_gate_file_internal(desfire::app_id aid, desfire::file_id fid, gate_app_master_key const &mkey, bool check_app);
+
+        /**
+         * @param aid App Id
+         * @param fid File Id
          * @param key Key that is supposed to open for reading @p fid
          * @param check_app If true, it will run @ref check_gate_app on @p aid
          * @param check_file If true, it will run @ref check_gate_file on @o fid
@@ -375,6 +389,22 @@ namespace ka {
          *  - Any other @ref desfire::error in case of communication failure.
          */
         r<> write_gate_file(gate_id gid, gate_app_master_key const &mkey, mlab::bin_data const &data, bool check_app);
+
+        /**
+         * @brief Deletes the given gate file.
+         * @see check_gate_file
+         * @param gid Gate ID identifying the gate file.
+         * @param mkey Master key for the gate app. Necessary to delete and create files.
+         * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
+         *  @ref desfire::error::app_integrity_error.
+         * @return
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0.
+         *  - @ref desfire::error::app_integrity_error If the app settings are incorrect
+         *  - @ref desfire::error::permission_denied If @p mkey cannot login
+         *  - @ref desfire::error::app_not_found If the app was not found
+         *  - Any other @ref desfire::error in case of communication failure.
+         */
+        r<> delete_gate_file(gate_id gid, gate_app_master_key const &mkey, bool check_app);
 
         /**
          * @brief Writes the given content into the master file, i.e. file 0 at @ref gate_id::aid_range_begin.
