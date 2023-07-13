@@ -654,7 +654,13 @@ namespace ka {
         template <>
         struct parser<desfire::any_key> {
             [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
-                return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(k.get_packed_key_body())});
+                auto body = k.get_packed_key_body();
+                auto first_nonzero = std::find_if(std::begin(body), std::end(body), [](auto b) { return b != 0; });
+                if (first_nonzero == std::end(body) and first_nonzero != std::begin(body)) {
+                    // If it's all zeroes, make sure there is at least one printed
+                    --first_nonzero;
+                }
+                return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(first_nonzero, std::end(body))});
             }
 
             [[nodiscard]] static std::string type_description() {
