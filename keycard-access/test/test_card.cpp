@@ -238,7 +238,7 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km_kp, {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km_kp, {*r_id, {}, {}}, true)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km_kp, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km_kp)));
@@ -247,7 +247,7 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_master_file(false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_master_file(mkey, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_master_file(mkey, {}, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km_kp, {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_master_file(bundle.km_kp, {*r_id, {}, {}}, false)));
             TEST_ASSERT(ok_and<false>(token.is_master_enrolled(false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_encrypted_master_file(bundle.km_kp, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km_kp)));
@@ -278,12 +278,12 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, true, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {}, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, true)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, true, true)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(g.read_encrypted_gate_file(token, true, false)));
 
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, true)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {}, true, true)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {*r_id, {}, {}}, true, true)));
 
             const auto r_gates = token.list_gates(true, true);
             TEST_ASSERT(r_gates);
@@ -297,12 +297,12 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_gate_file(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.read_gate_file(gid, key, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_gate_file(gid, mkey, {}, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {}, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, false)));
             TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(gid, false, false)));
             TEST_ASSERT(is_err<desfire::error::app_not_found>(g.read_encrypted_gate_file(token, false, false)));
 
             TEST_ASSERT(is_err<desfire::error::app_not_found>(token.enroll_gate_key(gid, mkey, key, false)));
-            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {}, false, false)));
+            TEST_ASSERT(is_err<desfire::error::app_not_found>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {*r_id, {}, {}}, false, false)));
         }
 
         /**
@@ -359,12 +359,12 @@ namespace ut {
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_gate_file(gid, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_gate_file(gid, key, true, false)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_gate_file(gid, mkey, {}, true)));
-                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {}, true)));
+                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.is_gate_enrolled(gid, true, true)));
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(g.read_encrypted_gate_file(token, true, false)));
 
                     TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.enroll_gate_key(gid, mkey, key, true)));
-                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {}, true, true)));
+                    TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {*r_id, {}, {}}, true, true)));
 
                     const auto r_gates = token.list_gates(true, true);
                     TEST_ASSERT(r_gates);
@@ -388,16 +388,16 @@ namespace ut {
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.read_gate_file(gid, key, false, true)));
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.is_gate_enrolled(gid, false, true)));
                         TEST_ASSERT(is_err<desfire::error::app_integrity_error>(g.read_encrypted_gate_file(token, false, true)));
-                        TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {}, false, true)));
+                        TEST_ASSERT(is_err<desfire::error::app_integrity_error>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {*r_id, {}, {}}, false, true)));
                         suppress.restore();
                     }
                     // These pass if we do not check the app
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.read_gate_file(gid, key, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_gate_file(gid, mkey, {}, false)));
-                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {}, false)));
+                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.write_encrypted_gate_file(bundle.km_kp, bundle.g13.public_info(), {*r_id, {}, {}}, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(g.read_encrypted_gate_file(token, false, false)));
                     TEST_ASSERT(is_err<desfire::error::permission_denied>(token.enroll_gate_key(gid, mkey, key, false)));
-                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {}, false, false)));
+                    TEST_ASSERT(is_err<desfire::error::permission_denied>(token.check_encrypted_gate_file(bundle.km_kp, bundle.g13_sec_info, {*r_id, {}, {}}, false, false)));
 
                     r_gate_apps = token.list_gate_apps(false);
                     TEST_ASSERT(r_gate_apps);
@@ -419,6 +419,8 @@ namespace ut {
 
         const auto r_id = token.get_id();
         TEST_ASSERT(r_id);
+
+        const ka::identity real_identity{*r_id, "Holder", "Publisher"};
 
         const auto rkey = bundle.km_kp.derive_token_root_key(*r_id);
         const auto mkey = bundle.km_kp.derive_gate_app_master_key(*r_id);
@@ -531,10 +533,11 @@ namespace ut {
             /**
              * We need an actual master file to test at a gate file level
              */
-            TEST_ASSERT(token.write_encrypted_master_file(bundle.km_kp, bundle.id, true));
+            TEST_ASSERT(is_err<desfire::error::parameter_error>(token.write_encrypted_master_file(bundle.km_kp, ka::identity{}, true)));
+            TEST_ASSERT(token.write_encrypted_master_file(bundle.km_kp, real_identity, true));
             const auto r_identity = token.read_encrypted_master_file(bundle.km_kp, true, true);
             TEST_ASSERT(r_identity);
-            TEST_ASSERT(r_identity->first == bundle.id);
+            TEST_ASSERT(*r_identity == real_identity);
             TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
             TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
 
@@ -595,7 +598,7 @@ namespace ut {
          */
         {
             // Note: a key is already enrolled, so this tests that re-enrolling works correctly
-            const ka::identity fake_identity{{}, "Not me", {}};
+            const ka::identity fake_identity{*r_id, "Not me", {}};
 
             TEST_ASSERT(token.write_encrypted_gate_file(bundle.km_kp, bundle.g0.public_info(), fake_identity, true));
             TEST_ASSERT(ok_and<true>(token.is_gate_enrolled(gid, true, true)));
@@ -614,11 +617,12 @@ namespace ut {
             TEST_ASSERT(is_err<desfire::error::parameter_error>(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, fake_identity)));
 
             // Right, let's do this with the correct identity
-            TEST_ASSERT(token.write_encrypted_gate_file(bundle.km_kp, bundle.g0.public_info(), bundle.id, true));
+            TEST_ASSERT(token.write_encrypted_gate_file(bundle.km_kp, bundle.g0.public_info(), real_identity, true));
             TEST_ASSERT(ok_and<true>(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g0_sec_info)));
 
             // Let's assert that the top-level enrollment works too
-            TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, bundle.id));
+            TEST_ASSERT(is_err<desfire::error::parameter_error>(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, fake_identity)));
+            TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, real_identity));
 
             // And finally let us assert that listing the gates includes the one we just got
             r_list = token.list_gates(true, true);
@@ -638,6 +642,8 @@ namespace ut {
         const auto r_id = token.get_id();
         TEST_ASSERT(r_id);
 
+        const ka::identity real_identity{*r_id, "Holder", "Publisher"};
+
         const auto rkey = bundle.km_kp.derive_token_root_key(*r_id);
         TEST_ASSERT(ok_and<true>(token.check_root(rkey)));
 
@@ -646,13 +652,13 @@ namespace ut {
         TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_deployed_correctly(bundle.km_kp)));
         TEST_ASSERT(ok_and<false>(token.is_master_enrolled(true, true)));
 
-        TEST_ASSERT(token.deploy(bundle.km_kp, bundle.id));
+        TEST_ASSERT(token.deploy(bundle.km_kp, real_identity));
         TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
 
         TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(bundle.g0.id(), true, true)));
         TEST_ASSERT(is_err<desfire::error::file_not_found>(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g0_sec_info)));
-        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, bundle.id));
+        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, real_identity));
         TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
 
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
@@ -660,7 +666,7 @@ namespace ut {
         TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g0_sec_info));
 
         // Does it work twice in a row?
-        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, bundle.id));
+        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g0_sec_info, real_identity));
         TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
 
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
@@ -687,7 +693,7 @@ namespace ut {
         // Does it work with a different gate app?
         TEST_ASSERT(ok_and<false>(token.is_gate_enrolled(bundle.g13.id(), true, true)));
         TEST_ASSERT(is_err<desfire::error::app_not_found>(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g13_sec_info)));
-        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g13_sec_info, bundle.id));
+        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g13_sec_info, real_identity));
         TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
 
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));
@@ -695,7 +701,7 @@ namespace ut {
         TEST_ASSERT(token.is_gate_enrolled_correctly(bundle.km_kp, bundle.g13_sec_info));
 
         // Does it work twice in a row?
-        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g13_sec_info, bundle.id));
+        TEST_ASSERT(token.enroll_gate(bundle.km_kp, bundle.g13_sec_info, real_identity));
         TEST_ASSERT(ok_and<true>(token.is_master_enrolled(true, true)));
 
         TEST_ASSERT(token.is_deployed_correctly(bundle.km_kp));

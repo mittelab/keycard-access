@@ -521,6 +521,9 @@ namespace ka {
 
     r<token_id> member_token::write_encrypted_gate_file(key_pair const &km_kp, gate_pub_info const &g, identity const &id, bool check_app) {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            if (id.id != *r_id) {
+                return desfire::error::parameter_error;
+            }
             const auto [aid, fid] = g.id.app_and_file();
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_SILENT(write_encrypted_gate_file_internal(aid, fid, mkey, g.id.key_no(), km_kp, g.pk, id, check_app));
@@ -530,6 +533,9 @@ namespace ka {
 
     r<token_id> member_token::write_encrypted_master_file(key_pair const &km_kp, identity const &id, bool check_app) {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            if (id.id != *r_id) {
+                return desfire::error::parameter_error;
+            }
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_SILENT(write_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, 0, km_kp, km_kp.drop_secret_key(), id, check_app));
             return r_id;
@@ -646,19 +652,29 @@ namespace ka {
         }
     }
 
-    r<identity, token_id> member_token::read_encrypted_gate_file(gate_id gid, key_pair const &gate_kp, gate_base_key const &bk, pub_key const &km_pk, bool check_app, bool check_file) const {
+    r<identity> member_token::read_encrypted_gate_file(gate_id gid, key_pair const &gate_kp, gate_base_key const &bk, pub_key const &km_pk, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto [aid, fid] = gid.app_and_file();
             const auto key = bk.derive_token_key(*r_id, gid.key_no());
-            return mlab::concat_result(read_encrypted_gate_file_internal(aid, fid, key, gate_kp, km_pk, check_app, check_file), r_id);
+            TRY_RESULT_SILENT(read_encrypted_gate_file_internal(aid, fid, key, gate_kp, km_pk, check_app, check_file)) {
+                if (r->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
+                return r;
+            }
         }
     }
 
 
-    r<identity, token_id> member_token::read_encrypted_master_file(key_pair const &km_kp, bool check_app, bool check_file) const {
+    r<identity> member_token::read_encrypted_master_file(key_pair const &km_kp, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
-            return mlab::concat_result(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), check_app, check_file), r_id);
+            TRY_RESULT_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), check_app, check_file)) {
+                if (r->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
+                return r;
+            }
         }
     }
 
@@ -673,6 +689,9 @@ namespace ka {
 
     r<bool, token_id> member_token::check_encrypted_gate_file(key_pair const &km_kp, gate_sec_info const &g, identity const &id, bool check_app, bool check_file) const {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            if (id.id != *r_id) {
+                return desfire::error::parameter_error;
+            }
             const auto key = g.bk.derive_token_key(*r_id, g.id.key_no());
             return mlab::concat_result(check_encrypted_gate_file_internal(key, km_kp, g, id, check_app, check_file), r_id);
         }
@@ -683,6 +702,9 @@ namespace ka {
             const auto [aid, fid] = g.id.app_and_file();
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_RESULT_AS_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), true, true), r_exp_id) {
+                if (r_exp_id->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
                 const auto key = g.bk.derive_token_key(*r_id, g.id.key_no());
                 // The first app was already tested when reading the master file
                 const bool app_needs_testing = (aid != gate_id::first_aid);
@@ -697,6 +719,9 @@ namespace ka {
             const auto [aid, fid] = g.id.app_and_file();
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_RESULT_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), true, true)) {
+                if (r->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
                 if (*r != id) {
                     return desfire::error::parameter_error;
                 }
@@ -722,13 +747,20 @@ namespace ka {
                     return desfire::error::picc_integrity_error;
                 }
             }
-            TRY_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), true, true))
+            TRY_RESULT_SILENT(read_encrypted_gate_file_internal(gate_id::first_aid, 0x00, mkey, km_kp, km_kp.drop_secret_key(), true, true)) {
+                if (r->id != *r_id) {
+                    return desfire::error::picc_integrity_error;
+                }
+            }
             return r_id;
         }
     }
 
     r<token_id> member_token::deploy(key_pair const &km_kp, identity const &id) {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            if (id.id != *r_id) {
+                return desfire::error::parameter_error;
+            }
             const auto rkey = km_kp.derive_token_root_key(*r_id);
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_SILENT(setup_root(rkey, true))
@@ -740,6 +772,9 @@ namespace ka {
 
     r<token_id> member_token::deploy(key_pair const &km_kp, identity const &id, desfire::any_key const &previous_rkey) {
         TRY_RESULT_AS_SILENT(get_id(), r_id) {
+            if (id.id != *r_id) {
+                return desfire::error::parameter_error;
+            }
             const auto rkey = km_kp.derive_token_root_key(*r_id);
             const auto mkey = km_kp.derive_gate_app_master_key(*r_id);
             TRY_SILENT(setup_root(rkey, true, previous_rkey))

@@ -39,8 +39,6 @@ namespace ut {
 
         ka::gate g0_uncfg{g0_kp};
 
-        ka::identity id{{}, "Test user", "Test deployer"};
-
     } const bundle{};
 
     namespace sec_keys {

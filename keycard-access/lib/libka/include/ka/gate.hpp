@@ -133,7 +133,7 @@ namespace ka {
 
         [[nodiscard]] gate_pub_info public_info() const;
 
-        [[nodiscard]] r<identity, token_id> read_encrypted_gate_file(member_token &token, bool check_app, bool check_file) const;
+        [[nodiscard]] r<identity> read_encrypted_gate_file(member_token &token, bool check_app, bool check_file) const;
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
     };
 }// namespace ka

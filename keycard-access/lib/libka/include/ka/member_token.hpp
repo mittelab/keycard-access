@@ -510,7 +510,8 @@ namespace ka {
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
          *  @ref desfire::error::app_integrity_error.
          * @return The token id that was used to generate keys, or
-         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0.
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0, or the declared token id in @p id does
+         *    not match the card's id.
          *  - @ref desfire::error::app_integrity_error If the app settings are incorrect
          *  - @ref desfire::error::permission_denied If @p mkey cannot login
          *  - @ref desfire::error::app_not_found If the app was not found
@@ -532,7 +533,8 @@ namespace ka {
          * @param check_app If true, it will call @ref check_gate_app on @ref gate_id::app and in case of failure, it will return
          *  @ref desfire::error::app_integrity_error.
          * @return The token id that was used to generate keys, or
-         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0.
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0, or the declared token id in @p id does
+         *    not match the card's id.
          *  - @ref desfire::error::app_integrity_error If the app settings are incorrect
          *  - @ref desfire::error::permission_denied If @p mkey cannot login
          *  - @ref desfire::error::app_not_found If the app was not found
@@ -619,9 +621,10 @@ namespace ka {
          *  - @ref desfire::error::file_not_found If the file was not found
          *  - @ref desfire::error::crypto_error If it was not possible to decrypt the identity.
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<identity, token_id> read_encrypted_gate_file(gate_id gid, key_pair const &gate_kp, gate_base_key const &bk, pub_key const &km_pk, bool check_app, bool check_file) const;
+        [[nodiscard]] r<identity> read_encrypted_gate_file(gate_id gid, key_pair const &gate_kp, gate_base_key const &bk, pub_key const &km_pk, bool check_app, bool check_file) const;
 
         /**
          * @brief Reads the identity from master file, i.e. file 0 at @ref gate_id::aid_range_begin.
@@ -645,9 +648,10 @@ namespace ka {
          *  - @ref desfire::error::file_not_found If the file was not found
          *  - @ref desfire::error::crypto_error If it was not possible to decrypt the identity.
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - Any other @ref desfire::error in case of communication failure.
          */
-        [[nodiscard]] r<identity, token_id> read_encrypted_master_file(key_pair const &km_kp, bool check_app, bool check_file) const;
+        [[nodiscard]] r<identity> read_encrypted_master_file(key_pair const &km_kp, bool check_app, bool check_file) const;
 
         /**
          * @brief Checks that the gate file has the expected content
@@ -669,6 +673,7 @@ namespace ka {
          *  - false if the file exists, is readable but the content does not match, or
          *  - @ref desfire::error::app_integrity_error If the app has incorrect settings.
          *  - @ref desfire::error::file_integrity_error If the file has incorrect settings.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - @ref desfire::error::permission_denied If the derived key does not open the file.
          *  - @ref desfire::error::app_not_found If the app was not found
          *  - @ref desfire::error::file_not_found If the file was not found
@@ -695,6 +700,7 @@ namespace ka {
          *  - @ref desfire::error::file_not_found If the master file or gate file was not found
          *  - @ref desfire::error::crypto_error If it was not possible to decrypt the master identity or encrypt it for @p g
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - Any other @ref desfire::error in case of communication failure.
          */
         [[nodiscard]] r<bool, token_id> is_gate_enrolled_correctly(key_pair const &km_kp, gate_sec_info const &g) const;
@@ -713,6 +719,7 @@ namespace ka {
          *  - @ref desfire::error::file_not_found If the master file was not found
          *  - @ref desfire::error::crypto_error If it was not possible to decrypt the identity.
          *  - @ref desfire::error::malformed If it was not possible to parse the identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - Any other @ref desfire::error in case of communication failure.
          */
         [[nodiscard]] r<token_id> is_deployed_correctly(key_pair const &km_kp) const;
@@ -727,6 +734,8 @@ namespace ka {
          * @warning This will format the picc!
          * @return The token id that was used to generate keys, or
          *  - @ref desfire::error::permission_denied if it was not possible to authenticate with any root key
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0, or the declared token id in @p id does
+         *    not match the card's id.
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
@@ -741,6 +750,8 @@ namespace ka {
          * @warning This will format the picc!
          * @return The token id that was used to generate keys, or
          *  - @ref desfire::error::permission_denied if it was not possible to authenticate with any root key
+         *  - @ref desfire::error::parameter_error If @p mkey does not have key number 0, or the declared token id in @p id does
+         *    not match the card's id.
          *  - @ref desfire::error::crypto_error If it was not possible to encrypt the identity.
          *  - Any other @ref desfire::error in case of communication failure.
          */
@@ -758,7 +769,7 @@ namespace ka {
          *   5. The encrypted file is created with @ref write_encrypted_gate_file.
          * @param km_kp Keymaker's keypair.
          * @param g Public gate configuration.
-         * @param id Identity to enroll.
+         * @param id Identity to enroll. Used to check if the declared token identity matches the one we want to write.
          * @return The token id that was used to generate keys, or
          *  - @ref desfire::error::app_integrity_error If the master app has incorrect settings or the gate app exists already and
          *      has incorrect settings.
@@ -769,6 +780,7 @@ namespace ka {
          *  - @ref desfire::error::crypto_error If it was not possible to decrypt the master identity or encrypt the gate's identity.
          *  - @ref desfire::error::malformed If it was not possible to parse the master identity.
          *  - @ref desfire::error::parameter_error if @p id is different from the master identity.
+         *  - @ref desfire::error::picc_integrity_error If the declared identity token id does not match the current token id.
          *  - Any other @ref desfire::error in case of communication failure.
          */
         r<token_id> enroll_gate(key_pair const &km_kp, gate_sec_info const &g, identity const &id);
