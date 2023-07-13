@@ -741,7 +741,7 @@ namespace ka {
         return retval;
     }
 
-    bool keymaker::card_format(desfire::any_key root_key, desfire::any_key new_root_key) const {
+    bool keymaker::card_format(desfire::any_key root_key, desfire::any_key new_root_key) {
         return bool([&]() -> desfire::result<> {
             TRY_RESULT(open_card_channel()) {
                 if (root_key.type() == desfire::cipher_type::none) {
@@ -765,6 +765,48 @@ namespace ka {
                     std::this_thread::sleep_for(1s);
                 }
                 return r->tag().format_picc();
+            }
+        }());
+    }
+
+    bool keymaker::card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher) {
+        return bool([&]() -> desfire::result<> {
+            TRY_RESULT(open_card_channel()) {
+                if (old_root_key.type() == desfire::cipher_type::none) {
+                    ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
+                    old_root_key = keys().derive_token_root_key(r->id());
+                }
+                member_token tkn{r->tag()};
+                TRY(tkn.deploy(keys(), identity{r->id(), std::string{holder}, std::string{publisher}}));
+                return mlab::result_success;
+            }
+        }());
+    }
+
+    bool keymaker::card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher) {
+        if (std::uint32_t{gid} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate not found.");
+            return false;
+        }
+        return bool([&]() -> desfire::result<> {
+            TRY_RESULT(open_card_channel()) {
+                member_token tkn{r->tag()};
+                TRY(tkn.enroll_gate(keys(), _gates[std::uint32_t{gid}], identity{r->id(), std::string{holder}, std::string{publisher}}));
+                return mlab::result_success;
+            }
+        }());
+    }
+
+    bool keymaker::card_unenroll_gate(gate_id gid) {
+         if (std::uint32_t{gid} >= _gates.size()) {
+            ESP_LOGE(TAG, "Gate not found.");
+            return false;
+        }
+        return bool([&]() -> desfire::result<> {
+            TRY_RESULT(open_card_channel()) {
+                member_token tkn{r->tag()};
+                TRY(tkn.unenroll_gate(keys(), _gates[std::uint32_t{gid}]));
+                return mlab::result_success;
             }
         }());
     }

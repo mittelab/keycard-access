@@ -90,7 +90,10 @@ namespace ka {
         [[nodiscard]] std::vector<keymaker_gate_info> gate_list() const;
 
         [[nodiscard]] std::optional<desfire::any_key> card_recover_root_key() const;
-        [[nodiscard]] bool card_format(desfire::any_key old_root_key, desfire::any_key new_root_key) const;
+        [[nodiscard]] bool card_format(desfire::any_key old_root_key, desfire::any_key new_root_key);
+        [[nodiscard]] bool card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher);
+        [[nodiscard]] bool card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher);
+        [[nodiscard]] bool card_unenroll_gate(gate_id gid);
 
         void register_commands(ka::cmd::shell &sh) override;
     };
