@@ -95,6 +95,7 @@ namespace ka {
         [[nodiscard]] r<bool> card_is_gate_enrolled(gate_id gid) const;
         [[nodiscard]] r<> card_is_deployed() const;
         [[nodiscard]] r<identity> card_get_identity() const;
+        [[nodiscard]] r<std::vector<keymaker_gate_info>> card_list_enrolled_gates() const;
 
         void register_commands(ka::cmd::shell &sh) override;
     };
