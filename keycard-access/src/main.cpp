@@ -32,6 +32,12 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
 
 [[noreturn]] void gate_main(std::shared_ptr<pn532::controller> const &ctrl) {
     ka::gate g{ka::nvs::instance().open_default_partition()};
+    if (g.is_configured()) {
+        ESP_LOGI(TAG, "Gate configured as gate %lu with keymaker public key:", std::uint32_t{g.id()});
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, g.keymaker_pk().raw_pk().data(), g.keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
+    } else {
+        ESP_LOGI(TAG, "Gate not configured.");
+    }
     ka::gate_responder responder{g};
     pn532::scanner scanner{*ctrl};
     while (true) {

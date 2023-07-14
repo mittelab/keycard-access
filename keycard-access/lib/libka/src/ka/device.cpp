@@ -22,6 +22,8 @@ namespace ka {
         if (_device_ns) {
             if (const auto r = _device_ns->get_parse_blob<key_pair>("secret-key"); r) {
                 _kp = *r;
+                ESP_LOGI(TAG, "Loaded key pair; public key:");
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
             } else if (r.error() == nvs::error::not_found) {
                 generate_keys();
             } else {

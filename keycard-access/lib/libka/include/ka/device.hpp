@@ -26,12 +26,12 @@ namespace ka {
 
         device() = default;
 
-        void generate_keys();
 
         friend struct ut::secure_p2p_loopback;
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
 
+        void generate_keys();
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.

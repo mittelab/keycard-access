@@ -199,6 +199,7 @@ namespace ka {
                 return mlab::result_success;
             }());
         }
+        device::generate_keys();
     }
 
     gate_token_key gate::derive_token_key(const ka::token_id &token_id, std::uint8_t key_no) const {
