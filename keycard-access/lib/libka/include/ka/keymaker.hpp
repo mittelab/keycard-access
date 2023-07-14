@@ -63,8 +63,6 @@ namespace ka {
         [[nodiscard]] p2p::r<gate_id, bool> check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
-
-        [[nodiscard]] desfire::result<desfire::any_key> recover_card_root_key_internal(desfire::any_key hint = desfire::key<desfire::cipher_type::des>{}) const;
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
@@ -77,23 +75,26 @@ namespace ka {
          */
         explicit keymaker(key_pair kp);
 
-        gate_id gate_add(std::string notes = "", bool configure = false);
-        bool gate_configure(gate_id id, bool force = false);
-        bool gate_remove(gate_id id, bool force = false);
-        std::optional<p2p::v0::update_config> gate_get_update_config();
-        std::optional<p2p::v0::wifi_status> gate_get_wifi_status();
-        bool gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
-        bool gate_connect_wifi(std::string_view ssid, std::string_view password);
+        p2p::r<gate_id> gate_add(std::string notes = "", bool configure = false);
+        p2p::r<> gate_configure(gate_id id, bool force = false);
+        p2p::r<> gate_remove(gate_id id, bool force = false);
+        p2p::r<p2p::v0::update_config> gate_get_update_config();
+        p2p::r<p2p::v0::wifi_status> gate_get_wifi_status();
+        p2p::r<> gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
+        p2p::r<bool> gate_connect_wifi(std::string_view ssid, std::string_view password);
         void gate_set_notes(gate_id id, std::string notes);
         [[nodiscard]] gate_status gate_get_status(gate_id id) const;
-        [[nodiscard]] std::optional<keymaker_gate_info> gate_inspect(gate_id id = std::numeric_limits<gate_id>::max()) const;
+        [[nodiscard]] p2p::r<keymaker_gate_info> gate_inspect(gate_id id = std::numeric_limits<gate_id>::max()) const;
         [[nodiscard]] std::vector<keymaker_gate_info> gate_list() const;
 
-        [[nodiscard]] std::optional<desfire::any_key> card_recover_root_key() const;
-        [[nodiscard]] bool card_format(desfire::any_key old_root_key, desfire::any_key new_root_key);
-        [[nodiscard]] bool card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher);
-        [[nodiscard]] bool card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher);
-        [[nodiscard]] bool card_unenroll_gate(gate_id gid);
+        [[nodiscard]] r<desfire::any_key> card_recover_root_key(desfire::any_key test_root_key = desfire::any_key{desfire::cipher_type::none}) const;
+        r<> card_format(desfire::any_key old_root_key, desfire::any_key new_root_key);
+        r<> card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher);
+        r<> card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher);
+        r<> card_unenroll_gate(gate_id gid);
+        [[nodiscard]] r<bool> card_is_gate_enrolled(gate_id gid) const;
+        [[nodiscard]] r<> card_is_deployed() const;
+        [[nodiscard]] r<identity> card_get_identity() const;
 
         void register_commands(ka::cmd::shell &sh) override;
     };

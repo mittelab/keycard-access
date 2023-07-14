@@ -309,61 +309,66 @@ namespace ka {
         return mlab::result_success;
     }
 
-    gate_id keymaker::gate_add(std::string notes, bool configure) {
+    p2p::r<gate_id> keymaker::gate_add(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
         _gates.push_back(keymaker_gate_data{id, {}, {}, gate_status::initialized, std::move(notes)});
         if (configure) {
             ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
-            if (configure_gate_internal(_gates.back())) {
+            if (const auto r = configure_gate_internal(_gates.back()); r) {
                 ESP_LOGI(TAG, "Gate configured.");
             } else {
                 _gates.pop_back();
                 ESP_LOGE(TAG, "Unable to configure gate.");
-                return std::numeric_limits<gate_id>::max();
+                return r.error();
             }
         } else {
-            save_gate(_gates.back());
+            if (not save_gate(_gates.back())) {
+                return p2p::error::invalid;
+            }
             ESP_LOGI(TAG, "Gate registered but not configured.");
             ESP_LOGW(TAG, "Run gate-configure --gate-id %lu", std::uint32_t{id});
         }
         return id;
     }
 
-    bool keymaker::gate_configure(gate_id id, bool force) {
+    p2p::r<> keymaker::gate_configure(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
-            return false;
+            return p2p::error::arg_error;
         }
         auto &gd = _gates[std::uint32_t{id}];
         if (gd.status != gate_status::initialized) {
             ESP_LOG_LEVEL((force ? ESP_LOG_WARN : ESP_LOG_ERROR), TAG, "Gate status is %s.", to_string(gd.status));
             if (not force) {
-                return false;
+                return p2p::error::invalid;
             }
         }
         ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
-        if (configure_gate_internal(gd)) {
+        if (const auto r = configure_gate_internal(gd); r) {
             ESP_LOGI(TAG, "Gate configured.");
-            return true;
+            return mlab::result_success;
+        } else {
+            return r.error();
         }
-        return false;
     }
 
-    bool keymaker::gate_remove(gate_id id, bool force) {
+    p2p::r<> keymaker::gate_remove(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
-            return false;
+            return p2p::error::arg_error;
         }
         auto &gd = _gates[std::uint32_t{id}];
         if (gd.status == gate_status::initialized) {
             ESP_LOGW(TAG, "The gate was never configured!");
             gd.status = gate_status::deleted;
-            return bool(save_gate(gd));
+            if (not save_gate(gd)) {
+                return p2p::error::invalid;
+            }
         }
         if (gd.status == gate_status::deleted) {
             ESP_LOGW(TAG, "The gate was already deleted.");
             if (not force) {
-                return true;
+                return mlab::result_success;
             }
         }
         auto pk_s = mlab::data_to_hex_string(gd.pk.raw_pk());
@@ -392,16 +397,24 @@ namespace ka {
             }
             return mlab::result_success;
         };
-        if (const auto r = open_and_reset(); not r) {
+        if (const auto r = open_and_reset(); r) {
+            gd.status = gate_status::deleted;
+            if (not save_gate(gd)) {
+                return p2p::error::invalid;
+            }
+            return mlab::result_success;
+        } else {
             if (force) {
                 ESP_LOGW(TAG, "The gate was not found or could not be reset, but we will force-delete it.");
+                gd.status = gate_status::deleted;
+                if (not save_gate(gd)) {
+                    return p2p::error::invalid;
+                }
             } else {
                 ESP_LOGE(TAG, "The gate was not found or could not be reset.");
-                return false;
             }
+            return r.error();
         }
-        gd.status = gate_status::deleted;
-        return bool(save_gate(gd));
     }
 
     void keymaker::gate_set_notes(gate_id id, std::string notes) {
@@ -445,468 +458,503 @@ namespace ka {
         return {gid, ours};
     }
 
-    std::optional<p2p::v0::update_config> keymaker::gate_get_update_config() {
+    p2p::r<p2p::v0::update_config> keymaker::gate_get_update_config() {
         ESP_LOGI(TAG, "Bring closer a gate...");
-        auto get_info = [&]() -> p2p::r<p2p::v0::update_config> {
-            TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY(check_if_detected_gate_is_ours(r_rg->get()));
-                    TRY_RESULT(r_rg->get().get_update_settings()) {
-                        return std::move(*r);
-                    }
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY_RESULT(r_rg->get().get_update_settings()) {
+                    return std::move(*r);
                 }
             }
-        };
-        if (auto r = get_info(); r) {
-            return std::move(*r);
         }
-        return std::nullopt;
     }
-    std::optional<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() {
+
+    p2p::r<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() {
         ESP_LOGI(TAG, "Bring closer a gate...");
-        auto get_info = [&]() -> p2p::r<p2p::v0::wifi_status> {
-            TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY(check_if_detected_gate_is_ours(r_rg->get()));
-                    TRY_RESULT(r_rg->get().get_wifi_status()) {
-                        return std::move(*r);
-                    }
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY_RESULT(r_rg->get().get_wifi_status()) {
+                    return std::move(*r);
                 }
             }
-        };
-        if (auto r = get_info(); r) {
-            return std::move(*r);
         }
-        return std::nullopt;
     }
 
-    bool keymaker::gate_set_update_config(std::string_view update_channel, bool automatic_updates) {
+    p2p::r<> keymaker::gate_set_update_config(std::string_view update_channel, bool automatic_updates) {
         ESP_LOGI(TAG, "Bring closer a gate...");
-        auto set_updates = [&]() -> p2p::r<> {
-            TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY(check_if_detected_gate_is_ours(r_rg->get()));
-                    TRY(r_rg->get().set_update_settings(update_channel, automatic_updates));
-                }
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY(r_rg->get().set_update_settings(update_channel, automatic_updates));
             }
-            return mlab::result_success;
-        };
-        return bool(set_updates());
-    }
-
-    bool keymaker::gate_connect_wifi(std::string_view ssid, std::string_view password) {
-        ESP_LOGI(TAG, "Bring closer a gate...");
-        auto connect_wifi = [&]() -> p2p::r<bool> {
-            TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY(check_if_detected_gate_is_ours(r_rg->get()));
-                    TRY_RESULT(r_rg->get().connect_wifi(ssid, password)) {
-                        if (not *r) {
-                            ESP_LOGW(TAG, "Wifi did not connect within the given timespan.");
-                        }
-                        return r;
-                    }
-                }
-            }
-        };
-        const auto r = connect_wifi();
-        return r and *r;
-    }
-
-    std::optional<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
-        std::optional<pub_key> exp_pk = std::nullopt;
-        bool ours = true;
-        if (id == std::numeric_limits<gate_id>::max()) {
-            ESP_LOGI(TAG, "Bring closer a gate...");
-            void([&]() -> p2p::r<> {
-                TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                    exp_pk = r_chn->peer_pub_key();
-                    TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                        TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
-                            if (r_ours->first != std::numeric_limits<gate_id>::max()) {
-                                id = r_ours->first;
-                                ours = r_ours->second;
-                            }
-                        }
-                    }
-                }
-                return mlab::result_success;
-            }());
         }
-        if (id == std::numeric_limits<gate_id>::max()) {
-            return std::nullopt;
-        }
-        if (not ours) {
-            return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
-        }
-        if (std::uint32_t{id} >= _gates.size()) {
-            ESP_LOGE(TAG, "Gate not found.");
-            return std::nullopt;
-        }
-        auto const &gd = _gates[std::uint32_t{id}];
-        if (exp_pk and *exp_pk != gd.pk) {
-            ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
-        }
-        return keymaker_gate_info{gd.id, gd.pk, gd.status, gd.notes};
-    }
-
-    namespace cmd {
-        template <>
-        struct parser<keymaker_gate_info> {
-            [[nodiscard]] static std::string to_string(keymaker_gate_info const &gi) {
-                if (gi.status == gate_status::configured) {
-                    return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
-                                              "Configured, PK ", mlab::data_to_hex_string(gi.pk.raw_pk()), "\n",
-                                              "Notes: ", gi.notes.empty() ? "n/a" : gi.notes});
-                } else {
-                    return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
-                                              "Status ", ka::to_string(gi.status),
-                                              ".\nNotes: ", gi.notes.empty() ? "n/a" : gi.notes});
-                }
-            }
-        };
-        template <>
-        struct parser<gate_status> {
-            [[nodiscard]] static std::string to_string(gate_status gs) {
-                return ka::to_string(gs);
-            }
-        };
-        template <>
-        struct parser<gate_id> {
-            [[nodiscard]] static std::string to_string(gate_id gid) {
-                if (gid == std::numeric_limits<gate_id>::max()) {
-                    return "gate_id: invalid";
-                }
-                return mlab::concatenate({"gate-id: ", parser<std::uint32_t>::to_string(std::uint32_t{gid})});
-            }
-            [[nodiscard]] static std::string type_description() {
-                return "gate-id";
-            }
-
-            [[nodiscard]] static ka::cmd::r<gate_id> parse(std::string_view s) {
-                if (const auto r = parser<std::uint32_t>::parse(s); r) {
-                    return gate_id{*r};
-                } else {
-                    return r.error();
-                }
-            }
-        };
-
-        template <>
-        struct parser<p2p::v0::update_config> {
-            [[nodiscard]] static std::string to_string(p2p::v0::update_config const &us) {
-                return mlab::concatenate({us.enable_automatic_update ? "automatic,  from " : "not automatic, from ",
-                                          us.update_channel});
-            }
-        };
-        template <>
-        struct parser<p2p::v0::wifi_status> {
-            [[nodiscard]] static std::string to_string(p2p::v0::wifi_status const &ws) {
-                if (ws.ssid.empty()) {
-                    return "not associated";
-                }
-                return mlab::concatenate({"associated to ", ws.ssid,
-                                          ws.operational ? ", operational" : ", not operational"});
-            }
-        };
-        template <>
-        struct parser<desfire::cipher_type> {
-            [[nodiscard]] static std::string to_string(desfire::cipher_type ct) {
-                switch (ct) {
-                    case desfire::cipher_type::aes128:
-                        return "aes";
-                    case desfire::cipher_type::des:
-                        return "des";
-                    case desfire::cipher_type::des3_2k:
-                        return "3des2k";
-                    case desfire::cipher_type::des3_3k:
-                        return "3des";
-                    case desfire::cipher_type::none:
-                        return "none";
-                    default:
-                        return "invalid";
-                }
-            }
-
-            [[nodiscard]] static ka::cmd::r<desfire::cipher_type> parse(std::string_view s) {
-                std::string lc_s{s};
-                std::transform(std::begin(lc_s), std::end(lc_s), std::begin(lc_s), ::tolower);
-                if (lc_s == "aes") {
-                    return desfire::cipher_type::aes128;
-                } else if (lc_s == "des") {
-                    return desfire::cipher_type::des;
-                } else if (lc_s == "3des2k") {
-                    return desfire::cipher_type::des3_2k;
-                } else if (lc_s == "3des") {
-                    return desfire::cipher_type::des3_3k;
-                } else if (lc_s == "none") {
-                    return desfire::cipher_type::none;
-                } else {
-                    return ka::cmd::error::parse;
-                }
-            }
-        };
-        template <>
-        struct parser<desfire::any_key> {
-            [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
-                auto body = k.get_packed_key_body();
-                auto first_nonzero = std::find_if(std::begin(body), std::end(body), [](auto b) { return b != 0; });
-                if (first_nonzero == std::end(body) and first_nonzero != std::begin(body)) {
-                    // If it's all zeroes, make sure there is at least one printed
-                    --first_nonzero;
-                }
-                return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(first_nonzero, std::end(body))});
-            }
-
-            [[nodiscard]] static std::string type_description() {
-                return "auto|(aes|des|3des2k|3des:<hex key>)";
-            }
-
-            [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
-                auto parse_internal = [&]() -> std::optional<desfire::any_key> {
-                    const auto colon_pos = s.find_first_of(':');
-                    auto opt_ct = parser<desfire::cipher_type>::parse(s.substr(0, colon_pos));
-                    if (not opt_ct) {
-                        return std::nullopt;
-                    } else if (colon_pos == std::string_view::npos) {
-                        return desfire::any_key{*opt_ct};
-                    }
-                    auto hex_str = std::string{s.substr(colon_pos + 1)};
-                    if (hex_str.size() % 2 != 0) {
-                        hex_str.insert(std::begin(hex_str), '0');
-                    }
-                    auto body = mlab::data_from_hex_string(hex_str);
-                    bool matches_size = true;
-                    auto pad_body = [&](std::size_t sz) {
-                        if (body.size() > sz) {
-                            matches_size = false;
-                            return;
-                        }
-                        body.insert(std::begin(body), sz - body.size(), 0);
-                    };
-                    switch (*opt_ct) {
-                        case desfire::cipher_type::des:
-                            pad_body(desfire::key<desfire::cipher_type::des>::size);
-                            break;
-                        case desfire::cipher_type::des3_2k:
-                            pad_body(desfire::key<desfire::cipher_type::des3_2k>::size);
-                            break;
-                        case desfire::cipher_type::des3_3k:
-                            pad_body(desfire::key<desfire::cipher_type::des3_3k>::size);
-                            break;
-                        case desfire::cipher_type::aes128:
-                            pad_body(desfire::key<desfire::cipher_type::aes128>::size);
-                            break;
-                        default:
-                            break;
-                    }
-                    if (not matches_size) {
-                        return std::nullopt;
-                    }
-                    return desfire::any_key(*opt_ct, body.data_view());
-                };
-                if (const auto opt_k = parse_internal(); opt_k) {
-                    return *opt_k;
-                } else {
-                    ESP_LOGW(TAG, "Keys must be auto or in the format <cipher type>:<hex string>, where cipher type is aes|des|3des2k|3des.");
-                    return cmd::error::parse;
-                }
-            }
-        };
-
-        template <>
-        struct parser<std::vector<keymaker_gate_info>> {
-            [[nodiscard]] static std::string to_string(std::vector<keymaker_gate_info> const &gis) {
-                if (gis.empty()) {
-                    return "(none)";
-                }
-                std::vector<std::string> pieces;
-                pieces.reserve(gis.size());
-                for (std::size_t i = 0; i < gis.size(); ++i) {
-                    auto const &g = gis[i];
-                    pieces.emplace_back(mlab::concatenate({i < 9 ? " " : "", std::to_string(i + 1),
-                                                           ". Gate ", std::to_string(std::uint32_t{g.id}), " (", ka::to_string(g.status),
-                                                           g.status != gate_status::configured ? ")" : ") PK: ",
-                                                           g.status != gate_status::configured ? "" : mlab::data_to_hex_string(g.pk.raw_pk())}));
-                }
-                return mlab::concatenate_s(pieces, "\n");
-            }
-        };
-    }// namespace cmd
-
-    std::vector<keymaker_gate_info> keymaker::gate_list() const {
-        std::vector<keymaker_gate_info> retval;
-        retval.reserve(_gates.size());
-        std::copy(std::begin(_gates), std::end(_gates), std::back_inserter(retval));
-        return retval;
-    }
-
-    bool keymaker::card_format(desfire::any_key root_key, desfire::any_key new_root_key) {
-        return bool([&]() -> desfire::result<> {
-            TRY_RESULT(open_card_channel()) {
-                if (root_key.type() == desfire::cipher_type::none) {
-                    ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
-                    root_key = keys().derive_token_root_key(r->id());
-                }
-                TRY(r->tag().select_application());
-                TRY(r->tag().authenticate(root_key));
-                if (new_root_key.type() == desfire::cipher_type::none) {
-                    ESP_LOGI(TAG, "Using token-specific key as a new key.");
-                    new_root_key = keys().derive_token_root_key(r->id());
-                }
-                ESP_LOGI(TAG, "Changing root key...");
-                const auto default_k = desfire::key<desfire::cipher_type::des>{};
-                TRY(r->tag().change_key(default_k));
-                TRY(r->tag().select_application());
-                TRY(r->tag().authenticate(default_k));
-                ESP_LOGW(TAG, "We will now format this card.");
-                for (int i = 5; i > 0; --i) {
-                    ESP_LOGW(TAG, "Formatting in %d...", i);
-                    std::this_thread::sleep_for(1s);
-                }
-                return r->tag().format_picc();
-            }
-        }());
-    }
-
-    bool keymaker::card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher) {
-        return bool([&]() -> desfire::result<> {
-            TRY_RESULT(open_card_channel()) {
-                if (old_root_key.type() == desfire::cipher_type::none) {
-                    ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
-                    old_root_key = keys().derive_token_root_key(r->id());
-                }
-                member_token tkn{r->tag()};
-                TRY(tkn.deploy(keys(), identity{r->id(), std::string{holder}, std::string{publisher}}));
-                return mlab::result_success;
-            }
-        }());
-    }
-
-    bool keymaker::card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher) {
-        if (std::uint32_t{gid} >= _gates.size()) {
-            ESP_LOGE(TAG, "Gate not found.");
-            return false;
-        }
-        return bool([&]() -> desfire::result<> {
-            TRY_RESULT(open_card_channel()) {
-                member_token tkn{r->tag()};
-                TRY(tkn.enroll_gate(keys(), _gates[std::uint32_t{gid}], identity{r->id(), std::string{holder}, std::string{publisher}}));
-                return mlab::result_success;
-            }
-        }());
-    }
-
-    bool keymaker::card_unenroll_gate(gate_id gid) {
-         if (std::uint32_t{gid} >= _gates.size()) {
-            ESP_LOGE(TAG, "Gate not found.");
-            return false;
-        }
-        return bool([&]() -> desfire::result<> {
-            TRY_RESULT(open_card_channel()) {
-                member_token tkn{r->tag()};
-                TRY(tkn.unenroll_gate(keys(), _gates[std::uint32_t{gid}]));
-                return mlab::result_success;
-            }
-        }());
-    }
-
-    desfire::result<desfire::any_key> keymaker::recover_card_root_key_internal(desfire::any_key hint) const {
-        static constexpr std::uint8_t secondary_keys_version = 0x10;
-        static constexpr std::array<std::uint8_t, 8> secondary_des_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe};
-        static constexpr std::array<std::uint8_t, 16> secondary_des3_2k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e};
-        static constexpr std::array<std::uint8_t, 24> secondary_des3_3k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e};
-        static constexpr std::array<std::uint8_t, 16> secondary_aes_key = {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
-        static key_pair test_kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-                                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
-        static key_pair demo_kp{ka::pwhash, "foobar"};
-        TRY_RESULT(open_card_channel()) {
-            const std::array<desfire::any_key, 12> keys_to_test = {
-                    desfire::any_key{desfire::cipher_type::des},
-                    std::move(hint),
-                    keys().derive_token_root_key(r->id()),
-                    test_kp.derive_token_root_key(r->id()),
-                    demo_kp.derive_token_root_key(r->id()),
-                    desfire::any_key{desfire::cipher_type::des3_2k},
-                    desfire::any_key{desfire::cipher_type::des3_3k},
-                    desfire::any_key{desfire::cipher_type::aes128},
-                    desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
-                    desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
-            TRY(r->tag().select_application());
-            auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
-            for (auto const &key : keys_to_test) {
-                if (r->tag().authenticate(key)) {
-                    return key;
-                }
-            }
-            return desfire::error::authentication_error;
-        }
-    }
-
-    std::optional<desfire::any_key> keymaker::card_recover_root_key() const {
-        ESP_LOGI(TAG, "Attempting to recover root key...");
-        if (const auto r = recover_card_root_key_internal(); r) {
-            return *r;
-        } else {
-            ESP_LOGW(TAG, "Unable to find root key.");
-            return std::nullopt;
-        }
-    }
-
-    void keymaker::register_commands(ka::cmd::shell &sh) {
-        device::register_commands(sh);
-        sh.register_command("gate-configure", *this, &keymaker::gate_configure, {{"gate-id", "gid"}, cmd::flag{"force", false}});
-        sh.register_command("gate-remove", *this, &keymaker::gate_remove, {{"gate-id", "gid"}, cmd::flag{"force", false}});
-        sh.register_command("gate-add", *this, &keymaker::gate_add, {{"notes", {}, ""}, cmd::flag{"configure", true}});
-        sh.register_command("gate-inspect", *this, &keymaker::gate_inspect, {{"gate-id", "gid", std::numeric_limits<gate_id>::max()}});
-        sh.register_command("gate-set-notes", *this, &keymaker::gate_set_notes, {{"gate-id", "gid"}, {"notes"}});
-        sh.register_command("gate-get-status", *this, &keymaker::gate_get_status, {{"gate-id", "gid"}});
-        sh.register_command("gate-wifi-get-status", *this, &keymaker::gate_get_wifi_status, {});
-        sh.register_command("gate-wifi-connect", *this, &keymaker::gate_connect_wifi, {{"ssid"}, {"password"}});
-        sh.register_command("gate-update-get-config", *this, &keymaker::gate_get_update_config, {});
-        sh.register_command("gate-update-set-config", *this, &keymaker::gate_set_update_config,
-                            {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
-        sh.register_command("gate-list", *this, &keymaker::gate_list, {});
-        sh.register_command("card-recover-root-key", *this, &keymaker::card_recover_root_key, {});
-        sh.register_command("card-format", *this, &keymaker::card_format,
-                            {{"old-key", desfire::any_key{desfire::cipher_type::des}}, {"new-key", desfire::any_key{desfire::cipher_type::des}}});
-    }
-
-
-    nvs::r<> keymaker_gate_data::save_to(nvs::namespc &ns) const {
-        TRY(ns.set_encode_blob(get_nvs_key(id), *this));
-        TRY(ns.commit());
         return mlab::result_success;
     }
 
-    std::string keymaker_gate_data::get_nvs_key(gate_id gid) {
-        std::string buffer;
-        buffer.resize(9);
-        std::snprintf(buffer.data(), buffer.size(), "%08lx", std::uint32_t{gid});
-        buffer.resize(8);
-        return buffer;
+    p2p::r<bool> keymaker::gate_connect_wifi(std::string_view ssid, std::string_view password) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn){
+                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg){
+                        TRY(check_if_detected_gate_is_ours(r_rg->get()));
+        TRY_RESULT(r_rg->get().connect_wifi(ssid, password)) {
+            if (not *r) {
+                ESP_LOGW(TAG, "Wifi did not connect within the given timespan.");
+            }
+            return r;
+        }
     }
+};// namespace ka
+}
 
-    nvs::r<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
-        return ns.get_parse_blob<keymaker_gate_data>(get_nvs_key(gid));
-    }
-
-    std::vector<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns) {
-        std::vector<keymaker_gate_data> retval;
-        for (gate_id gid = std::numeric_limits<gate_id>::min(); gid < std::numeric_limits<gate_id>::max(); gid = gate_id{gid + 1}) {
-            if (const auto r = load_from(ns, gid); r) {
-                retval.push_back(*r);
-            } else if (r.error() == nvs::error::not_found) {
-                break;
-            } else {
-                ESP_LOGE(TAG, "Unable to load gate %lu, error %s", std::uint32_t{gid}, to_string(r.error()));
-                retval.push_back(keymaker_gate_data{gid, {}, {}, gate_status::unknown, {}});
+p2p::r<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
+    std::optional<pub_key> exp_pk = std::nullopt;
+    bool ours = true;
+    if (id == std::numeric_limits<gate_id>::max()) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            exp_pk = r_chn->peer_pub_key();
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
+                    if (r_ours->first != std::numeric_limits<gate_id>::max()) {
+                        id = r_ours->first;
+                        ours = r_ours->second;
+                    }
+                }
             }
         }
-        return retval;
     }
+    if (id == std::numeric_limits<gate_id>::max()) {
+        return p2p::error::p2p_app_error;
+    }
+    if (not ours) {
+        return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
+    }
+    if (std::uint32_t{id} >= _gates.size()) {
+        ESP_LOGE(TAG, "Gate not found.");
+        return p2p::error::arg_error;
+    }
+    auto const &gd = _gates[std::uint32_t{id}];
+    if (exp_pk and *exp_pk != gd.pk) {
+        ESP_LOGE(TAG, "Mismatching stored public key and remote public key.");
+    }
+    return keymaker_gate_info{gd.id, gd.pk, gd.status, gd.notes};
+}
+
+namespace cmd {
+    template <>
+    struct parser<keymaker_gate_info> {
+        [[nodiscard]] static std::string to_string(keymaker_gate_info const &gi) {
+            if (gi.status == gate_status::configured) {
+                return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
+                                          "Configured, PK ", mlab::data_to_hex_string(gi.pk.raw_pk()), "\n",
+                                          "Notes: ", gi.notes.empty() ? "n/a" : gi.notes});
+            } else {
+                return mlab::concatenate({"Gate ", std::to_string(std::uint32_t{gi.id}), "\n",
+                                          "Status ", ka::to_string(gi.status),
+                                          ".\nNotes: ", gi.notes.empty() ? "n/a" : gi.notes});
+            }
+        }
+    };
+    template <>
+    struct parser<gate_status> {
+        [[nodiscard]] static std::string to_string(gate_status gs) {
+            return ka::to_string(gs);
+        }
+    };
+    template <class T>
+    struct parser<desfire::result<T>> {
+        [[nodiscard]] static std::string to_string(desfire::result<T> const &r) {
+            if (r) {
+                return parser<T>::to_string(*r);
+            } else {
+                return member_token::describe(r.error());
+            }
+        }
+    };
+    template <class T>
+    struct parser<p2p::r<T>> {
+        [[nodiscard]] static std::string to_string(p2p::r<T> const &r) {
+            if (r) {
+                return parser<T>::to_string(*r);
+            } else {
+                return ka::p2p::to_string(r.error());
+            }
+        }
+    };
+    template <>
+    struct parser<p2p::r<>> {
+        [[nodiscard]] static std::string to_string(p2p::r<> const &r) {
+            if (r) {
+                return "success";
+            } else {
+                return ka::p2p::to_string(r.error());
+            }
+        }
+    };
+    template <>
+    struct parser<desfire::result<>> {
+        [[nodiscard]] static std::string to_string(desfire::result<> const &r) {
+            if (r) {
+                return "success";
+            } else {
+                return member_token::describe(r.error());
+            }
+        }
+    };
+    template <>
+    struct parser<gate_id> {
+        [[nodiscard]] static std::string to_string(gate_id gid) {
+            if (gid == std::numeric_limits<gate_id>::max()) {
+                return "gate_id: invalid";
+            }
+            return mlab::concatenate({"gate-id: ", parser<std::uint32_t>::to_string(std::uint32_t{gid})});
+        }
+        [[nodiscard]] static std::string type_description() {
+            return "gate-id";
+        }
+
+        [[nodiscard]] static ka::cmd::r<gate_id> parse(std::string_view s) {
+            if (const auto r = parser<std::uint32_t>::parse(s); r) {
+                return gate_id{*r};
+            } else {
+                return r.error();
+            }
+        }
+    };
+
+    template <>
+    struct parser<p2p::v0::update_config> {
+        [[nodiscard]] static std::string to_string(p2p::v0::update_config const &us) {
+            return mlab::concatenate({us.enable_automatic_update ? "automatic,  from " : "not automatic, from ",
+                                      us.update_channel});
+        }
+    };
+    template <>
+    struct parser<p2p::v0::wifi_status> {
+        [[nodiscard]] static std::string to_string(p2p::v0::wifi_status const &ws) {
+            if (ws.ssid.empty()) {
+                return "not associated";
+            }
+            return mlab::concatenate({"associated to ", ws.ssid,
+                                      ws.operational ? ", operational" : ", not operational"});
+        }
+    };
+    template <>
+    struct parser<desfire::cipher_type> {
+        [[nodiscard]] static std::string to_string(desfire::cipher_type ct) {
+            switch (ct) {
+                case desfire::cipher_type::aes128:
+                    return "aes";
+                case desfire::cipher_type::des:
+                    return "des";
+                case desfire::cipher_type::des3_2k:
+                    return "3des2k";
+                case desfire::cipher_type::des3_3k:
+                    return "3des";
+                case desfire::cipher_type::none:
+                    return "none";
+                default:
+                    return "invalid";
+            }
+        }
+
+        [[nodiscard]] static ka::cmd::r<desfire::cipher_type> parse(std::string_view s) {
+            std::string lc_s{s};
+            std::transform(std::begin(lc_s), std::end(lc_s), std::begin(lc_s), ::tolower);
+            if (lc_s == "aes") {
+                return desfire::cipher_type::aes128;
+            } else if (lc_s == "des") {
+                return desfire::cipher_type::des;
+            } else if (lc_s == "3des2k") {
+                return desfire::cipher_type::des3_2k;
+            } else if (lc_s == "3des") {
+                return desfire::cipher_type::des3_3k;
+            } else if (lc_s == "none") {
+                return desfire::cipher_type::none;
+            } else {
+                return ka::cmd::error::parse;
+            }
+        }
+    };
+    template <>
+    struct parser<desfire::any_key> {
+        [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
+            auto body = k.get_packed_key_body();
+            auto first_nonzero = std::find_if(std::begin(body), std::end(body), [](auto b) { return b != 0; });
+            if (first_nonzero == std::end(body) and first_nonzero != std::begin(body)) {
+                // If it's all zeroes, make sure there is at least one printed
+                --first_nonzero;
+            }
+            return mlab::concatenate({parser<desfire::cipher_type>::to_string(k.type()), ":", mlab::data_to_hex_string(first_nonzero, std::end(body))});
+        }
+
+        [[nodiscard]] static std::string type_description() {
+            return "auto|(aes|des|3des2k|3des:<hex key>)";
+        }
+
+        [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
+            auto parse_internal = [&]() -> std::optional<desfire::any_key> {
+                const auto colon_pos = s.find_first_of(':');
+                auto opt_ct = parser<desfire::cipher_type>::parse(s.substr(0, colon_pos));
+                if (not opt_ct) {
+                    return std::nullopt;
+                } else if (colon_pos == std::string_view::npos) {
+                    return desfire::any_key{*opt_ct};
+                }
+                auto hex_str = std::string{s.substr(colon_pos + 1)};
+                if (hex_str.size() % 2 != 0) {
+                    hex_str.insert(std::begin(hex_str), '0');
+                }
+                auto body = mlab::data_from_hex_string(hex_str);
+                bool matches_size = true;
+                auto pad_body = [&](std::size_t sz) {
+                    if (body.size() > sz) {
+                        matches_size = false;
+                        return;
+                    }
+                    body.insert(std::begin(body), sz - body.size(), 0);
+                };
+                switch (*opt_ct) {
+                    case desfire::cipher_type::des:
+                        pad_body(desfire::key<desfire::cipher_type::des>::size);
+                        break;
+                    case desfire::cipher_type::des3_2k:
+                        pad_body(desfire::key<desfire::cipher_type::des3_2k>::size);
+                        break;
+                    case desfire::cipher_type::des3_3k:
+                        pad_body(desfire::key<desfire::cipher_type::des3_3k>::size);
+                        break;
+                    case desfire::cipher_type::aes128:
+                        pad_body(desfire::key<desfire::cipher_type::aes128>::size);
+                        break;
+                    default:
+                        break;
+                }
+                if (not matches_size) {
+                    return std::nullopt;
+                }
+                return desfire::any_key(*opt_ct, body.data_view());
+            };
+            if (const auto opt_k = parse_internal(); opt_k) {
+                return *opt_k;
+            } else {
+                ESP_LOGW(TAG, "Keys must be auto or in the format <cipher type>:<hex string>, where cipher type is aes|des|3des2k|3des.");
+                return cmd::error::parse;
+            }
+        }
+    };
+
+    template <>
+    struct parser<std::vector<keymaker_gate_info>> {
+        [[nodiscard]] static std::string to_string(std::vector<keymaker_gate_info> const &gis) {
+            if (gis.empty()) {
+                return "(none)";
+            }
+            std::vector<std::string> pieces;
+            pieces.reserve(gis.size());
+            for (std::size_t i = 0; i < gis.size(); ++i) {
+                auto const &g = gis[i];
+                pieces.emplace_back(mlab::concatenate({i < 9 ? " " : "", std::to_string(i + 1),
+                                                       ". Gate ", std::to_string(std::uint32_t{g.id}), " (", ka::to_string(g.status),
+                                                       g.status != gate_status::configured ? ")" : ") PK: ",
+                                                       g.status != gate_status::configured ? "" : mlab::data_to_hex_string(g.pk.raw_pk())}));
+            }
+            return mlab::concatenate_s(pieces, "\n");
+        }
+    };
+}// namespace cmd
+
+std::vector<keymaker_gate_info> keymaker::gate_list() const {
+    std::vector<keymaker_gate_info> retval;
+    retval.reserve(_gates.size());
+    std::copy(std::begin(_gates), std::end(_gates), std::back_inserter(retval));
+    return retval;
+}
+
+r<> keymaker::card_format(desfire::any_key root_key, desfire::any_key new_root_key) {
+    TRY_RESULT(open_card_channel()) {
+        if (root_key.type() == desfire::cipher_type::none) {
+            ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
+            root_key = keys().derive_token_root_key(r->id());
+        }
+        TRY(r->tag().select_application());
+        TRY(r->tag().authenticate(root_key));
+        if (new_root_key.type() == desfire::cipher_type::none) {
+            ESP_LOGI(TAG, "Using token-specific key as a new key.");
+            new_root_key = keys().derive_token_root_key(r->id());
+        }
+        ESP_LOGI(TAG, "Changing root key...");
+        const auto default_k = desfire::key<desfire::cipher_type::des>{};
+        TRY(r->tag().change_key(default_k));
+        TRY(r->tag().select_application());
+        TRY(r->tag().authenticate(default_k));
+        ESP_LOGW(TAG, "We will now format this card.");
+        for (int i = 5; i > 0; --i) {
+            ESP_LOGW(TAG, "Formatting in %d...", i);
+            std::this_thread::sleep_for(1s);
+        }
+        return r->tag().format_picc();
+    }
+}
+
+r<> keymaker::card_deploy(desfire::any_key old_root_key, std::string_view holder, std::string_view publisher) {
+    TRY_RESULT(open_card_channel()) {
+        if (old_root_key.type() == desfire::cipher_type::none) {
+            ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
+            old_root_key = keys().derive_token_root_key(r->id());
+        }
+        member_token tkn{r->tag()};
+        TRY(tkn.deploy(keys(), identity{r->id(), std::string{holder}, std::string{publisher}}));
+        return mlab::result_success;
+    }
+}
+
+r<> keymaker::card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher) {
+    if (std::uint32_t{gid} >= _gates.size()) {
+        ESP_LOGE(TAG, "Gate not found.");
+        return desfire::error::parameter_error;
+    }
+    TRY_RESULT(open_card_channel()) {
+        member_token tkn{r->tag()};
+        TRY(tkn.enroll_gate(keys(), _gates[std::uint32_t{gid}], identity{r->id(), std::string{holder}, std::string{publisher}}));
+        return mlab::result_success;
+    }
+}
+
+r<> keymaker::card_unenroll_gate(gate_id gid) {
+    if (std::uint32_t{gid} >= _gates.size()) {
+        ESP_LOGW(TAG, "Gate not found, but will attempt nonetheless.");
+        ESP_LOGW(TAG, "A different master key protects gates enrolled by other keymakers.");
+    }
+    TRY_RESULT(open_card_channel()) {
+        member_token tkn{r->tag()};
+        TRY(tkn.unenroll_gate(keys(), _gates[std::uint32_t{gid}]));
+        return mlab::result_success;
+    }
+}
+
+r<bool> keymaker::card_is_gate_enrolled(gate_id gid) const {
+    TRY_RESULT(open_card_channel()) {
+        member_token tkn{r->tag()};
+        TRY_RESULT_AS(tkn.is_gate_enrolled(gid, true, true), r_enrolled) {
+            if (not *r_enrolled) {
+                return false;
+            }
+        }
+        if (std::uint32_t{gid} >= _gates.size()) {
+            ESP_LOGW(TAG, "Gate not found, so we cannot confirm the authenticity.");
+            return true;
+        }
+        TRY_RESULT_AS(tkn.is_gate_enrolled_correctly(keys(), _gates[std::uint32_t{gid}]), r_enrolled) {
+            return r_enrolled->first;
+        }
+    }
+}
+
+r<> keymaker::card_is_deployed() const {
+    TRY_RESULT(open_card_channel()) {
+        member_token tkn{r->tag()};
+        return tkn.is_deployed_correctly(keys());
+    }
+}
+
+r<identity> keymaker::card_get_identity() const {
+    TRY_RESULT(open_card_channel()) {
+        member_token tkn{r->tag()};
+        return tkn.read_encrypted_master_file(keys(), true, true);
+    }
+}
+
+r<desfire::any_key> keymaker::card_recover_root_key(desfire::any_key test_root_key) const {
+    ESP_LOGI(TAG, "Attempting to recover root key...");
+    static constexpr std::uint8_t secondary_keys_version = 0x10;
+    static constexpr std::array<std::uint8_t, 8> secondary_des_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe};
+    static constexpr std::array<std::uint8_t, 16> secondary_des3_2k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e};
+    static constexpr std::array<std::uint8_t, 24> secondary_des3_3k_key = {0x0, 0x2, 0x4, 0x6, 0x8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c, 0x1e, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x2c, 0x2e};
+    static constexpr std::array<std::uint8_t, 16> secondary_aes_key = {0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf};
+    static key_pair test_kp{{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f}};
+    static key_pair demo_kp{ka::pwhash, "foobar"};
+    TRY_RESULT(open_card_channel()) {
+        const std::array<desfire::any_key, 12> keys_to_test = {
+                desfire::any_key{desfire::cipher_type::des},
+                std::move(test_root_key),
+                keys().derive_token_root_key(r->id()),
+                test_kp.derive_token_root_key(r->id()),
+                demo_kp.derive_token_root_key(r->id()),
+                desfire::any_key{desfire::cipher_type::des3_2k},
+                desfire::any_key{desfire::cipher_type::des3_3k},
+                desfire::any_key{desfire::cipher_type::aes128},
+                desfire::any_key{desfire::cipher_type::des, mlab::make_range(secondary_des_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_2k, mlab::make_range(secondary_des3_2k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::des3_3k, mlab::make_range(secondary_des3_3k_key), 0, secondary_keys_version},
+                desfire::any_key{desfire::cipher_type::aes128, mlab::make_range(secondary_aes_key), 0, secondary_keys_version}};
+        TRY(r->tag().select_application());
+        auto suppress = desfire::esp32::suppress_log{DESFIRE_LOG_PREFIX};
+        for (auto const &key : keys_to_test) {
+            if (key.type() != desfire::cipher_type::none and r->tag().authenticate(key)) {
+                return key;
+            }
+        }
+        ESP_LOGW(TAG, "Unable to find root key.");
+        return desfire::error::authentication_error;
+    }
+}
+
+void keymaker::register_commands(ka::cmd::shell &sh) {
+    device::register_commands(sh);
+    sh.register_command("gate-configure", *this, &keymaker::gate_configure, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+    sh.register_command("gate-remove", *this, &keymaker::gate_remove, {{"gate-id", "gid"}, cmd::flag{"force", false}});
+    sh.register_command("gate-add", *this, &keymaker::gate_add, {{"notes", {}, ""}, cmd::flag{"configure", true}});
+    sh.register_command("gate-inspect", *this, &keymaker::gate_inspect, {{"gate-id", "gid", std::numeric_limits<gate_id>::max()}});
+    sh.register_command("gate-set-notes", *this, &keymaker::gate_set_notes, {{"gate-id", "gid"}, {"notes"}});
+    sh.register_command("gate-get-status", *this, &keymaker::gate_get_status, {{"gate-id", "gid"}});
+    sh.register_command("gate-wifi-get-status", *this, &keymaker::gate_get_wifi_status, {});
+    sh.register_command("gate-wifi-connect", *this, &keymaker::gate_connect_wifi, {{"ssid"}, {"password"}});
+    sh.register_command("gate-update-get-config", *this, &keymaker::gate_get_update_config, {});
+    sh.register_command("gate-update-set-config", *this, &keymaker::gate_set_update_config,
+                        {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
+    sh.register_command("gate-list", *this, &keymaker::gate_list, {});
+    sh.register_command("card-recover-root-key", *this, &keymaker::card_recover_root_key, {{"test-key",  desfire::any_key{desfire::cipher_type::none}}});
+    sh.register_command("card-format", *this, &keymaker::card_format,
+                        {{"old-key", desfire::any_key{desfire::cipher_type::des}}, {"new-key", desfire::any_key{desfire::cipher_type::des}}});
+}
+
+
+nvs::r<> keymaker_gate_data::save_to(nvs::namespc &ns) const {
+    TRY(ns.set_encode_blob(get_nvs_key(id), *this));
+    TRY(ns.commit());
+    return mlab::result_success;
+}
+
+std::string keymaker_gate_data::get_nvs_key(gate_id gid) {
+    std::string buffer;
+    buffer.resize(9);
+    std::snprintf(buffer.data(), buffer.size(), "%08lx", std::uint32_t{gid});
+    buffer.resize(8);
+    return buffer;
+}
+
+nvs::r<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns, gate_id gid) {
+    return ns.get_parse_blob<keymaker_gate_data>(get_nvs_key(gid));
+}
+
+std::vector<keymaker_gate_data> keymaker_gate_data::load_from(nvs::const_namespc const &ns) {
+    std::vector<keymaker_gate_data> retval;
+    for (gate_id gid = std::numeric_limits<gate_id>::min(); gid < std::numeric_limits<gate_id>::max(); gid = gate_id{gid + 1}) {
+        if (const auto r = load_from(ns, gid); r) {
+            retval.push_back(*r);
+        } else if (r.error() == nvs::error::not_found) {
+            break;
+        } else {
+            ESP_LOGE(TAG, "Unable to load gate %lu, error %s", std::uint32_t{gid}, to_string(r.error()));
+            retval.push_back(keymaker_gate_data{gid, {}, {}, gate_status::unknown, {}});
+        }
+    }
+    return retval;
+}
 }// namespace ka
 
 namespace mlab {
