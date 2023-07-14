@@ -189,7 +189,11 @@ namespace ka {
             }
 
             if (type == argument_type::flag) {
-                return mlab::concatenate({"--[no-]", token_main});
+                if (value_marker.empty()) {
+                    return mlab::concatenate({"--[no-]", token_main});
+                } else {
+                    return mlab::concatenate({"--[no-]", token_main, " ", value_marker});
+                }
             }
 
             return mlab::concatenate({"--", token_main, " <", value_marker.empty() ? "value" : value_marker, ">"});
@@ -209,9 +213,17 @@ namespace ka {
 
             if (type == argument_type::flag) {
                 if (token_alternate.empty()) {
-                    return mlab::concatenate({lwrap, "--[no-]", token_main, rwrap});
+                    if (default_value.empty()) {
+                        return mlab::concatenate({lwrap, "--[no-]", token_main, rwrap});
+                    } else {
+                        return mlab::concatenate({lwrap, "--[no-]", token_main, " (", default_value, ")", rwrap});
+                    }
                 } else {
-                    return mlab::concatenate({lwrap, "--[no-]", token_main, "|-[n]", token_alternate, rwrap});
+                    if (default_value.empty()) {
+                        return mlab::concatenate({lwrap, "--[no-]", token_main, "|-[n]", token_alternate, rwrap});
+                    } else {
+                        return mlab::concatenate({lwrap, "--[no-]", token_main, "|-[n]", token_alternate, " (def: ", default_value, ")", rwrap});
+                    }
                 }
             }
 

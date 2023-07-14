@@ -98,6 +98,10 @@ namespace ka {
         [[nodiscard]] r<identity> card_get_identity() const;
         [[nodiscard]] r<std::vector<keymaker_gate_info>> card_list_enrolled_gates() const;
 
+        /**
+         * @todo Add remote ops check for updates, trigger update, update manually
+         */
+
         void register_commands(ka::cmd::shell &sh) override;
     };
 

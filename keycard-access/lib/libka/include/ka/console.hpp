@@ -436,13 +436,23 @@ namespace ka {
 
         template <parsable T>
         std::string typed_argument<T>::help_string() const {
+            if constexpr (std::is_same_v<T, bool>) {
+                if (default_value and type == argument_type::flag) {
+                    return argument::help_string(parser<T>::type_description(), *default_value ? "Y" : "N");
+                }
+            }
             return argument::help_string(parser<T>::type_description(), default_value ? parser<T>::to_string(*default_value) : "");
         }
 
         template <parsable T>
         std::string typed_argument<T>::signature_string() const {
             if (default_value) {
-                return argument::signature_string(parser<T>::to_string(*default_value));
+                if constexpr (std::is_same_v<T, bool>) {
+                    if (type == argument_type::flag) {
+                        return mlab::concatenate({"[", argument::signature_string(*default_value ? "(Y)" : "(N)"), "]"});
+                    }
+                }
+                return mlab::concatenate({"[", argument::signature_string(parser<T>::to_string(*default_value)), "]"});
             } else {
                 return argument::signature_string(parser<T>::type_description());
             }
