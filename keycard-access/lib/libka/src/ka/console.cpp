@@ -279,8 +279,9 @@ namespace ka {
             for (auto const &pcmd : active_shell()->_cmds) {
                 if (typed_s.starts_with(pcmd->name)) {
                     auto s = pcmd->signature();
-                    char *retval = new char[s.size() + 1]{/* zero-initialize */};
-                    std::copy(std::begin(s), std::end(s), retval);
+                    char *retval = new char[s.size() + 2]{/* zero-initialize */};
+                    retval[0] = ' ';
+                    std::copy(std::begin(s), std::end(s), &retval[1]);
                     *color = 34 /* blue */;
                     return retval;
                 }

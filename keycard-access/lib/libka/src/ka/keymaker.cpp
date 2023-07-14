@@ -689,6 +689,9 @@ namespace ka {
         template <>
         struct parser<desfire::any_key> {
             [[nodiscard]] static std::string to_string(desfire::any_key const &k) {
+                if (k.type() == desfire::cipher_type::none) {
+                    return "auto";
+                }
                 auto body = k.get_packed_key_body();
                 auto first_nonzero = std::find_if(std::begin(body), std::end(body), [](auto b) { return b != 0; });
                 if (first_nonzero == std::end(body) and first_nonzero != std::begin(body)) {

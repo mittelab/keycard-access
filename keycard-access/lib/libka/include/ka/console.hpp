@@ -670,7 +670,7 @@ namespace ka {
         namespace util {
             template <std::size_t... Is>
             [[nodiscard]] std::string signature_impl(std::index_sequence<Is...>, auto const &targs) {
-                return mlab::concatenate({"", std::get<Is>(targs).signature_string()...}, " ");
+                return mlab::concatenate({std::get<Is>(targs).signature_string()...}, " ");
             }
             template <std::size_t... Is>
             [[nodiscard]] std::string help_impl(std::index_sequence<Is...>, std::string_view cmd_name, auto const &targs) {
