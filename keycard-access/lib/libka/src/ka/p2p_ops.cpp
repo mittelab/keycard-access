@@ -256,13 +256,13 @@ namespace ka::p2p {
             set_update_settings = 0x03,
             get_wifi_status = 0x04,
             connect_wifi = 0x05,
-            get_public_info = 0x06,
+            get_registration_info = 0x06,
             register_gate = 0x07,
             reset_gate = 0x08,
         };
 
-        r<gate_pub_info> remote_gate::get_public_info() {
-            auto r = command_parse_response<gate_pub_info>(commands::get_public_info);
+        r<gate_registration_info> remote_gate::get_registration_info() {
+            auto r = command_parse_response<gate_registration_info>(commands::get_registration_info);
             if (r) {
                 if (r->pk != local_interface().peer_pub_key()) {
                     ESP_LOGE(TAG, "Mismatching declared public key with peer public key!");
@@ -343,11 +343,11 @@ namespace ka::p2p {
             return connect_wifi(ssid, password);
         }
 
-        r<gate_pub_info> local_gate::get_public_info(mlab::bin_data const &body) {
+        r<gate_registration_info> local_gate::get_registration_info(mlab::bin_data const &body) {
             if (not assert_stream_healthy(mlab::bin_stream{body})) {
                 return error::malformed;
             }
-            return get_public_info();
+            return get_registration_info();
         }
 
         r<gate_base_key> local_gate::register_gate(mlab::bin_data const &body) {
@@ -388,8 +388,8 @@ namespace ka::p2p {
                 case commands::connect_wifi:
                     TRY(response_send(connect_wifi(body)));
                     return serve_outcome::ok;
-                case commands::get_public_info:
-                    TRY(response_send(get_public_info(body)));
+                case commands::get_registration_info:
+                    TRY(response_send(get_registration_info(body)));
                     return serve_outcome::ok;
                 case commands::register_gate:
                     TRY(response_send(register_gate(body)));
@@ -413,8 +413,8 @@ namespace ka::p2p {
             return wifi_status{"", false};
         }
 
-        r<gate_pub_info> local_gate::get_public_info() {
-            return g().public_info();
+        r<gate_registration_info> local_gate::get_registration_info() {
+            return gate_registration_info{g().public_info(), g().keymaker_pk()};
         }
 
         r<> local_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
@@ -471,6 +471,15 @@ namespace mlab {
                   << fwinfo.proto_version;
     }
 
+    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::gate_registration_info &rinfo) {
+        s >> rinfo.id >> rinfo.pk >> rinfo.keymaker_pk;
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::p2p::v0::gate_registration_info const &rinfo) {
+        return bd << prealloc(ka::raw_pub_key::array_size * 2 + 4) << rinfo.id << rinfo.pk << rinfo.keymaker_pk;
+    }
+
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid) {
         std::uint32_t v{};
         s >> lsb32 >> v;
@@ -482,15 +491,6 @@ namespace mlab {
 
     bin_data &operator<<(bin_data &bd, ka::gate_id const &gid) {
         return bd << lsb32 << std::uint32_t(gid);
-    }
-
-    bin_stream &operator>>(bin_stream &s, ka::gate_pub_info &rinfo) {
-        s >> rinfo.id >> rinfo.pk;
-        return s;
-    }
-
-    bin_data &operator<<(bin_data &bd, ka::gate_pub_info const &rinfo) {
-        return bd << rinfo.id << rinfo.pk;
     }
 
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_config &usettings) {

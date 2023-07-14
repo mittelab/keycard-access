@@ -11,8 +11,6 @@
 #include <ka/device.hpp>
 #include <ka/key_pair.hpp>
 #include <ka/member_token.hpp>
-#include <ka/p2p_ops.hpp>
-#include <ka/secure_p2p.hpp>
 
 namespace pn532 {
     class controller;
@@ -21,6 +19,17 @@ namespace pn532 {
 namespace ka {
     namespace nvs {
         class partition;
+    }
+
+    namespace p2p {
+        struct protocol_factory_base;
+        class local_gate_base;
+
+        template <class T>
+        concept local_gate_protocol = std::is_base_of_v<local_gate_base, T>;
+
+        template <local_gate_protocol Protocol>
+        struct protocol_factory;
     }
 
     class gate;

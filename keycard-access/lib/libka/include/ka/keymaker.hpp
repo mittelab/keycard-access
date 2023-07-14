@@ -8,6 +8,7 @@
 #include <ka/device.hpp>
 #include <ka/gate.hpp>
 #include <ka/key_pair.hpp>
+#include <ka/p2p_ops.hpp>
 
 namespace ka {
     namespace cmd {

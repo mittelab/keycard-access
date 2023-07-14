@@ -6,6 +6,7 @@
 #include <esp_log.h>
 #include <ka/console.hpp>
 #include <ka/keymaker.hpp>
+#include <ka/secure_p2p.hpp>
 #include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 
@@ -15,6 +16,10 @@
 #define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
+    namespace p2p {
+        template <class T>
+        concept remote_gate_protocol = std::is_base_of_v<remote_gate_base, T>;
+    }
 
     using namespace ka::cmd_literals;
 
@@ -445,10 +450,10 @@ namespace ka {
     p2p::r<gate_id, bool> keymaker::check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const {
         gate_id gid = std::numeric_limits<gate_id>::max();
         bool ours = false;
-        TRY_RESULT(rg.get_public_info()) {
+        TRY_RESULT(rg.get_registration_info()) {
             if (r->id != std::numeric_limits<gate_id>::max()) {
                 gid = r->id;
-                ours = r->pk == keys();
+                ours = r->keymaker_pk == keys();
                 ESP_LOGI(TAG, "This gate is configured as gate %lu with %s keymaker.",
                          std::uint32_t{r->id}, ours ? "this" : "another");
             } else {

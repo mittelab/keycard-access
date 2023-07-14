@@ -6,6 +6,8 @@
 #include <ka/gate.hpp>
 #include <ka/member_token.hpp>
 #include <ka/nvs.hpp>
+#include <ka/p2p_ops.hpp>
+#include <ka/secure_p2p.hpp>
 #include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
