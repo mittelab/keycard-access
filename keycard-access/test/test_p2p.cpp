@@ -147,7 +147,7 @@ namespace ut {
             }
         }
         {
-            ESP_LOGI("UT", "Testing %s", "connect_wifi");
+            ESP_LOGI("UT", "Testing %s", "wifi_connect");
             auto r = rg.connect_wifi("Test SSID", "Test Password");
             TEST_ASSERT(r);
             if (r) {

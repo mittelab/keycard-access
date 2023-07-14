@@ -59,13 +59,13 @@ namespace ka {
 
         [[nodiscard]] std::optional<release_info> check_for_updates() const;
         [[nodiscard]] fw_info get_firmware_info() const;
-        void update_firmware();
-        void update_firmware(std::string_view fw_url);
+        void update_now();
+        void update_manually(std::string_view fw_url);
 
-        [[nodiscard]] bool is_wifi_configured() const;
-        [[nodiscard]] std::optional<std::string> get_wifi_ssid() const;
-        [[nodiscard]] bool test_wifi();
-        bool connect_wifi(std::string_view ssid, std::string_view password);
+        [[nodiscard]] bool wifi_is_configured() const;
+        [[nodiscard]] std::optional<std::string> wifi_get_ssid() const;
+        [[nodiscard]] bool wifi_test();
+        bool wifi_connect(std::string_view ssid, std::string_view password);
 
         virtual void register_commands(cmd::shell &sh);
     };

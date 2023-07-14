@@ -407,8 +407,8 @@ namespace ka::p2p {
         }
 
         r<wifi_status> local_gate::get_wifi_status() {
-            if (const auto ssid = g().get_wifi_ssid(); ssid) {
-                return wifi_status{*ssid, g().test_wifi()};
+            if (const auto ssid = g().wifi_get_ssid(); ssid) {
+                return wifi_status{*ssid, g().wifi_test()};
             }
             return wifi_status{"", false};
         }
@@ -428,7 +428,7 @@ namespace ka::p2p {
 
         r<bool> local_gate::connect_wifi(std::string_view ssid, std::string_view password) {
             TRY(assert_peer_is_keymaker());
-            return g().connect_wifi(ssid, password);
+            return g().wifi_connect(ssid, password);
         }
 
         r<gate_base_key> local_gate::register_gate(gate_id requested_id) {

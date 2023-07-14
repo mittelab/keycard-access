@@ -144,7 +144,7 @@ namespace ka {
         return fw_info::get_running_fw();
     }
 
-    void device::update_firmware() {
+    void device::update_now() {
         if (not _ota) {
             ESP_LOGE(TAG, "Updates not available during test.");
             return;
@@ -154,7 +154,7 @@ namespace ka {
         }
     }
 
-    void device::update_firmware(std::string_view fw_url) {
+    void device::update_manually(std::string_view fw_url) {
         if (not _ota) {
             ESP_LOGE(TAG, "Updates not available during test.");
             return;
@@ -162,21 +162,21 @@ namespace ka {
         _ota->update_from(fw_url);
     }
 
-    bool device::is_wifi_configured() const {
-        return get_wifi_ssid() != std::nullopt;
+    bool device::wifi_is_configured() const {
+        return wifi_get_ssid() != std::nullopt;
     }
 
-    std::optional<std::string> device::get_wifi_ssid() const {
+    std::optional<std::string> device::wifi_get_ssid() const {
         auto &wf = wifi::instance();
         return wf.get_ssid();
     }
 
-    bool device::test_wifi() {
+    bool device::wifi_test() {
         auto &wf = wifi::instance();
         return wf.ensure_connected();
     }
 
-    bool device::connect_wifi(std::string_view ssid, std::string_view password) {
+    bool device::wifi_connect(std::string_view ssid, std::string_view password) {
         auto &wf = wifi::instance();
         wf.reconfigure(ssid, password);
         return wf.ensure_connected();
@@ -197,17 +197,17 @@ namespace ka {
     }// namespace cmd
 
     void device::register_commands(cmd::shell &sh) {
-        sh.register_command("wifi-connect", *this, &device::connect_wifi, {{"ssid"}, {"password"}});
-        sh.register_command("wifi-test", *this, &device::test_wifi, {});
-        sh.register_command("wifi-is-configured", *this, &device::is_wifi_configured, {});
-        sh.register_command("wifi-get-ssid", *this, &device::get_wifi_ssid, {});
+        sh.register_command("wifi-connect", *this, &device::wifi_connect, {{"ssid"}, {"password"}});
+        sh.register_command("wifi-test", *this, &device::wifi_test, {});
+        sh.register_command("wifi-is-configured", *this, &device::wifi_is_configured, {});
+        sh.register_command("wifi-get-ssid", *this, &device::wifi_get_ssid, {});
         sh.register_command("update-is-automated", *this, &device::updates_automatically, {});
         sh.register_command("update-set-automated", *this, &device::set_update_automatically, {"toggle"_pos});
         sh.register_command("update-get-channel", *this, &device::update_channel, {});
         sh.register_command("update-set-channel", *this, &device::set_update_channel, {"channel"_pos, ka::cmd::flag{"test", true}});
         // Weird overload situation, cast to disambiguate!!
-        sh.register_command("update-now", *this, static_cast<void (device::*)()>(&device::update_firmware), {});
-        sh.register_command("update-manually", *this, static_cast<void (device::*)(std::string_view)>(&device::update_firmware), {"firmware-url"_pos});
+        sh.register_command("update-now", *this, &device::update_now, {});
+        sh.register_command("update-manually", *this, &device::update_manually, {"firmware-url"_pos});
         sh.register_command("update-check-only", *this, &device::check_for_updates, {});
         sh.register_command("update-get-current-version", *this, &device::get_firmware_info, {});
     }
