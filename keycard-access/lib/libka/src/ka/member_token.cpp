@@ -85,7 +85,7 @@ namespace ka {
             case desfire::error::malformed:
                 return "incorrect identity format";
             case desfire::error::picc_integrity_error:
-                return "incorrect root settings or permissions";
+                return "incorrect root settings or permissions, or mismatching token id";
             default:
                 return desfire::to_string(e);
         }
