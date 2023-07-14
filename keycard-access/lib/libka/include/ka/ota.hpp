@@ -64,6 +64,11 @@ namespace ka {
         [[nodiscard]] std::optional<release_info> check_now(std::string_view update_channel) const;
 
         /**
+         * Returns the url from which the firmware is updating, if any, or nullopt.
+         */
+        [[nodiscard]] std::optional<std::string> is_updating() const;
+
+        /**
          * Triggers update from a specific url.
          * @param url
          */

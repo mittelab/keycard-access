@@ -22,6 +22,29 @@ namespace ka {
             return _mtx;
         }
 
+        class currently_updating {
+            mutable std::mutex mtx{};
+            std::string updating{};
+
+            currently_updating() = default;
+
+        public:
+            void set(std::string_view s_) {
+                std::unique_lock<std::mutex> lock{mtx};
+                updating = std::string{s_};
+            }
+
+            [[nodiscard]] std::string get() const {
+                std::unique_lock<std::mutex> lock{mtx};
+                return updating;
+            }
+
+            static currently_updating &instance() {
+                static currently_updating _instance{};
+                return _instance;
+            }
+        };
+
     }// namespace
 
     std::optional<std::vector<release_info>> release_info::from_update_channel(std::string_view update_channel, std::string_view fw_bin_prefix) {
@@ -117,12 +140,22 @@ namespace ka {
         return releases != std::nullopt;
     }
 
+    std::optional<std::string> ota_watch::is_updating() const {
+        std::unique_lock<std::mutex> lock{update_mutex(), std::try_to_lock};
+        if (lock.owns_lock()) {
+            return std::nullopt;
+        } else {
+            return currently_updating::instance().get();
+        }
+    }
+
     void ota_watch::update_from(std::string_view url) {
         std::unique_lock<std::mutex> lock{update_mutex(), std::try_to_lock};
         if (not lock.owns_lock()) {
             ESP_LOGW(TAG, "Another update operation is in progress.");
             return;
         }
+        currently_updating::instance().set(url);
 
         wifi_session session;
         if (not session) {
