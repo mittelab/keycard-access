@@ -875,6 +875,24 @@ namespace ka {
         }
     }
 
+    r<std::vector<keymaker_gate_info>> keymaker::card_list_enrolled_gates() const {
+        TRY_RESULT(open_card_channel()) {
+            member_token tkn{r->tag()};
+            TRY_RESULT_AS(tkn.list_gates(true, true), r_gates) {
+                std::vector<keymaker_gate_info> gi{};
+                gi.reserve(r_gates->size());
+                for (auto gid : *r_gates) {
+                    if (std::uint32_t{gid} >= _gates.size()) {
+                        ESP_LOGW(TAG, "Unknown enrolled gate %lu.", std::uint32_t{gid});
+                    } else {
+                        gi.emplace_back(_gates[std::uint32_t{gid}]);
+                    }
+                }
+                return gi;
+            }
+        }
+    }
+
     r<desfire::any_key> keymaker::card_recover_root_key(desfire::any_key test_root_key) const {
         ESP_LOGI(TAG, "Attempting to recover root key...");
         static constexpr std::uint8_t secondary_keys_version = 0x10;
@@ -935,8 +953,9 @@ namespace ka {
                             {{"gate-id", "gid"}, {"holder"}, {"publisher"}});
         sh.register_command("card-gate-unenroll", *this, &keymaker::card_unenroll_gate, {{"gate-id", "gid"}});
         sh.register_command("card-gate-is-enrolled", *this, &keymaker::card_is_gate_enrolled, {{"gate-id", "gid"}});
-        sh.register_command("card-is-deeployed", *this, &keymaker::card_is_deployed, {});
+        sh.register_command("card-is-deployed", *this, &keymaker::card_is_deployed, {});
         sh.register_command("card-get-identity", *this, &keymaker::card_get_identity, {});
+        sh.register_command("card-gate-list", *this, &keymaker::card_list_enrolled_gates, {});
     }
 
 
