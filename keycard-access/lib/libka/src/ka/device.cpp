@@ -195,7 +195,7 @@ namespace ka {
     }// namespace cmd
 
     void device::register_commands(cmd::shell &sh) {
-        sh.register_command("wifi-connect", *this, &device::connect_wifi, {"ssid"_pos, "password"_pos});
+        sh.register_command("wifi-connect", *this, &device::connect_wifi, {{"ssid"}, {"password"}});
         sh.register_command("wifi-test", *this, &device::test_wifi, {});
         sh.register_command("wifi-is-configured", *this, &device::is_wifi_configured, {});
         sh.register_command("wifi-get-ssid", *this, &device::get_wifi_ssid, {});
