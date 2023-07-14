@@ -642,6 +642,14 @@ namespace cmd {
         }
     };
     template <>
+    struct parser<ka::identity> {
+        [[nodiscard]] static std::string to_string(ka::identity const &id) {
+            return mlab::concatenate({" token id: ", mlab::data_to_hex_string(id.id), "\n",
+                                      "   holder: ", id.holder, "\n",
+                                      "publisher: ", id.publisher});
+        }
+    };
+    template <>
     struct parser<desfire::cipher_type> {
         [[nodiscard]] static std::string to_string(desfire::cipher_type ct) {
             switch (ct) {
@@ -917,9 +925,18 @@ void keymaker::register_commands(ka::cmd::shell &sh) {
     sh.register_command("gate-update-set-config", *this, &keymaker::gate_set_update_config,
                         {{"update-channel", std::optional<std::string>{""}}, cmd::flag{"auto", true}});
     sh.register_command("gate-list", *this, &keymaker::gate_list, {});
-    sh.register_command("card-recover-root-key", *this, &keymaker::card_recover_root_key, {{"test-key",  desfire::any_key{desfire::cipher_type::none}}});
+    sh.register_command("card-recover-root-key", *this, &keymaker::card_recover_root_key,
+                        {{"test-key", desfire::any_key{desfire::cipher_type::none}}});
     sh.register_command("card-format", *this, &keymaker::card_format,
                         {{"old-key", desfire::any_key{desfire::cipher_type::des}}, {"new-key", desfire::any_key{desfire::cipher_type::des}}});
+    sh.register_command("card-deploy", *this, &keymaker::card_deploy,
+                        {{"old-key", desfire::any_key{desfire::cipher_type::none}}, {"holder"}, {"publisher"}});
+    sh.register_command("card-gate-enroll", *this, &keymaker::card_enroll_gate,
+                        {{"gate-id", "gid"}, {"holder"}, {"publisher"}});
+    sh.register_command("card-gate-unenroll", *this, &keymaker::card_unenroll_gate, {{"gate-id", "gid"}});
+    sh.register_command("card-gate-is-enrolled", *this, &keymaker::card_is_gate_enrolled, {{"gate-id", "gid"}});
+    sh.register_command("card-is-deeployed", *this, &keymaker::card_is_deployed, {});
+    sh.register_command("card-get-identity", *this, &keymaker::card_get_identity, {});
 }
 
 
