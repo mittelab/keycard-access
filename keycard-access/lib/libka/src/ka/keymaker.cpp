@@ -632,7 +632,7 @@ namespace ka {
         template <>
         struct parser<p2p::v0::update_config> {
             [[nodiscard]] static std::string to_string(p2p::v0::update_config const &us) {
-                return mlab::concatenate({us.enable_automatic_update ? "automatic,  from " : "not automatic, from ",
+                return mlab::concatenate({us.enable_automatic_update ? "automatic, from " : "not automatic, from ",
                                           us.update_channel});
             }
         };
@@ -830,6 +830,9 @@ namespace ka {
     r<> keymaker::card_enroll_gate(gate_id gid, std::string_view holder, std::string_view publisher) {
         if (std::uint32_t{gid} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate not found.");
+            return desfire::error::parameter_error;
+        } else if (_gates[std::uint32_t{gid}].status != gate_status::configured) {
+            ESP_LOGE(TAG, "Gate not configured.");
             return desfire::error::parameter_error;
         }
         TRY_RESULT(open_card_channel()) {
