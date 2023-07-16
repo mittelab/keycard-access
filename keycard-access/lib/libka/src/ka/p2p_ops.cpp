@@ -303,19 +303,8 @@ namespace ka::p2p {
             return command_parse_response<release_info>(commands::check_for_updates);
         }
 
-        r<std::string> remote_gate::is_updating() {
-            if (const auto r = command_response(static_cast<std::uint8_t>(commands::is_updating), {}); r) {
-                mlab::bin_stream s{*r};
-                std::string retval{};
-                s >> mlab::length_encoded >> retval;
-                if (assert_stream_healthy(s)) {
-                    return retval;
-                } else {
-                    return error::malformed;
-                }
-            } else {
-                return r.error();
-            }
+        r<update_status> remote_gate::is_updating() {
+            return command_parse_response<update_status>(commands::is_updating);
         }
 
         r<release_info> remote_gate::update_now() {
@@ -397,7 +386,7 @@ namespace ka::p2p {
             return check_for_updates();
         }
 
-        r<std::string> local_gate::is_updating(mlab::bin_data const &body) {
+        r<update_status> local_gate::is_updating(mlab::bin_data const &body) {
             if (not assert_stream_healthy(mlab::bin_stream{body})) {
                 return error::malformed;
             }
@@ -554,11 +543,8 @@ namespace ka::p2p {
             return release_info{};
         }
 
-        r<std::string> local_gate::is_updating() {
-            if (auto upd_from = g().is_updating(); upd_from) {
-                return std::move(*upd_from);
-            }
-            return std::string{};
+        r<update_status> local_gate::is_updating() {
+            return g().is_updating();
         }
 
         r<release_info> local_gate::update_now() {
@@ -568,7 +554,7 @@ namespace ka::p2p {
                     g.update_manually(from);
                 };
                 std::thread upd_th{body};
-                return std::move(*ri);
+                return *ri;
             } else {
                 return release_info{};
             }
@@ -690,6 +676,27 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::release_info &ri) {
         s >> ri.semantic_version >> length_encoded >> ri.firmware_url;
         return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::update_status &us) {
+        std::string from{};
+        s >> length_encoded >> from;
+        if (not s.bad()) {
+            if (from.empty()) {
+                us = ka::update_status{std::nullopt};
+            } else {
+                us = ka::update_status{std::move(from)};
+            }
+        }
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::update_status const &us) {
+        if (us.updating_from == std::nullopt) {
+            return bd << mlab::length_encoded << "";
+        } else {
+            return bd << mlab::length_encoded << *us.updating_from;
+        }
     }
 
     bin_data &operator<<(bin_data &bd, ka::release_info const &ri) {

@@ -162,6 +162,13 @@ namespace ka {
         _ota->update_from(fw_url);
     }
 
+    update_status device::is_updating() const {
+        if (not _ota) {
+            return {std::nullopt};
+        }
+        return {_ota->is_updating()};
+    }
+
     bool device::wifi_is_configured() const {
         return wifi_get_ssid() != std::nullopt;
     }
@@ -194,6 +201,14 @@ namespace ka {
                 return fi.to_string();
             }
         };
+
+        std::string parser<update_status>::to_string(update_status const &us) {
+            if (us.updating_from) {
+                return mlab::concatenate({"updating from ", *us.updating_from});
+            } else {
+                return "up to date";
+            }
+        }
     }// namespace cmd
 
     void device::register_commands(cmd::shell &sh) {
@@ -205,7 +220,7 @@ namespace ka {
         sh.register_command("update-set-automated", *this, &device::set_update_automatically, {"toggle"_pos});
         sh.register_command("update-get-channel", *this, &device::update_channel, {});
         sh.register_command("update-set-channel", *this, &device::set_update_channel, {"channel"_pos, ka::cmd::flag{"test", true}});
-        // Weird overload situation, cast to disambiguate!!
+        sh.register_command("update-is-running", *this, &device::is_updating, {});
         sh.register_command("update-now", *this, &device::update_now, {});
         sh.register_command("update-manually", *this, &device::update_manually, {"firmware-url"_pos});
         sh.register_command("update-check-only", *this, &device::check_for_updates, {});

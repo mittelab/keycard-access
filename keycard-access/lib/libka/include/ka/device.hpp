@@ -17,7 +17,12 @@ namespace ut {
 namespace ka {
     namespace cmd {
         class shell;
+        template <class> struct parser;
     }
+
+    struct update_status {
+        std::optional<std::string> updating_from = std::nullopt;
+    };
 
     class device {
         key_pair _kp = {};
@@ -61,6 +66,7 @@ namespace ka {
         [[nodiscard]] fw_info get_firmware_info() const;
         void update_now();
         void update_manually(std::string_view fw_url);
+        [[nodiscard]] update_status is_updating() const;
 
         [[nodiscard]] bool wifi_is_configured() const;
         [[nodiscard]] std::optional<std::string> wifi_get_ssid() const;
@@ -69,6 +75,13 @@ namespace ka {
 
         virtual void register_commands(cmd::shell &sh);
     };
+
+    namespace cmd {
+        template <>
+        struct parser<update_status> {
+            [[nodiscard]] static std::string to_string(update_status const &us);
+        };
+    }
 }// namespace ka
 
 namespace ka {
