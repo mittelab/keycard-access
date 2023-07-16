@@ -146,6 +146,15 @@ namespace ut {
                 TEST_ASSERT(not r->operational);
             }
         }
+        /**
+         * @todo Test:
+         *  - r<release_info> check_for_updates();
+         *  - r<update_status> is_updating();
+         *  - r<release_info> update_now();
+         *  - r<> update_manually(std::string_view fw_url);
+         *  - r<> set_backend_url(std::string_view url, std::string_view api_key);
+         *  - r<std::string> get_backend_url();
+         */
         {
             ESP_LOGI("UT", "Testing %s", "wifi_connect");
             auto r = rg.connect_wifi("Test SSID", "Test Password");

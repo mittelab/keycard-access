@@ -180,6 +180,9 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<> update_manually(std::string_view fw_url);
             [[nodiscard]] virtual r<> set_backend_url(std::string_view url, std::string_view api_key);
             [[nodiscard]] virtual r<std::string> get_backend_url();
+            /**
+             * @todo Add set/get gpio config
+             */
             [[nodiscard]] virtual r<wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
