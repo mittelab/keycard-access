@@ -115,6 +115,8 @@ namespace ka::p2p {
         template <class... Args>
         [[nodiscard]] r<> response_send(r<Args...> const &response);
 
+        [[nodiscard]] r<> response_send(r<std::string> const &response);
+
         [[nodiscard]] virtual r<serve_outcome> try_serve_command(std::uint8_t command_code, mlab::bin_data const &body);
         [[nodiscard]] r<> assert_peer_is_keymaker() const;
 
@@ -172,6 +174,12 @@ namespace ka::p2p {
 
             [[nodiscard]] virtual r<update_config> get_update_settings();
             [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
+            [[nodiscard]] virtual r<release_info> check_for_updates();
+            [[nodiscard]] virtual r<std::string> is_updating();
+            [[nodiscard]] virtual r<release_info> update_now();
+            [[nodiscard]] virtual r<> update_manually(std::string_view fw_url);
+            [[nodiscard]] virtual r<> set_backend_url(std::string_view url, std::string_view api_key);
+            [[nodiscard]] virtual r<std::string> get_backend_url();
             [[nodiscard]] virtual r<wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
@@ -185,6 +193,12 @@ namespace ka::p2p {
 
             [[nodiscard]] virtual r<update_config> get_update_settings(mlab::bin_data const &body);
             [[nodiscard]] virtual r<> set_update_settings(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<release_info> check_for_updates(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<std::string> is_updating(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<release_info> update_now(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<> update_manually(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<> set_backend_url(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<std::string> get_backend_url(mlab::bin_data const &body);
             [[nodiscard]] virtual r<wifi_status> get_wifi_status(mlab::bin_data const &body);
             [[nodiscard]] virtual r<bool> connect_wifi(mlab::bin_data const &body);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info(mlab::bin_data const &body);
@@ -198,6 +212,12 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<update_config> get_update_settings();
             [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
             [[nodiscard]] virtual r<wifi_status> get_wifi_status();
+            [[nodiscard]] virtual r<release_info> check_for_updates();
+            [[nodiscard]] virtual r<std::string> is_updating();
+            [[nodiscard]] virtual r<release_info> update_now();
+            [[nodiscard]] virtual r<> update_manually(std::string_view fw_url);
+            [[nodiscard]] virtual r<> set_backend_url(std::string_view url, std::string_view api_key);
+            [[nodiscard]] virtual r<std::string> get_backend_url();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
             [[nodiscard]] virtual r<gate_base_key> register_gate(gate_id requested_id);
@@ -229,6 +249,7 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_config &usettings);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
+    bin_stream &operator>>(bin_stream &s, ka::release_info &ri);
 
     bin_data &operator<<(bin_data &bd, ka::p2p::gate_fw_info const &fwinfo);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::gate_registration_info const &rinfo);
@@ -237,6 +258,7 @@ namespace mlab {
     bin_data &operator<<(bin_data &bd, ka::gate_id const &gid);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_config const &usettings);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings);
+    bin_data &operator<<(bin_data &bd, ka::release_info const &ri);
 }// namespace mlab
 
 namespace ka::p2p {
@@ -293,7 +315,6 @@ namespace ka::p2p {
             return bd;
         }
     }// namespace impl
-
 
     template <class... Args>
     r<> local_gate_base::response_send(r<Args...> const &response) {

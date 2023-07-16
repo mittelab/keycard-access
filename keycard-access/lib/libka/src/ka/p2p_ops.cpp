@@ -10,6 +10,7 @@
 #include <mlab/result_macro.hpp>
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
+#include <thread>
 
 #define TAG "P2P"
 
@@ -179,6 +180,14 @@ namespace ka::p2p {
         }
     }
 
+    r<> local_gate_base::response_send(r<std::string> const &response) {
+        if (not response) {
+            return response_send(error_to_proto_status(response.error()), {});
+        } else {
+            return response_send(proto_status::ok, mlab::bin_data::chain(mlab::length_encoded, *response));
+        }
+    }
+
     r<> local_gate_base::response_send(proto_status s, mlab::bin_data resp) {
         resp << s;
         if (auto r = local_interface().communicate(resp, 5s); r) {
@@ -259,6 +268,12 @@ namespace ka::p2p {
             get_registration_info = 0x06,
             register_gate = 0x07,
             reset_gate = 0x08,
+            check_for_updates = 0x09,
+            is_updating = 0x0a,
+            update_now = 0x0b,
+            update_manually = 0x0c,
+            get_backend_url = 0x0d,
+            set_backend_url = 0x0e,
         };
 
         r<gate_registration_info> remote_gate::get_registration_info() {
@@ -284,6 +299,55 @@ namespace ka::p2p {
                     automatic_updates);
         }
 
+        r<release_info> remote_gate::check_for_updates() {
+            return command_parse_response<release_info>(commands::check_for_updates);
+        }
+
+        r<std::string> remote_gate::is_updating() {
+            if (const auto r = command_response(static_cast<std::uint8_t>(commands::is_updating), {}); r) {
+                mlab::bin_stream s{*r};
+                std::string retval{};
+                s >> mlab::length_encoded >> retval;
+                if (assert_stream_healthy(s)) {
+                    return retval;
+                } else {
+                    return error::malformed;
+                }
+            } else {
+                return r.error();
+            }
+        }
+
+        r<release_info> remote_gate::update_now() {
+            return command_parse_response<release_info>(commands::update_now);
+        }
+
+        r<> remote_gate::update_manually(std::string_view fw_url) {
+            return command_parse_response<void>(
+                    commands::update_manually,
+                    mlab::length_encoded, fw_url);
+        }
+
+        r<> remote_gate::set_backend_url(std::string_view url, std::string_view api_key) {
+            return command_parse_response<void>(
+                    commands::set_backend_url,
+                    mlab::length_encoded, url, mlab::length_encoded, api_key);
+        }
+
+        r<std::string> remote_gate::get_backend_url() {
+            if (const auto r = command_response(static_cast<std::uint8_t>(commands::get_backend_url), {}); r) {
+                mlab::bin_stream s{*r};
+                std::string retval{};
+                s >> mlab::length_encoded >> retval;
+                if (assert_stream_healthy(s)) {
+                    return retval;
+                } else {
+                    return error::malformed;
+                }
+            } else {
+                return r.error();
+            }
+        }
 
         r<wifi_status> remote_gate::get_wifi_status() {
             return command_parse_response<wifi_status>(commands::get_wifi_status);
@@ -324,6 +388,54 @@ namespace ka::p2p {
                 return error::malformed;
             }
             return set_update_settings(update_channel, automatic_updates);
+        }
+
+        r<release_info> local_gate::check_for_updates(mlab::bin_data const &body) {
+            if (not assert_stream_healthy(mlab::bin_stream{body})) {
+                return error::malformed;
+            }
+            return check_for_updates();
+        }
+
+        r<std::string> local_gate::is_updating(mlab::bin_data const &body) {
+            if (not assert_stream_healthy(mlab::bin_stream{body})) {
+                return error::malformed;
+            }
+            return is_updating();
+        }
+
+        r<release_info> local_gate::update_now(mlab::bin_data const &body) {
+            if (not assert_stream_healthy(mlab::bin_stream{body})) {
+                return error::malformed;
+            }
+            return update_now();
+        }
+
+        r<> local_gate::update_manually(mlab::bin_data const &body) {
+            std::string url = {};
+            mlab::bin_stream s{body};
+            s >> mlab::length_encoded >> url;
+            if (not assert_stream_healthy(s)) {
+                return error::malformed;
+            }
+            return update_manually(url);
+        }
+
+        r<> local_gate::set_backend_url(mlab::bin_data const &body) {
+            std::string url = {}, api_key = {};
+            mlab::bin_stream s{body};
+            s >> mlab::length_encoded >> url >> mlab::length_encoded >> api_key;
+            if (not assert_stream_healthy(s)) {
+                return error::malformed;
+            }
+            return set_backend_url(url, api_key);
+        }
+
+        r<std::string> local_gate::get_backend_url(mlab::bin_data const &body) {
+            if (not assert_stream_healthy(mlab::bin_stream{body})) {
+                return error::malformed;
+            }
+            return get_backend_url();
         }
 
         r<wifi_status> local_gate::get_wifi_status(mlab::bin_data const &body) {
@@ -397,9 +509,30 @@ namespace ka::p2p {
                 case commands::reset_gate:
                     TRY(response_send(reset_gate(body)));
                     return serve_outcome::ok;
-                default:
-                    return serve_outcome::unknown;
+                case commands::check_for_updates:
+                    TRY(response_send(check_for_updates(body)));
+                    return serve_outcome::ok;
+                case commands::is_updating:
+                    TRY(response_send(is_updating(body)));
+                    return serve_outcome::ok;
+                case commands::update_now:
+                    TRY(response_send(update_now(body)));
+                    return serve_outcome::ok;
+                case commands::update_manually:
+                    TRY(response_send(update_manually(body)));
+                    return serve_outcome::ok;
+                case commands::get_backend_url:
+                    TRY(response_send(get_backend_url(body)));
+                    return serve_outcome::ok;
+                case commands::set_backend_url:
+                    TRY(response_send(set_backend_url(body)));
+                    return serve_outcome::ok;
+                case commands::_reserved1:
+                    [[fallthrough]];
+                case commands::_reserved2:
+                    break;
             }
+            return serve_outcome::unknown;
         }
 
         r<update_config> local_gate::get_update_settings() {
@@ -411,6 +544,53 @@ namespace ka::p2p {
                 return wifi_status{*ssid, g().wifi_test()};
             }
             return wifi_status{"", false};
+        }
+
+        r<release_info> local_gate::check_for_updates() {
+            TRY(assert_peer_is_keymaker());
+            if (auto ri = g().check_for_updates(); ri) {
+                return std::move(*ri);
+            }
+            return release_info{};
+        }
+
+        r<std::string> local_gate::is_updating() {
+            if (auto upd_from = g().is_updating(); upd_from) {
+                return std::move(*upd_from);
+            }
+            return std::string{};
+        }
+
+        r<release_info> local_gate::update_now() {
+            TRY(assert_peer_is_keymaker());
+            if (const auto ri = g().check_for_updates(); ri) {
+                auto body = [from = ri->firmware_url, &g = g()]() {
+                    g.update_manually(from);
+                };
+                std::thread upd_th{body};
+                return std::move(*ri);
+            } else {
+                return release_info{};
+            }
+        }
+
+        r<> local_gate::update_manually(std::string_view fw_url) {
+            TRY(assert_peer_is_keymaker());
+            auto body = [from = std::string{fw_url}, &g = g()]() {
+                g.update_manually(from);
+            };
+            std::thread upd_th{body};
+            return mlab::result_success;
+        }
+
+        r<> local_gate::set_backend_url(std::string_view, std::string_view) {
+            ESP_LOGE(TAG, "set_backend_url not yet implemented");
+            return error::invalid;
+        }
+
+        r<std::string> local_gate::get_backend_url() {
+            ESP_LOGE(TAG, "get_backend_url not yet implemented");
+            return error::invalid;
         }
 
         r<gate_registration_info> local_gate::get_registration_info() {
@@ -505,6 +685,15 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings) {
         s >> length_encoded >> wfsettings.ssid >> wfsettings.operational;
         return s;
+    }
+
+    bin_stream &operator>>(bin_stream &s, ka::release_info &ri) {
+        s >> ri.semantic_version >> length_encoded >> ri.firmware_url;
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::release_info const &ri) {
+        return bd << ri.semantic_version << length_encoded << ri.firmware_url;
     }
 
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings) {
