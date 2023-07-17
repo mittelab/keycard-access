@@ -112,7 +112,7 @@ namespace ka {
         p2p::r<> gate_set_backend_url(std::string_view url, std::string_view api_key);
         [[nodiscard]] p2p::r<std::string> gate_get_backend_url() const;
         [[nodiscard]] p2p::r<gpio_responder_config> gate_get_gpio_config() const;
-        p2p::r<> gate_set_gpio_config(gpio_responder_config cfg);
+        p2p::r<> gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time);
 
         void register_commands(ka::cmd::shell &sh) override;
     };

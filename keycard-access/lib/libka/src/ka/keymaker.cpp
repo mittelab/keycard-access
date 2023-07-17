@@ -598,12 +598,12 @@ namespace ka {
         }
     }
 
-    p2p::r<> keymaker::gate_set_gpio_config(gpio_responder_config cfg) {
+    p2p::r<> keymaker::gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
                 TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().set_gpio_config(cfg)) {
+                TRY_RESULT(r_rg->get().set_gpio_config({gpio, level, hold_time})) {
                     return r;
                 }
             }
@@ -1065,6 +1065,15 @@ namespace ka {
         sh.register_command("card-is-deployed", *this, &keymaker::card_is_deployed, {});
         sh.register_command("card-get-identity", *this, &keymaker::card_get_identity, {});
         sh.register_command("card-gate-list", *this, &keymaker::card_list_enrolled_gates, {});
+
+        sh.register_command("gate-update-check", *this, &keymaker::gate_update_check, {});
+        sh.register_command("gate-update-is-running", *this, &keymaker::gate_is_updating, {});
+        sh.register_command("gate-update-now", *this, &keymaker::gate_update_now, {});
+        sh.register_command("gate-update-manually", *this, &keymaker::gate_update_manually, {{"from"}});
+        sh.register_command("gate-backend-configure", *this, &keymaker::gate_set_backend_url, {{"url"}, {"api-key"}});
+        sh.register_command("gate-backend-get-url", *this, &keymaker::gate_get_backend_url, {});
+        sh.register_command("gate-gpio-get-config", *this, &keymaker::gate_get_gpio_config, {});
+        sh.register_command("gate-gpio-configure", *this, &keymaker::gate_set_gpio_config, {{"gpio"}, {"level", true}, {"hold-time", 100ms}});
     }
 
 
