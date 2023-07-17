@@ -6,6 +6,7 @@
 #include "test_bundle.hpp"
 #include <chrono>
 #include <desfire/esp32/utils.hpp>
+#include <ka/gpio_auth_responder.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/p2p_ops.hpp>
 #include <ka/secure_p2p.hpp>
@@ -45,7 +46,7 @@ namespace ut {
                 return t2i_data;
             }
         };
-    }
+    }// namespace
 
     struct secure_p2p_loopback : p2p_loopback {
         ka::p2p::secure_initiator initiator;
@@ -101,6 +102,44 @@ namespace ut {
             ka::p2p::r<> reset_gate() override {
                 return ka::p2p::error::unauthorized;
             }
+
+            ka::p2p::r<ka::release_info> check_for_updates() override {
+                return ka::release_info{semver::version{1, 2, 3}, "https://foo.bar"};
+            }
+
+            ka::p2p::r<ka::update_status> is_updating() override {
+                return ka::update_status{"https://foo.bar"};
+            }
+
+            ka::p2p::r<ka::release_info> update_now() override {
+                return ka::release_info{semver::version{1, 2, 3}, "https://foo.bar"};
+            }
+
+            ka::p2p::r<> update_manually(std::string_view fw_url) override {
+                TEST_ASSERT(fw_url == "https://foo.bar");
+                return mlab::result_success;
+            }
+
+            ka::p2p::r<> set_backend_url(std::string_view url, std::string_view api_key) override {
+                TEST_ASSERT(url == "https://back.end");
+                TEST_ASSERT(api_key == "deadbeef");
+                return mlab::result_success;
+            }
+
+            ka::p2p::r<ka::gpio_responder_config> get_gpio_config() override {
+                return ka::gpio_responder_config{GPIO_NUM_13, false, 100ms};
+            }
+
+            ka::p2p::r<> set_gpio_config(ka::gpio_responder_config cfg) override {
+                TEST_ASSERT(cfg.gpio == GPIO_NUM_14);
+                TEST_ASSERT(cfg.level == true);
+                TEST_ASSERT(cfg.hold_time == 200ms);
+                return mlab::result_success;
+            }
+
+            ka::p2p::r<std::string> get_backend_url() override {
+                return std::string{"https://back.end"};
+            }
         };
 
 
@@ -146,15 +185,6 @@ namespace ut {
                 TEST_ASSERT(not r->operational);
             }
         }
-        /**
-         * @todo Test:
-         *  - r<release_info> check_for_updates();
-         *  - r<update_status> is_updating();
-         *  - r<release_info> update_now();
-         *  - r<> update_manually(std::string_view fw_url);
-         *  - r<> set_backend_url(std::string_view url, std::string_view api_key);
-         *  - r<std::string> get_backend_url();
-         */
         {
             ESP_LOGI("UT", "Testing %s", "wifi_connect");
             auto r = rg.connect_wifi("Test SSID", "Test Password");
@@ -189,6 +219,70 @@ namespace ut {
                 TEST_ASSERT(r.error() == ka::p2p::error::unauthorized);
             }
         }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "check_for_updates");
+            auto r = rg.check_for_updates();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT((r->semantic_version == semver::version{1, 2, 3}));
+                TEST_ASSERT(r->firmware_url == "https://foo.bar");
+            }
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "is_updating");
+            auto r = rg.is_updating();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(r->updating_from);
+                if (r->updating_from) {
+                    TEST_ASSERT(*r->updating_from == "https://foo.bar");
+                }
+            }
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "update_now");
+            auto r = rg.update_now();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT((r->semantic_version == semver::version{1, 2, 3}));
+                TEST_ASSERT(r->firmware_url == "https://foo.bar");
+            }
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "update_manually");
+            auto r = rg.update_manually("https://foo.bar");
+            TEST_ASSERT(r);
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "set_backend_url");
+            auto r = rg.set_backend_url("https://back.end", "deadbeef");
+            TEST_ASSERT(r);
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "get_gpio_config");
+            auto r = rg.get_gpio_config();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(r->gpio == GPIO_NUM_13);
+                TEST_ASSERT(r->level == false);
+                TEST_ASSERT(r->hold_time == 100ms);
+            }
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "set_gpio_config");
+            auto r = rg.set_gpio_config(ka::gpio_responder_config{GPIO_NUM_14, true, 200ms});
+            TEST_ASSERT(r);
+        }
+        {
+            ESP_LOGI("UT", "Testing %s", "get_backend_url");
+            auto r = rg.get_backend_url();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r == "https://back.end");
+            }
+        }
+
         rg.bye();
 
         t.join();
