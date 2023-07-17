@@ -5,6 +5,7 @@
 #include <desfire/esp32/utils.hpp>
 #include <esp_log.h>
 #include <ka/console.hpp>
+#include <ka/gpio_auth_responder.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/secure_p2p.hpp>
 #include <mlab/result_macro.hpp>
@@ -287,7 +288,7 @@ namespace ka {
     p2p::r<> keymaker::configure_gate_internal(keymaker_gate_data &gd) {
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
+                TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
                     if (r_ours->first != std::numeric_limits<gate_id>::max()) {
                         if (not r_ours->second) {
                             ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
@@ -385,7 +386,7 @@ namespace ka {
                         ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
                         return p2p::error::invalid;
                     }
-                    TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
+                    TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
                         if (r_ours->first == std::numeric_limits<gate_id>::max()) {
                             ESP_LOGW(TAG, "This gate is not configured or was already deleted.");
                             return mlab::result_success;
@@ -447,7 +448,7 @@ namespace ka {
         return mlab::result_success;
     }
 
-    p2p::r<gate_id, bool> keymaker::check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const {
+    p2p::r<gate_id, bool> keymaker::identify_gate(p2p::v0::remote_gate &rg) const {
         gate_id gid = std::numeric_limits<gate_id>::max();
         bool ours = false;
         TRY_RESULT(rg.get_registration_info()) {
@@ -463,11 +464,11 @@ namespace ka {
         return {gid, ours};
     }
 
-    p2p::r<p2p::v0::update_config> keymaker::gate_get_update_config() {
+    p2p::r<p2p::v0::update_config> keymaker::gate_get_update_config() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY(identify_gate(r_rg->get()));
                 TRY_RESULT(r_rg->get().get_update_settings()) {
                     return std::move(*r);
                 }
@@ -475,11 +476,11 @@ namespace ka {
         }
     }
 
-    p2p::r<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() {
+    p2p::r<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY(identify_gate(r_rg->get()));
                 TRY_RESULT(r_rg->get().get_wifi_status()) {
                     return std::move(*r);
                 }
@@ -491,7 +492,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY(identify_gate(r_rg->get()));
                 TRY(r_rg->get().set_update_settings(update_channel, automatic_updates));
             }
         }
@@ -502,7 +503,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(check_if_detected_gate_is_ours(r_rg->get()));
+                TRY(identify_gate(r_rg->get()));
                 TRY_RESULT(r_rg->get().connect_wifi(ssid, password)) {
                     if (not *r) {
                         ESP_LOGW(TAG, "Wifi did not connect within the given timespan.");
@@ -513,6 +514,103 @@ namespace ka {
         }
     }
 
+    p2p::r<release_info> keymaker::gate_update_check() {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().check_for_updates()) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<update_status> keymaker::gate_is_updating() const {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().is_updating()) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<release_info> keymaker::gate_update_now() {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().update_now()) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<> keymaker::gate_update_manually(std::string_view fw_url) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().update_manually(fw_url)) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<> keymaker::gate_set_backend_url(std::string_view url, std::string_view api_key) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().set_backend_url(url, api_key)) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<std::string> keymaker::gate_get_backend_url() const {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().get_backend_url()) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<gpio_responder_config> keymaker::gate_get_gpio_config() const {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().get_gpio_config()) {
+                    return r;
+                }
+            }
+        }
+    }
+
+    p2p::r<> keymaker::gate_set_gpio_config(gpio_responder_config cfg) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
+                TRY(identify_gate(r_rg->get()));
+                TRY_RESULT(r_rg->get().set_gpio_config(cfg)) {
+                    return r;
+                }
+            }
+        }
+    }
+
+
     p2p::r<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
         std::optional<pub_key> exp_pk = std::nullopt;
         bool ours = true;
@@ -521,7 +619,7 @@ namespace ka {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
                 exp_pk = r_chn->peer_pub_key();
                 TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY_RESULT_AS(check_if_detected_gate_is_ours(r_rg->get()), r_ours) {
+                    TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
                         if (r_ours->first != std::numeric_limits<gate_id>::max()) {
                             id = r_ours->first;
                             ours = r_ours->second;

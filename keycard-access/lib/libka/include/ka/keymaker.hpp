@@ -11,6 +11,8 @@
 #include <ka/p2p_ops.hpp>
 
 namespace ka {
+    struct gpio_responder_config;
+
     namespace cmd {
         class shell;
     }
@@ -61,7 +63,12 @@ namespace ka {
 
         [[nodiscard]] p2p::r<> configure_gate_internal(keymaker_gate_data &gd);
 
-        [[nodiscard]] p2p::r<gate_id, bool> check_if_detected_gate_is_ours(p2p::v0::remote_gate &rg) const;
+        /**
+         * Prints a message with the gate id and checks whether it's registered to us.
+         * @return The gate id and a boolean expressing whether the gate is ours.
+         * @todo Add a boolean that fail if not ours
+         */
+        [[nodiscard]] p2p::r<gate_id, bool> identify_gate(p2p::v0::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
     public:
@@ -79,8 +86,8 @@ namespace ka {
         p2p::r<gate_id> gate_add(std::string notes = "", bool configure = false);
         p2p::r<> gate_configure(gate_id id, bool force = false);
         p2p::r<> gate_remove(gate_id id, bool force = false);
-        p2p::r<p2p::v0::update_config> gate_get_update_config();
-        p2p::r<p2p::v0::wifi_status> gate_get_wifi_status();
+        [[nodiscard]] p2p::r<p2p::v0::update_config> gate_get_update_config() const;
+        [[nodiscard]] p2p::r<p2p::v0::wifi_status> gate_get_wifi_status() const;
         p2p::r<> gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
         p2p::r<bool> gate_connect_wifi(std::string_view ssid, std::string_view password);
         void gate_set_notes(gate_id id, std::string notes);
@@ -98,16 +105,14 @@ namespace ka {
         [[nodiscard]] r<identity> card_get_identity() const;
         [[nodiscard]] r<std::vector<keymaker_gate_info>> card_list_enrolled_gates() const;
 
-        /**
-         * @todo
-         *  - r<release_info> check_for_updates();
-         *  - r<update_status> is_updating();
-         *  - r<release_info> update_now();
-         *  - r<> update_manually(std::string_view fw_url);
-         *  - r<> set_backend_url(std::string_view url, std::string_view api_key);
-         *  - r<std::string> get_backend_url();
-         *  - get/set gpio config
-         */
+        p2p::r<release_info> gate_update_check();
+        [[nodiscard]] p2p::r<update_status> gate_is_updating() const;
+        p2p::r<release_info> gate_update_now();
+        p2p::r<> gate_update_manually(std::string_view fw_url);
+        p2p::r<> gate_set_backend_url(std::string_view url, std::string_view api_key);
+        [[nodiscard]] p2p::r<std::string> gate_get_backend_url() const;
+        [[nodiscard]] p2p::r<gpio_responder_config> gate_get_gpio_config() const;
+        p2p::r<> gate_set_gpio_config(gpio_responder_config cfg);
 
         void register_commands(ka::cmd::shell &sh) override;
     };
