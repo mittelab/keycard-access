@@ -14,10 +14,22 @@ namespace ka {
         class gpio_responder_global_config {
             gpio_responder_config _cfg = {};
             mutable std::mutex _chg_mtx = {};
+            std::shared_ptr<nvs::namespc> _gate_ns = {};
 
             gpio_responder_global_config() {
-                if (const auto p = nvs::instance().open_default_partition()) {
+                if (const auto p = nvs::instance().open_default_partition(); p) {
+                    _gate_ns = p->open_namespc("gate");
+                    if (_gate_ns) {
+                        if (const auto r = ka::gpio_responder_config::load_from(*_gate_ns); r) {
+                            set(*r);
+                            return;
+                        } else if (r.error() == nvs::error::not_found) {
+                            // No worries
+                            return;
+                        }
+                    }
                 }
+                ESP_LOGW("KA", "Unable to load GPIO configuration.");
             }
 
         public:
@@ -26,7 +38,10 @@ namespace ka {
                 return _cfg;
             }
 
-            void set(gpio_responder_config cfg) {
+            bool set(gpio_responder_config cfg) {
+                if (cfg.gpio != GPIO_NUM_MAX and not GPIO_IS_VALID_OUTPUT_GPIO(cfg.gpio)) {
+                    return false;
+                }
                 std::unique_lock<std::mutex> lock{_chg_mtx};
                 if (_cfg.gpio != GPIO_NUM_MAX) {
                     ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_set_direction(_cfg.gpio, GPIO_MODE_DISABLE));
@@ -42,6 +57,12 @@ namespace ka {
                 } else {
                     ESP_LOGI("KA", "On authentication: do nothing");
                 }
+                if (_gate_ns) {
+                    if (const auto r = _cfg.save_to(*_gate_ns); not r) {
+                        MLAB_FAIL_MSG("_cfg.save_to(*_gate_ns)", r);
+                    }
+                }
+                return true;
             }
 
             void hold() {
@@ -68,8 +89,8 @@ namespace ka {
         return gpio_responder_global_config::instance().get();
     }
 
-    void gpio_responder_config::set_global_config(gpio_responder_config cfg) {
-        gpio_responder_global_config::instance().set(cfg);
+    bool gpio_responder_config::set_global_config(gpio_responder_config cfg) {
+        return gpio_responder_global_config::instance().set(cfg);
     }
 
     void gpio_gate_responder::on_authentication_success(ka::identity const &) {
@@ -81,13 +102,7 @@ namespace ka {
     }
 
     nvs::r<gpio_responder_config> gpio_responder_config::load_from(nvs::const_namespc const &ns) {
-        if (auto r = ns.get_parse_blob<gpio_responder_config>("gpio-responder"); r) {
-            return r;
-        } else if (r.error() == nvs::error::not_found) {
-            return gpio_responder_config{};
-        } else {
-            return r.error();
-        }
+        return ns.get_parse_blob<gpio_responder_config>("gpio-responder");
     }
 }// namespace ka
 

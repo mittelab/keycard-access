@@ -20,7 +20,7 @@ namespace ka {
         std::chrono::milliseconds hold_time = 100ms;
 
         [[nodiscard]] static gpio_responder_config get_global_config();
-        static void set_global_config(gpio_responder_config cfg);
+        [[nodiscard]] static bool set_global_config(gpio_responder_config cfg);
 
         nvs::r<> save_to(nvs::namespc &ns) const;
         [[nodiscard]] static nvs::r<gpio_responder_config> load_from(nvs::const_namespc const &ns);

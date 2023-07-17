@@ -32,31 +32,16 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
     ESP_LOGI(TAG, "Exiting shell.");
 }
 
-void setup_auth_gpio(ka::nvs::partition &partition) {
-    if (const auto ns = partition.open_namespc("gate"); ns) {
-        if (const auto r = ka::gpio_responder_config::load_from(*ns); r) {
-            ka::gpio_responder_config::set_global_config(*r);
-        } else {
-            MLAB_FAIL_MSG("ka::gpio_responder_config::load_from(*ns)", r);
-        }
-    } else {
-        ESP_LOGW(TAG, "Failed partition.open_namespc(\"gate\").");
-    }
-}
-
 [[noreturn]] void gate_main(std::shared_ptr<pn532::controller> const &ctrl) {
-    auto default_part = ka::nvs::instance().open_default_partition();
-    ka::gate g{default_part};
+    ka::gate g{ka::nvs::instance().open_default_partition()};
     if (g.is_configured()) {
         ESP_LOGI(TAG, "Gate configured as gate %lu with keymaker public key:", std::uint32_t{g.id()});
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, g.keymaker_pk().raw_pk().data(), g.keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
     } else {
         ESP_LOGI(TAG, "Gate not configured.");
     }
-    // Reload GPIO configuration
-    if (default_part) {
-        setup_auth_gpio(*default_part);
-    }
+    // Make sure GPIO configuration is loaded now, not at the first usage
+    static_cast<void>(ka::gpio_responder_config::get_global_config());
     ka::gpio_gate_responder responder{g};
     pn532::scanner scanner{*ctrl};
     while (true) {
