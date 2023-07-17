@@ -11,6 +11,7 @@
 #include <mlab/strutils.hpp>
 #include <pn532/controller.hpp>
 #include <thread>
+#include <ka/gpio_auth_responder.hpp>
 
 #define TAG "P2P"
 
@@ -274,6 +275,8 @@ namespace ka::p2p {
             update_manually = 0x0c,
             get_backend_url = 0x0d,
             set_backend_url = 0x0e,
+            get_gpio_config = 0x0f,
+            set_gpio_config = 0x10
         };
 
         r<gate_registration_info> remote_gate::get_registration_info() {
@@ -336,6 +339,14 @@ namespace ka::p2p {
             } else {
                 return r.error();
             }
+        }
+
+        r<gpio_responder_config> remote_gate::get_gpio_config() {
+            return command_parse_response<gpio_responder_config>(commands::get_gpio_config);
+        }
+
+        r<> remote_gate::set_gpio_config(gpio_responder_config cfg) {
+            return command_parse_response<void>(commands::set_gpio_config, cfg);
         }
 
         r<wifi_status> remote_gate::get_wifi_status() {
@@ -427,6 +438,23 @@ namespace ka::p2p {
             return get_backend_url();
         }
 
+        r<gpio_responder_config> local_gate::get_gpio_config(mlab::bin_data const &body) {
+            if (not assert_stream_healthy(mlab::bin_stream{body})) {
+                return error::malformed;
+            }
+            return get_gpio_config();
+        }
+
+        r<> local_gate::set_gpio_config(mlab::bin_data const &body) {
+            gpio_responder_config cfg{};
+            mlab::bin_stream s{body};
+            s >> cfg;
+            if (not assert_stream_healthy(s)) {
+                return error::malformed;
+            }
+            return set_gpio_config(cfg);
+        }
+
         r<wifi_status> local_gate::get_wifi_status(mlab::bin_data const &body) {
             if (not assert_stream_healthy(mlab::bin_stream{body})) {
                 return error::malformed;
@@ -516,6 +544,12 @@ namespace ka::p2p {
                 case commands::set_backend_url:
                     TRY(response_send(set_backend_url(body)));
                     return serve_outcome::ok;
+                case commands::get_gpio_config:
+                    TRY(response_send(get_gpio_config(body)));
+                    return serve_outcome::ok;
+                case commands::set_gpio_config:
+                    TRY(response_send(set_gpio_config(body)));
+                    return serve_outcome::ok;
                 case commands::_reserved1:
                     [[fallthrough]];
                 case commands::_reserved2:
@@ -577,6 +611,17 @@ namespace ka::p2p {
         r<std::string> local_gate::get_backend_url() {
             ESP_LOGE(TAG, "get_backend_url not yet implemented");
             return error::invalid;
+        }
+
+        r<gpio_responder_config> local_gate::get_gpio_config() {
+            return gpio_responder_config::get_global_config();
+        }
+
+        r<> local_gate::set_gpio_config(gpio_responder_config cfg) {
+            if (not gpio_responder_config::set_global_config(cfg)) {
+                return error::arg_error;
+            }
+            return mlab::result_success;
         }
 
         r<gate_registration_info> local_gate::get_registration_info() {

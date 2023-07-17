@@ -12,6 +12,7 @@
 namespace ka {
     class gate;
     struct gate_pub_info;
+    struct gpio_responder_config;
 }// namespace ka
 
 namespace semver {
@@ -180,9 +181,8 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<> update_manually(std::string_view fw_url);
             [[nodiscard]] virtual r<> set_backend_url(std::string_view url, std::string_view api_key);
             [[nodiscard]] virtual r<std::string> get_backend_url();
-            /**
-             * @todo Add set/get gpio config
-             */
+            [[nodiscard]] virtual r<gpio_responder_config> get_gpio_config();
+            [[nodiscard]] virtual r<> set_gpio_config(gpio_responder_config cfg);
             [[nodiscard]] virtual r<wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
@@ -202,6 +202,8 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<> update_manually(mlab::bin_data const &body);
             [[nodiscard]] virtual r<> set_backend_url(mlab::bin_data const &body);
             [[nodiscard]] virtual r<std::string> get_backend_url(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<gpio_responder_config> get_gpio_config(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<> set_gpio_config(mlab::bin_data const &body);
             [[nodiscard]] virtual r<wifi_status> get_wifi_status(mlab::bin_data const &body);
             [[nodiscard]] virtual r<bool> connect_wifi(mlab::bin_data const &body);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info(mlab::bin_data const &body);
@@ -220,6 +222,8 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<release_info> update_now();
             [[nodiscard]] virtual r<> update_manually(std::string_view fw_url);
             [[nodiscard]] virtual r<> set_backend_url(std::string_view url, std::string_view api_key);
+            [[nodiscard]] virtual r<gpio_responder_config> get_gpio_config();
+            [[nodiscard]] virtual r<> set_gpio_config(gpio_responder_config cfg);
             [[nodiscard]] virtual r<std::string> get_backend_url();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
