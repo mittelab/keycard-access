@@ -604,6 +604,7 @@ namespace ka::p2p {
         }
 
         r<> local_gate::set_backend_url(std::string_view, std::string_view) {
+            TRY(assert_peer_is_keymaker());
             ESP_LOGE(TAG, "set_backend_url not yet implemented");
             return error::invalid;
         }
@@ -618,6 +619,7 @@ namespace ka::p2p {
         }
 
         r<> local_gate::set_gpio_config(gpio_responder_config cfg) {
+            TRY(assert_peer_is_keymaker());
             if (not gpio_responder_config::set_global_config(cfg)) {
                 return error::arg_error;
             }
