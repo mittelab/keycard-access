@@ -878,6 +878,68 @@ namespace ka {
                 return mlab::concatenate_s(pieces, "\n");
             }
         };
+
+
+        template <>
+        struct parser<std::chrono::milliseconds> {
+            [[nodiscard]] static std::string to_string(std::chrono::milliseconds ms) {
+                return mlab::concatenate({std::to_string(ms.count()), "ms"});
+            }
+            [[nodiscard]] static std::string type_description() {
+                return "ms";
+            }
+
+            [[nodiscard]] static ka::cmd::r<std::chrono::milliseconds> parse(std::string_view s) {
+                if (s.ends_with("ms")) {
+                    s = s.substr(0, s.length() - 2);
+                }
+                auto ms = parser<std::uint32_t>::parse(s);
+                if (not ms) {
+                    return ms.error();
+                }
+                return std::chrono::milliseconds{*ms};
+            }
+        };
+
+        template <>
+        struct parser<gpio_num_t> {
+            [[nodiscard]] static std::string to_string(gpio_num_t gpio) {
+                return std::to_string(static_cast<std::uint32_t>(gpio));
+            }
+            [[nodiscard]] static std::string type_description() {
+                return mlab::concatenate({
+                        std::to_string(static_cast<std::uint32_t>(GPIO_NUM_0)),
+                        "..",
+                        std::to_string(static_cast<std::uint32_t>(GPIO_NUM_MAX) - 1),
+                });
+            }
+
+            [[nodiscard]] static ka::cmd::r<gpio_num_t> parse(std::string_view s) {
+                auto gpio_num = parser<std::uint32_t>::parse(s);
+                if (not gpio_num) {
+                    return gpio_num.error();
+                }
+                if (*gpio_num >= GPIO_NUM_MAX) {
+                    return error::parse;
+                }
+                return static_cast<gpio_num_t>(*gpio_num);
+            }
+        };
+
+        template <>
+        struct parser<gpio_responder_config> {
+            [[nodiscard]] static std::string to_string(gpio_responder_config const &grc) {
+                if (grc.gpio == GPIO_NUM_MAX) {
+                    return "on auth: do nothing";
+                } else {
+                    return mlab::concatenate({
+                            "on auth: hold gpio ", parser<gpio_num_t>::to_string(grc.gpio),
+                            grc.level ? " high for " : " low for ",
+                            parser<std::chrono::milliseconds>::to_string(grc.hold_time)
+                    });
+                }
+            }
+        };
     }// namespace cmd
 
     std::vector<keymaker_gate_info> keymaker::gate_list() const {

@@ -81,6 +81,10 @@ namespace ka {
         struct parser<update_status> {
             [[nodiscard]] static std::string to_string(update_status const &us);
         };
+            template <>
+        struct parser<release_info> {
+            [[nodiscard]] static std::string to_string(release_info const &ri);
+        };
     }
 }// namespace ka
 

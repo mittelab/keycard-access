@@ -5,6 +5,7 @@
 #ifndef KEYCARD_ACCESS_KEYMAKER_HPP
 #define KEYCARD_ACCESS_KEYMAKER_HPP
 
+#include <hal/gpio_types.h>
 #include <ka/device.hpp>
 #include <ka/gate.hpp>
 #include <ka/key_pair.hpp>
@@ -71,6 +72,7 @@ namespace ka {
         [[nodiscard]] p2p::r<gate_id, bool> identify_gate(p2p::v0::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
+
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.

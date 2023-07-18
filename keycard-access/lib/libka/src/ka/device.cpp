@@ -190,12 +190,6 @@ namespace ka {
     }
     namespace cmd {
         template <>
-        struct parser<release_info> {
-            [[nodiscard]] static std::string to_string(release_info const &ri) {
-                return mlab::concatenate({"New release! ", ri.semantic_version.to_string(), ", url: ", ri.firmware_url});
-            }
-        };
-        template <>
         struct parser<fw_info> {
             [[nodiscard]] static std::string to_string(fw_info const &fi) {
                 return fi.to_string();
@@ -208,6 +202,10 @@ namespace ka {
             } else {
                 return "up to date";
             }
+        }
+
+        std::string parser<release_info>::to_string(release_info const &ri) {
+            return mlab::concatenate({"New release! ", ri.semantic_version.to_string(), ", url: ", ri.firmware_url});
         }
     }// namespace cmd
 
