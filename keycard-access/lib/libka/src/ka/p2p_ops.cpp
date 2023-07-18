@@ -754,29 +754,6 @@ namespace mlab {
         return bd << length_encoded << wfsettings.ssid << wfsettings.operational;
     }
 
-    bin_data &operator<<(encode_length<bin_data> w, std::string_view s) {
-        return w.s << mlab::lsb32 << s.size() << mlab::data_from_string(s);
-    }
-
-    bin_stream &operator>>(encode_length<bin_stream> w, std::string &str) {
-        auto &s = w.s;
-        if (s.bad() or s.remaining() < 4) {
-            s.set_bad();
-            return s;
-        }
-        std::uint32_t length = 0;
-        s >> mlab::lsb32 >> length;
-        if (s.bad()) {
-            return s;
-        }
-        if (s.remaining() < length) {
-            s.set_bad();
-            return s;
-        }
-        str = mlab::data_to_string(s.read(length));
-        return s;
-    }
-
     bin_stream &operator>>(bin_stream &s, semver::version &v) {
         if (s.bad()) {
             return s;

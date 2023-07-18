@@ -236,23 +236,9 @@ namespace ka::p2p {
 }// namespace ka::p2p
 
 namespace mlab {
-
-    struct length_encoded_t {};
-
-    constexpr length_encoded_t length_encoded{};
-
-    template <class T = bin_stream>
-    struct encode_length {
-        T &s;
-    };
-
-    inline encode_length<bin_stream> operator>>(bin_stream &s, length_encoded_t);
-    inline encode_length<bin_data> operator<<(bin_data &bd, length_encoded_t);
-
     bin_stream &operator>>(bin_stream &s, ka::p2p::gate_fw_info &fwinfo);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::gate_registration_info &rinfo);
     bin_stream &operator>>(bin_stream &s, semver::version &v);
-    bin_stream &operator>>(encode_length<bin_stream> w, std::string &str);
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_config &usettings);
     bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
@@ -262,7 +248,6 @@ namespace mlab {
     bin_data &operator<<(bin_data &bd, ka::p2p::gate_fw_info const &fwinfo);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::gate_registration_info const &rinfo);
     bin_data &operator<<(bin_data &bd, semver::version const &v);
-    bin_data &operator<<(encode_length<bin_data> w, std::string_view s);
     bin_data &operator<<(bin_data &bd, ka::gate_id const &gid);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_config const &usettings);
     bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings);
@@ -367,14 +352,5 @@ namespace ka::p2p {
     }
 }// namespace ka::p2p
 
-namespace mlab {
-    encode_length<bin_stream> operator>>(bin_stream &s, length_encoded_t) {
-        return {s};
-    }
-
-    encode_length<bin_data> operator<<(bin_data &bd, length_encoded_t) {
-        return {bd};
-    }
-}// namespace mlab
 
 #endif//KEYCARD_ACCESS_P2P_OPS_HPP
