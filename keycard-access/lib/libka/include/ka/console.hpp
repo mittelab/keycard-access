@@ -212,14 +212,8 @@ namespace ka {
             virtual ~command_base() = default;
         };
 
-        namespace util {
-            struct void_struct;
-            template <class R, class T, class... Args>
-            struct target_method;
-        }// namespace util
-
-        template <parse_can_output R, class T = util::void_struct, parsable... Args>
-        struct command final : command_base, typed_arguments_tuple_t<Args...>, util::target_method<R, T, Args...> {
+        template <parse_can_output R, class T = void_struct, parsable... Args>
+        struct command final : command_base, typed_arguments_tuple_t<Args...>, target_method<R, T, Args...> {
 
             explicit command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq);
 
@@ -229,7 +223,7 @@ namespace ka {
 
             [[nodiscard]] r<Args...> parse(std::vector<std::string_view> const &values) const;
 
-            using util::target_method<R, T, Args...>::operator();
+            using target_method<R, T, Args...>::operator();
 
             [[nodiscard]] r<std::string> parse_and_invoke(std::vector<std::string_view> const &values) override;
 
@@ -283,44 +277,6 @@ namespace ka {
 namespace ka {
 
     namespace cmd {
-
-        namespace util {
-            struct void_struct {
-                /**
-                 * @note This is needed because to use automated template argument resolution, we need to have in the cctor of
-                 * @ref command all the parameters available; this means we must be able to spell T::*method, and that cannot
-                 * be done with anything that is not a struct type.
-                 */
-            };
-
-            template <class R, class T, class... Args>
-            struct target_method {
-                using target_ptr_t = T *;
-                using fn_ptr_t = std::conditional_t<std::is_const_v<T>, R (T::*)(Args...) const, R (T::*)(Args...)>;
-
-                target_ptr_t target;
-                fn_ptr_t method;
-
-                target_method(target_ptr_t target_, fn_ptr_t method_) : target{target_}, method{method_} {}
-
-                auto operator()(Args &&...args) {
-                    return ((*target).*method)(std::forward<Args>(args)...);
-                }
-            };
-
-            template <class R, class... Args>
-            struct target_method<R, void_struct, Args...> {
-                using fn_ptr_t = R (*)(Args...);
-
-                fn_ptr_t method;
-
-                explicit target_method(fn_ptr_t method_) : method{method_} {}
-
-                auto operator()(Args &&...args) {
-                    return method(std::forward<Args>(args)...);
-                }
-            };
-        }// namespace util
 
         flag::flag(std::string_view token_main_, std::optional<bool> default_value_)
             : token_main{token_main_}, token_alternate{}, default_value{default_value_} {}
@@ -562,13 +518,13 @@ namespace ka {
         command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
-              util::target_method<R, T, Args...>{obj_, fn_} {}
+              target_method<R, T, Args...>{obj_, fn_} {}
 
         template <parse_can_output R, class T, parsable... Args>
         command<R, T, Args...>::command(std::string_view name, T *obj_, R (T::*fn_)(Args...) const, typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
-              util::target_method<R, T, Args...>{obj_, fn_} {
+              target_method<R, T, Args...>{obj_, fn_} {
             static_assert(std::is_const_v<T>, "You must explicitly mark the class type as const to call its const methods.");
         }
 
@@ -576,7 +532,7 @@ namespace ka {
         command<R, T, Args...>::command(std::string_view name, R (*fn_)(Args...), typed_arguments_tuple_t<Args...> arg_seq)
             : command_base{name},
               typed_arguments_tuple_t<Args...>{std::move(arg_seq)},
-              util::target_method<R, T, Args...>{fn_} {}
+              target_method<R, T, Args...>{fn_} {}
 
 
         template <parse_can_output R, class T, parsable... Args>
@@ -643,7 +599,7 @@ namespace ka {
 
         template <class R, parsable... Args>
         void shell::register_command(std::string_view name, R (*fn)(Args...), typed_arguments_tuple_t<Args...> arg_seq) {
-            _cmds.push_back(std::make_unique<command<R, util::void_struct, Args...>>(name, fn, std::move(arg_seq)));
+            _cmds.push_back(std::make_unique<command<R, void_struct, Args...>>(name, fn, std::move(arg_seq)));
         }
 
         template <class R, class T, parsable... Args>
