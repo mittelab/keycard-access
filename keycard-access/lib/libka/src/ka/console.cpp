@@ -256,6 +256,7 @@ namespace ka {
         struct shell::activate_on_linenoise {
             explicit activate_on_linenoise(shell const &sh) {
                 active_shell() = &sh;
+                linenoiseHistorySetMaxLen(32);
                 linenoiseSetCompletionCallback(&shell::linenoise_completion);
                 linenoiseSetHintsCallback(&shell::linenoise_hints);
                 linenoiseSetFreeHintsCallback(&shell::linenoise_free_hints);
@@ -317,11 +318,14 @@ namespace ka {
             activate_on_linenoise activate{*this};
 
             for (auto s = c.read_line(); s; s = c.read_line()) {
+                // Make a copy, so we can use the previous one in the history
+                std::string splittable_copy = *s;
                 auto pargv = std::make_unique<char *[]>(max_args);
-                const std::size_t argc = esp_console_split_argv(s->data(), pargv.get(), max_args);
+                const std::size_t argc = esp_console_split_argv(splittable_copy.data(), pargv.get(), max_args);
                 if (argc == 0) {
                     continue;
                 }
+                linenoiseHistoryAdd(s->c_str());
                 // Search for the command
                 command_base *called_cmd = nullptr;
                 for (auto const &pcmd : _cmds) {
