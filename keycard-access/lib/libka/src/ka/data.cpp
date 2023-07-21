@@ -88,7 +88,7 @@ namespace ka {
             return _code;
         }
 
-        [[nodiscard]] std::string escape(std::string const &text) {
+        [[nodiscard]] std::string escape(std::string_view text) {
             return mlab::replace_all(mlab::replace_all(text, "\\", "\\\\"), "\n", "\\\n");
         }
     }// namespace
