@@ -183,6 +183,7 @@ namespace ka::p2p {
             send_response,
             ack_response
         };
+        constexpr auto default_timeout = 10s;
     }
 
     target_bridge_interface::target_bridge_interface(std::shared_ptr<pn532::p2p::target> tgt) : _tgt{std::move(tgt)} {}
@@ -194,7 +195,7 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (const auto r_req_resp = _tgt->receive(5s); r_req_resp) {
+        if (const auto r_req_resp = _tgt->receive(default_timeout); r_req_resp) {
             if (r_req_resp->size() != 1 or r_req_resp->back() != static_cast<std::uint8_t>(proto::req_response)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "req_response");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_resp->data(), r_req_resp->size(), ESP_LOG_ERROR);
@@ -207,7 +208,7 @@ namespace ka::p2p {
         }
         // Actually send response, append the marker
         data << proto::send_response;
-        if (const auto r_send_resp = _tgt->send(data, 5s); r_send_resp) {
+        if (const auto r_send_resp = _tgt->send(data, default_timeout); r_send_resp) {
             return mlab::result_success;
         } else {
             MLAB_FAIL_MSG("_tgt->send()", r_send_resp);
@@ -220,7 +221,7 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (const auto r_req_cmd = _tgt->receive(5s); r_req_cmd) {
+        if (const auto r_req_cmd = _tgt->receive(default_timeout); r_req_cmd) {
             if (r_req_cmd->size() != 1 or r_req_cmd->back() != static_cast<std::uint8_t>(proto::req_command)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "req_command");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_cmd->data(), r_req_cmd->size(), ESP_LOG_ERROR);
@@ -233,7 +234,7 @@ namespace ka::p2p {
         }
         // Actually send command, append the marker
         data << proto::send_command;
-        if (const auto r_send_cmd = _tgt->send(data, 5s); r_send_cmd) {
+        if (const auto r_send_cmd = _tgt->send(data, default_timeout); r_send_cmd) {
             return mlab::result_success;
         } else {
             MLAB_FAIL_MSG("_tgt->send()", r_send_cmd);
@@ -246,14 +247,14 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (auto r_send_cmd = _tgt->receive(5s); r_send_cmd) {
+        if (auto r_send_cmd = _tgt->receive(default_timeout); r_send_cmd) {
             if (r_send_cmd->empty() or r_send_cmd->back() != static_cast<std::uint8_t>(proto::send_command)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_cmd->data(), r_send_cmd->size(), ESP_LOG_ERROR);
                 return ka::rpc::error::transport_error;
             }
             // Signal that it was acknowledged
-            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_command), 5s); not r_send_ack) {
+            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_command), default_timeout); not r_send_ack) {
                 MLAB_FAIL_MSG("_tgt->send(ack_command)", r_send_ack);
                 return ka::rpc::error::channel_error;
             }
@@ -271,14 +272,14 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (auto r_send_resp = _tgt->receive(5s); r_send_resp) {
+        if (auto r_send_resp = _tgt->receive(default_timeout); r_send_resp) {
             if (r_send_resp->empty() or r_send_resp->back() != static_cast<std::uint8_t>(proto::send_response)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_resp->data(), r_send_resp->size(), ESP_LOG_ERROR);
                 return ka::rpc::error::transport_error;
             }
             // Signal that it was acknowledged
-            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_response), 5s); not r_send_ack) {
+            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_response), default_timeout); not r_send_ack) {
                 MLAB_FAIL_MSG("_tgt->send(ack_response)", r_send_ack);
                 return ka::rpc::error::channel_error;
             }
@@ -297,7 +298,7 @@ namespace ka::p2p {
         }
         // Perform everything as a two-stroke engine triggered by the initiator
         data << proto::send_command;
-        if (const auto r_send_cmd = _ini->communicate(data, 5s); r_send_cmd) {
+        if (const auto r_send_cmd = _ini->communicate(data, default_timeout); r_send_cmd) {
             if (r_send_cmd->size() != 1 or r_send_cmd->back() != static_cast<std::uint8_t>(proto::ack_command)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "ack_command");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_cmd->data(), r_send_cmd->size(), ESP_LOG_ERROR);
@@ -317,7 +318,7 @@ namespace ka::p2p {
         }
         // Perform everything as a two-stroke engine triggered by the initiator
         data << proto::send_response;
-        if (const auto r_send_resp = _ini->communicate(data, 5s); r_send_resp) {
+        if (const auto r_send_resp = _ini->communicate(data, default_timeout); r_send_resp) {
             if (r_send_resp->size() != 1 or r_send_resp->back() != static_cast<std::uint8_t>(proto::ack_response)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "ack_response");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_resp->data(), r_send_resp->size(), ESP_LOG_ERROR);
@@ -336,7 +337,7 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (auto r_req_cmd = _ini->communicate(mlab::bin_data::chain(proto::req_command), 5s); r_req_cmd) {
+        if (auto r_req_cmd = _ini->communicate(mlab::bin_data::chain(proto::req_command), default_timeout); r_req_cmd) {
             if (r_req_cmd->empty() or r_req_cmd->back() != static_cast<std::uint8_t>(proto::send_command)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_cmd->data(), r_req_cmd->size(), ESP_LOG_ERROR);
@@ -356,7 +357,7 @@ namespace ka::p2p {
             return ka::rpc::error::transport_error;
         }
         // Perform everything as a two-stroke engine triggered by the initiator
-        if (auto r_req_resp = _ini->communicate(mlab::bin_data::chain(proto::req_response), 5s); r_req_resp) {
+        if (auto r_req_resp = _ini->communicate(mlab::bin_data::chain(proto::req_response), default_timeout); r_req_resp) {
             if (r_req_resp->empty() or r_req_resp->back() != static_cast<std::uint8_t>(proto::send_response)) {
                 ESP_LOGE("P2P", "Expected: %s, got:", "send_response");
                 ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_resp->data(), r_req_resp->size(), ESP_LOG_ERROR);
