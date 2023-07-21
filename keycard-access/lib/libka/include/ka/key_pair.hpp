@@ -74,7 +74,7 @@ namespace ka {
         explicit key_pair(sec_key sk);
         explicit key_pair(raw_sec_key sec_key_raw);
         explicit key_pair(mlab::range<std::uint8_t const *> sec_key_raw);
-        key_pair(pwhash_t, std::string const &password);
+        key_pair(pwhash_t, std::string_view password);
 
         [[nodiscard]] pub_key drop_secret_key() const;
 
@@ -85,7 +85,7 @@ namespace ka {
         [[nodiscard]] bool is_valid() const;
 
         void generate_random();
-        void generate_from_pwhash(std::string const &password);
+        void generate_from_pwhash(std::string_view password);
     };
 
 }// namespace ka

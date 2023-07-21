@@ -122,7 +122,7 @@ namespace ka {
         }
     }
 
-    key_pair::key_pair(pwhash_t, std::string const &password) : key_pair{} {
+    key_pair::key_pair(pwhash_t, std::string_view password) : key_pair{} {
         generate_from_pwhash(password);
     }
 
@@ -160,7 +160,7 @@ namespace ka {
         }
     }
 
-    void key_pair::generate_from_pwhash(std::string const &password) {
+    void key_pair::generate_from_pwhash(std::string_view password) {
         static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
         if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
             password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
