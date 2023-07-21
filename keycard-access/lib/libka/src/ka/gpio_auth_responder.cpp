@@ -76,6 +76,7 @@ namespace ka {
 
             void async_hold() {
                 std::thread t{&gpio_responder_global_config::hold, this};
+                t.detach();
             }
 
             [[nodiscard]] static gpio_responder_global_config &instance() {
