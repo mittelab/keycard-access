@@ -15,12 +15,18 @@
 using namespace std::chrono_literals;
 
 void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
-    ka::keymaker km{ka::nvs::instance().open_default_partition(), std::move(ctrl)};
-
     ESP_LOGI(TAG, "Waiting 2s to ensure the serial is attached and visible...");
     std::this_thread::sleep_for(2s);
 
     ka::console console;
+
+    std::optional<std::string> password;
+    do {
+        std::printf("Please enter the password to unlock this keymaker:");
+        password = console.read_line();
+    } while (password == std::nullopt);
+
+    ka::keymaker km{ka::nvs::instance().open_default_partition(), std::move(ctrl), std::move(*password)};
     ka::cmd::shell sh;
     sh.register_help_command();
     km.register_commands(sh);

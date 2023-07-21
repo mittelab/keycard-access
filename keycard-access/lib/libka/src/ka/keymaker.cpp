@@ -32,9 +32,12 @@ namespace ka {
         }
     }
 
-    keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
-        : device{partition},
-          _ctrl{std::move(ctrl)} {
+    void keymaker::setup_ns_and_rf(std::shared_ptr<nvs::partition> const &partition) {
+        if (partition) {
+            if (_gate_ns = partition->open_namespc("ka-gates"); _gate_ns) {
+                _gates = keymaker_gate_data::load_from(*_gate_ns);
+            }
+        }
         // Turn off the field, we will turn it on on-demand
         if (_ctrl) {
             void([&]() -> pn532::result<> {
@@ -42,12 +45,18 @@ namespace ka {
                 return mlab::result_success;
             }());
         }
-        if (not partition) {
-            return;
-        }
-        if (_gate_ns = partition->open_namespc("ka-gates"); _gate_ns) {
-            _gates = keymaker_gate_data::load_from(*_gate_ns);
-        }
+    }
+
+    keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl, std::string_view password)
+        : device{partition, password},
+          _ctrl{std::move(ctrl)} {
+        setup_ns_and_rf(partition);
+    }
+
+    keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
+        : device{partition},
+          _ctrl{std::move(ctrl)} {
+        setup_ns_and_rf(partition);
     }
 
     keymaker::keymaker(key_pair kp)

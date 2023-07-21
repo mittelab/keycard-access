@@ -36,12 +36,20 @@ namespace ka {
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
 
+        void setup_ns_and_ota(std::shared_ptr<nvs::partition> const &partition);
         void generate_keys();
+        void load_or_generate_keys();
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
          */
         explicit device(std::shared_ptr<nvs::partition> const &partition);
+
+        /**
+         * Construct a device loading it from the NVS, but using password hashing for the key pair.
+         * All changes but the key pair will be persisted.
+         */
+        explicit device(std::shared_ptr<nvs::partition> const &partition, std::string_view password);
 
         /**
          * Construct a device the given key pair. Testing purposes, changes will not be persisted

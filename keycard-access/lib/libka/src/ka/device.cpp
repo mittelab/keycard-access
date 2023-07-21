@@ -15,21 +15,27 @@ using namespace ka::cmd_literals;
 namespace ka {
 
     device::device(std::shared_ptr<nvs::partition> const &partition) : device{} {
+        setup_ns_and_ota(partition);
+        load_or_generate_keys();
+    }
+
+    device::device(std::shared_ptr<nvs::partition> const &partition, std::string_view password) : device{} {
+        setup_ns_and_ota(partition);
+        _kp = key_pair{pwhash, password};
+        ESP_LOGI(TAG, "Loaded key pair; public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
+    }
+
+    device::device(key_pair kp) {
+        _kp = kp;
+    }
+
+    void device::setup_ns_and_ota(const std::shared_ptr<nvs::partition> &partition) {
         _ota = std::make_unique<ota_watch>();
         if (partition) {
             _device_ns = partition->open_namespc("ka-device");
         }
         if (_device_ns) {
-            if (const auto r = _device_ns->get_parse_blob<key_pair>("secret-key"); r) {
-                _kp = *r;
-                ESP_LOGI(TAG, "Loaded key pair; public key:");
-                ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
-            } else if (r.error() == nvs::error::not_found) {
-                generate_keys();
-            } else {
-                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "secret key", to_string(r.error()));
-                generate_keys();
-            }
             // Now get update stuff
             if (const auto r = _device_ns->get_str("update-channel"); r) {
                 _ota->set_update_channel(*r);
@@ -48,13 +54,21 @@ namespace ka {
             } else {
                 ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update enable flag", to_string(r.error()));
             }
-        } else {
-            generate_keys();
         }
     }
 
-    device::device(key_pair kp) {
-        _kp = kp;
+    void device::load_or_generate_keys() {
+        if (_device_ns) {
+            if (const auto r = _device_ns->get_parse_blob<key_pair>("secret-key"); r) {
+                _kp = *r;
+                ESP_LOGI(TAG, "Loaded key pair; public key:");
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
+                return;
+            } else if (r.error() != nvs::error::not_found) {
+                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "secret key", to_string(r.error()));
+            }
+        }
+        generate_keys();
     }
 
     void device::generate_keys() {
