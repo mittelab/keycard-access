@@ -9,6 +9,7 @@ namespace ut {
     void test_p2p_comm();
     void test_p2p_registration();
     void test_rpc();
+    void test_rpc_gate();
 }
 
 #endif//KEYCARD_ACCESS_TEST_P2P_HPP

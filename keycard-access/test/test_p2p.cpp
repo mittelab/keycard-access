@@ -414,4 +414,254 @@ namespace ut {
             local_serve.join();
         }
     }
+
+    void test_rpc_gate() {
+        ka::gate g{bundle.g0_kp};
+        ka::keymaker km{bundle.km_kp};
+        auto base_loop = std::make_shared<p2p_loopback>();
+        secure_p2p_loopback loop{base_loop, km, g};
+
+        ka::p2p::v2::local_gate lg{g, loop.initiator};
+        ka::p2p::v2::remote_gate rg{loop.target};
+
+        TEST_ASSERT(loop.initiator->did_handshake());
+        TEST_ASSERT(loop.target->did_handshake());
+
+        ka::wifi::instance().set_max_attempts(1);
+
+        std::thread local_serve{&ka::p2p::v2::local_gate::serve_loop, &lg};
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_fw_info");
+            auto r = rg.get_fw_info();
+            TEST_ASSERT(r);
+            if (r) {
+                auto orig = g.get_firmware_info();
+                TEST_ASSERT(r->semantic_version == orig.semantic_version);
+                TEST_ASSERT(r->commit_info == orig.commit_info);
+                TEST_ASSERT(r->app_name == orig.app_name);
+                TEST_ASSERT(r->platform_code == orig.platform_code);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_update_settings");
+            auto r = rg.get_update_settings();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(r->update_channel == g.update_channel());
+                TEST_ASSERT(r->enable_automatic_update == g.updates_automatically());
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_wifi_status");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KA-WIFI"}};
+            auto r = rg.get_wifi_status();
+            TEST_ASSERT(r);
+            if (r) {
+                auto orig_ssid = g.wifi_get_ssid();
+                if (orig_ssid) {
+                    TEST_ASSERT(r->ssid == *orig_ssid);
+                    TEST_ASSERT(r->operational == g.wifi_test());
+                } else {
+                    TEST_ASSERT(r->ssid.empty());
+                    TEST_ASSERT(not r->operational);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "is_updating");
+            auto r = rg.is_updating();
+            TEST_ASSERT(r);
+            if (r) {
+                auto orig = g.is_updating();
+                TEST_ASSERT(r->updating_from == orig.updating_from);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_gpio_config");
+            auto r = rg.get_gpio_config();
+            TEST_ASSERT(r);
+            if (r) {
+                auto orig = ka::gpio_responder_config::get_global_config();
+                TEST_ASSERT(r->level == orig.level);
+                TEST_ASSERT(r->gpio == orig.gpio);
+                TEST_ASSERT(r->hold_time == orig.hold_time);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_registration_info");
+            auto r = rg.get_registration_info();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(r->keymaker_pk == g.keymaker_pk());
+                TEST_ASSERT(r->pk == g.public_info().pk);
+                TEST_ASSERT(r->id == g.public_info().id);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "get_backend_url (future feature)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
+            auto r = rg.get_backend_url();
+            TEST_ASSERT(r);
+            if (r) {
+                // So far is unimplemented.
+                TEST_ASSERT(r->empty());
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "check_for_updates");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
+            auto r = rg.check_for_updates();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+                if (*r) {
+                    TEST_ASSERT(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
+                    TEST_ASSERT((**r).firmware_url.empty());
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "set_update_settings (noop in test)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
+            auto r = rg.set_update_settings("https://foo.bar", true);
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(not *r);
+                if (not *r) {
+                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_argument);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "update_manually (noop in test)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
+            auto r = rg.update_manually("https://foo.bar");
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "update_now (noop in test)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
+            auto r = rg.update_now();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+                if (*r) {
+                    TEST_ASSERT(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
+                    TEST_ASSERT((**r).firmware_url.empty());
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "connect_wifi (non existent ssid)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KA-WIFI"}};
+            auto r = rg.connect_wifi("non existent", "wifi");
+            TEST_ASSERT(ka::wifi::instance().get_ssid() == "non existent");
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+                if (*r) {
+                    TEST_ASSERT(not **r);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "register_gate");
+            auto r = rg.register_gate(ka::gate_id{42});
+            TEST_ASSERT(r);
+            // Test that it fails afterward
+            r = rg.register_gate(ka::gate_id{42});
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(not *r);
+                if (not *r) {
+                    TEST_ASSERT((*r).error() == ka::p2p::v2::error::invalid_operation);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "set_backend_url (future feature)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
+            auto r = rg.set_backend_url("foo", "bar");
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(not *r);
+                if (not *r) {
+                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "set_gpio_config");
+            auto r = rg.set_gpio_config(ka::gpio_responder_config{GPIO_NUM_MAX, false, 42ms});
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+                if (*r) {
+                    auto orig = ka::gpio_responder_config::get_global_config();
+                    TEST_ASSERT(orig.level == false);
+                    TEST_ASSERT(orig.hold_time == 42ms);
+                    TEST_ASSERT(orig.gpio == GPIO_NUM_MAX);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "reset_gate");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"GATE"}};
+            auto r = rg.reset_gate();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(*r);
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "set_backend_url (not configured)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
+            auto r = rg.set_backend_url("foo", "bar");
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(not *r);
+                if (not *r) {
+                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                }
+            }
+        }
+
+        {
+            ESP_LOGI("UT", "Testing %s", "reset_gate (not configured)");
+            desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
+            auto r = rg.reset_gate();
+            TEST_ASSERT(r);
+            if (r) {
+                TEST_ASSERT(not *r);
+                if (not *r) {
+                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                }
+            }
+        }
+
+        TEST_ASSERT(rg.disconnect());
+
+        local_serve.join();
+    }
+
 }// namespace ut
