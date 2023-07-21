@@ -10,8 +10,6 @@ extern "C" void app_main() {
     RUN_TEST(ut::test_nvs);
     RUN_TEST(ut::test_encrypt_decrypt);
 
-    RUN_TEST(ut::test_p2p_comm);
-    RUN_TEST(ut::test_p2p_registration);
     RUN_TEST(ut::test_rpc);
     RUN_TEST(ut::test_rpc_gate);
     RUN_TEST(ut::test_rpc_registration);

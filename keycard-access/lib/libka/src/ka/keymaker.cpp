@@ -17,11 +17,6 @@
 #define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
-    namespace p2p {
-        template <class T>
-        concept remote_gate_protocol = std::is_base_of_v<remote_gate_base, T>;
-    }
-
     using namespace ka::cmd_literals;
 
     const char *to_string(gate_status gs) {
@@ -36,7 +31,6 @@ namespace ka {
                 return "unknown";
         }
     }
-
 
     keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
         : device{partition},
