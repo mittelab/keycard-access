@@ -664,4 +664,53 @@ namespace ut {
         local_serve.join();
     }
 
+    void test_rpc_registration() {
+        desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {"GATE", "P2P"}};
+
+        ka::keymaker km1{bundle.km_kp};
+        ka::keymaker km2{ka::key_pair{ka::pwhash, "foobar"}};
+        ka::gate g{bundle.g0_kp};
+
+        auto base_loop1 = std::make_shared<p2p_loopback>();
+        auto base_loop2 = std::make_shared<p2p_loopback>();
+
+        secure_p2p_loopback loop1{base_loop1, km1, g};
+        secure_p2p_loopback loop2{base_loop2, km2, g};
+
+        ka::p2p::v2::remote_gate rg1{loop1.target};
+        ka::p2p::v2::local_gate lg1{g, loop1.initiator};
+
+        ka::p2p::v2::remote_gate rg2{loop2.target};
+        ka::p2p::v2::local_gate lg2{g, loop2.initiator};
+
+        std::thread t1{[&]() { lg1.serve_loop(); }};
+        std::thread t2{[&]() { lg2.serve_loop(); }};
+
+        auto is_unauthorized = [](auto const &r) { return r and not *r and r->error() == ka::p2p::v2::error::unauthorized; };
+        auto is_invalid = [](auto const &r) { return r and not *r and r->error() == ka::p2p::v2::error::invalid_operation; };
+
+        // Do the setup with km1
+        TEST_ASSERT(rg1.get_fw_info());
+        TEST_ASSERT(rg1.register_gate(ka::gate_id{11}));
+        TEST_ASSERT(is_invalid(rg1.register_gate(ka::gate_id{11})));
+
+        // Attempt to register with km2
+        TEST_ASSERT(rg2.get_fw_info());
+        TEST_ASSERT(is_invalid(rg2.register_gate(ka::gate_id{12})));
+        TEST_ASSERT(is_unauthorized(rg2.reset_gate()));
+        TEST_ASSERT(is_unauthorized(rg2.connect_wifi("foo", "bar")));
+        TEST_ASSERT(is_unauthorized(rg2.set_update_settings("foo", false)));
+
+        // Reset with km1
+        TEST_ASSERT(rg1.reset_gate());
+        TEST_ASSERT(rg2.register_gate(ka::gate_id{11}));
+
+        // Good.
+        rg1.disconnect();
+        rg2.disconnect();
+
+        t1.join();
+        t2.join();
+    }
+
 }// namespace ut
