@@ -201,6 +201,7 @@ namespace ka::p2p::v2 {
             g.update_manually(from);
         };
         std::thread upd_th{body};
+        upd_th.detach();
         return mlab::result_success;
     }
 
@@ -231,6 +232,7 @@ namespace ka::p2p::v2 {
                 g.update_manually(from);
             };
             std::thread upd_th{body};
+            upd_th.detach();
             return *ri;
         } else {
             return release_info{};
