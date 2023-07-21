@@ -659,7 +659,7 @@ namespace ut {
             }
         }
 
-        TEST_ASSERT(rg.disconnect());
+        TEST_ASSERT(rg.bye());
 
         local_serve.join();
     }
@@ -706,8 +706,8 @@ namespace ut {
         TEST_ASSERT(rg2.register_gate(ka::gate_id{11}));
 
         // Good.
-        rg1.disconnect();
-        rg2.disconnect();
+        rg1.bye();
+        rg2.bye();
 
         t1.join();
         t2.join();

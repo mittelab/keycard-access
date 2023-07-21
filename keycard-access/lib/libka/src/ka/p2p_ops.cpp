@@ -335,7 +335,7 @@ namespace ka::p2p::v2 {
         return _b.remote_invoke_unique(&local_gate::connect_wifi, ssid, password);
     }
 
-    rpc::r<> remote_gate::disconnect() {
+    rpc::r<> remote_gate::bye() {
         return _b.remote_invoke_unique(&local_gate::disconnect);
     }
 }
