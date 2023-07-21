@@ -22,7 +22,7 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
 
     std::optional<std::string> password;
     do {
-        std::printf("Please enter the password to unlock this keymaker:");
+        std::printf("Please enter the password to unlock this keymaker:\n");
         password = console.read_line();
     } while (password == std::nullopt);
 
