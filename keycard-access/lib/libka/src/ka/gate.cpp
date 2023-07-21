@@ -241,7 +241,7 @@ namespace ka {
     }
 
     void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory) {
-        pn532::p2p::pn532_initiator raw_initiator{ctrl, logical_idx};
+        auto raw_initiator = std::make_shared<pn532::p2p::pn532_initiator>(ctrl, logical_idx);
         p2p::secure_initiator sec_initiator{raw_initiator, keys()};
         if (not sec_initiator.handshake()) {
             ESP_LOGE(TAG, "Unable to handshake with P2P peer.");

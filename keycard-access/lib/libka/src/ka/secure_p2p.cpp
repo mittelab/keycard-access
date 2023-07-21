@@ -11,11 +11,11 @@ namespace ka::p2p {
     static_assert(raw_pub_key::array_size == crypto_kx_PUBLICKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_kx_SECRETKEYBYTES);
 
-    secure_initiator::secure_initiator(initiator &raw_layer, key_pair kp)
-        : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
+    secure_initiator::secure_initiator(std::shared_ptr<initiator> raw_layer, key_pair kp)
+        : _raw_layer{std::move(raw_layer)}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
-    secure_target::secure_target(target &raw_layer, key_pair kp)
-        : _raw_layer{&raw_layer}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
+    secure_target::secure_target(std::shared_ptr<target> raw_layer, key_pair kp)
+        : _raw_layer{std::move(raw_layer)}, _tx{}, _rx{}, _hdr{}, _did_handshake{false}, _kp{kp} {}
 
     result<pub_key> secure_target::handshake(ms timeout) {
         if (_did_handshake) {

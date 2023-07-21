@@ -126,7 +126,7 @@ namespace ka {
 
     class keymaker::gate_channel {
         std::shared_ptr<pn532::controller> _ctrl = {};
-        std::unique_ptr<pn532::p2p::pn532_target> _raw_target = {};
+        std::shared_ptr<pn532::p2p::pn532_target> _raw_target = {};
         std::unique_ptr<p2p::secure_target> _sec_target = {};
         std::unique_ptr<p2p::remote_gate_base> _remote_gate = {};
         unsigned _remote_proto_version = std::numeric_limits<unsigned>::max();
@@ -138,7 +138,7 @@ namespace ka {
         explicit gate_channel(std::shared_ptr<pn532::controller> ctrl) {
             _ctrl = std::move(ctrl);
             if (_ctrl) {
-                _raw_target = std::make_unique<pn532::p2p::pn532_target>(*_ctrl);
+                _raw_target = std::make_shared<pn532::p2p::pn532_target>(*_ctrl);
             }
         }
 
@@ -172,7 +172,7 @@ namespace ka {
                 return p2p::channel_error_to_p2p_error(r_rf_on.error());
             }
             if (const auto r_init = _raw_target->init_as_dep_target(nfcid_data); r_init) {
-                _sec_target = std::make_unique<p2p::secure_target>(*_raw_target, kp);
+                _sec_target = std::make_unique<p2p::secure_target>(_raw_target, kp);
                 if (const auto r_hshake = _sec_target->handshake(); r_hshake) {
                     const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key().raw_pk());
                     ESP_LOGI(TAG, "Connected to peer with public key %s", pk_s.c_str());

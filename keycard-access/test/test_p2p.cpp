@@ -49,14 +49,13 @@ namespace ut {
         };
     }// namespace
 
-    struct secure_p2p_loopback : p2p_loopback {
+    struct secure_p2p_loopback {
         ka::p2p::secure_initiator initiator;
         ka::p2p::secure_target target;
 
-        secure_p2p_loopback(ka::key_pair const &km_keys, ka::key_pair const &g_keys)
-            : p2p_loopback{},
-              initiator{*this, g_keys},
-              target{*this, km_keys} {
+        secure_p2p_loopback(std::shared_ptr<p2p_loopback> loop, ka::key_pair const &km_keys, ka::key_pair const &g_keys)
+            : initiator{loop, g_keys},
+              target{loop, km_keys} {
             std::thread t{[&]() {
                 TEST_ASSERT(initiator.handshake(5s));
             }};
@@ -64,7 +63,7 @@ namespace ut {
             t.join();
         }
 
-        secure_p2p_loopback(ka::keymaker const &km, ka::gate const &g) : secure_p2p_loopback{km.keys(), g.keys()} {}
+        secure_p2p_loopback(std::shared_ptr<p2p_loopback> loop, ka::keymaker const &km, ka::gate const &g) : secure_p2p_loopback{std::move(loop), km.keys(), g.keys()} {}
     };
 
     namespace {
@@ -149,7 +148,8 @@ namespace ut {
     void test_p2p_comm() {
         ka::gate g{bundle.g0_kp};
         ka::keymaker km{bundle.km_kp};
-        secure_p2p_loopback loop{km, g};
+        auto base_loop = std::make_shared<p2p_loopback>();
+        secure_p2p_loopback loop{base_loop, km, g};
         assertive_local_gate lg{loop.initiator, g};
         ka::p2p::v0::remote_gate rg{loop.target};
 
@@ -296,8 +296,11 @@ namespace ut {
         ka::keymaker km2{ka::key_pair{ka::pwhash, "foobar"}};
         ka::gate g{bundle.g0_kp};
 
-        secure_p2p_loopback loop1{km1, g};
-        secure_p2p_loopback loop2{km2, g};
+        auto base_loop1 = std::make_shared<p2p_loopback>();
+        auto base_loop2 = std::make_shared<p2p_loopback>();
+
+        secure_p2p_loopback loop1{base_loop1, km1, g};
+        secure_p2p_loopback loop2{base_loop2, km2, g};
 
         ka::p2p::v0::remote_gate rg1{loop1.target};
         ka::p2p::v0::local_gate lg1{loop1.initiator, g};

@@ -27,7 +27,7 @@ namespace ka::p2p {
     using header = mlab::tagged_array<header_tag, crypto_secretstream_xchacha20poly1305_HEADERBYTES>;
 
     class secure_initiator : public initiator {
-        initiator *_raw_layer = nullptr;
+        std::shared_ptr<initiator> _raw_layer = nullptr;
         crypto_secretstream_xchacha20poly1305_state _tx{};
         crypto_secretstream_xchacha20poly1305_state _rx{};
         header _hdr{};
@@ -43,7 +43,7 @@ namespace ka::p2p {
         secure_initiator &operator=(secure_initiator const &) = delete;
         secure_initiator &operator=(secure_initiator &&) noexcept = default;
 
-        secure_initiator(initiator &raw_layer, key_pair kp);
+        secure_initiator(std::shared_ptr<initiator> raw_layer, key_pair kp);
 
         result<pub_key> handshake(ms timeout = 1s);
 
@@ -54,7 +54,7 @@ namespace ka::p2p {
     };
 
     class secure_target : public target {
-        target *_raw_layer = nullptr;
+        std::shared_ptr<target> _raw_layer = nullptr;
         crypto_secretstream_xchacha20poly1305_state _tx{};
         crypto_secretstream_xchacha20poly1305_state _rx{};
         header _hdr{};
@@ -70,7 +70,7 @@ namespace ka::p2p {
         secure_target &operator=(secure_target const &) = delete;
         secure_target &operator=(secure_target &&) noexcept = default;
 
-        secure_target(target &raw_layer, key_pair kp);
+        secure_target(std::shared_ptr<target> raw_layer, key_pair kp);
 
         result<pub_key> handshake(ms timeout = 1s);
 
