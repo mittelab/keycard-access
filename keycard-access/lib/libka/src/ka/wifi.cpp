@@ -311,8 +311,11 @@ namespace ka {
         std::unique_lock<std::mutex> lock{_status_change_mutex};
         mlab::reduce_timeout rt{timeout.count() > 0 ? timeout : std::numeric_limits<std::chrono::milliseconds>::max()};
         wifi_status retval = status();
-        for (; rt and retval == old; _status_change.wait_for(lock, rt.remaining())) {
+        for (; rt; _status_change.wait_for(lock, rt.remaining())) {
             retval = status();
+            if (retval != old) {
+                break;
+            }
         }
         return retval;
     }
