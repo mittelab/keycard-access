@@ -109,19 +109,22 @@ namespace ka::p2p::v2 {
         _b.register_command(&local_gate::get_gpio_config, *this);
         _b.register_command(&local_gate::get_backend_url, *this);
         _b.register_command(&local_gate::get_registration_info, *this);
-        _b.register_command(&local_gate::check_for_updates, *this);
         _b.register_command(&local_gate::register_gate, *this);
         _b.register_command(&local_gate::set_update_settings, *this);
         _b.register_command(&local_gate::update_manually, *this);
         _b.register_command(&local_gate::set_backend_url, *this);
         _b.register_command(&local_gate::set_gpio_config, *this);
         _b.register_command(&local_gate::reset_gate, *this);
-        _b.register_command(&local_gate::update_now, *this);
         _b.register_command(&local_gate::connect_wifi, *this);
+        // These two have the same signature, so we must disambiguate manually
+        _b.register_command(&local_gate::check_for_updates, *this, "check_for_updates");
+        _b.register_command(&local_gate::update_now, *this, "update_now");
     }
 
     void local_gate::serve_loop() {
-        _b.serve_loop();
+        if (_sec_layer->handshake()) {
+            _b.serve_loop();
+        }
     }
 
     pub_key local_gate::peer_pub_key() const {
@@ -258,7 +261,12 @@ namespace ka::p2p::v2 {
     remote_gate::remote_gate(std::shared_ptr<secure_target> target)
         : _sec_layer{std::move(target)},
           _b{std::make_unique<target_bridge_interface>(_sec_layer)}
-    {}
+    {
+        void([&]() -> pn532::result<> {
+            TRY(_sec_layer->handshake());
+            return mlab::result_success;
+        }());
+    }
 
     rpc::r<fw_info> remote_gate::get_fw_info() const {
         return _b.remote_invoke_unique(&local_gate::get_fw_info);
@@ -289,7 +297,7 @@ namespace ka::p2p::v2 {
     }
 
     rpc::r<r<release_info>> remote_gate::check_for_updates() {
-        return _b.remote_invoke_unique(&local_gate::check_for_updates);
+        return _b.remote_invoke(&local_gate::check_for_updates, "check_for_updates");
     }
 
     rpc::r<r<gate_base_key>> remote_gate::register_gate(gate_id requested_id) {
@@ -317,7 +325,7 @@ namespace ka::p2p::v2 {
     }
 
     rpc::r<r<release_info>> remote_gate::update_now() {
-        return _b.remote_invoke_unique(&local_gate::update_now);
+        return _b.remote_invoke(&local_gate::update_now, "update_now");
     }
 
     rpc::r<r<bool>> remote_gate::connect_wifi(std::string_view ssid, std::string_view password) {

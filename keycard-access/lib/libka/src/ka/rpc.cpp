@@ -8,6 +8,9 @@
 
 using namespace std::chrono_literals;
 
+#undef MLAB_RESULT_LOG_PREFIX
+#define MLAB_RESULT_LOG_PREFIX "RPC"
+
 namespace ka::rpc {
 
 
