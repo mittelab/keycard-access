@@ -50,16 +50,16 @@ namespace ut {
     }// namespace
 
     struct secure_p2p_loopback {
-        ka::p2p::secure_initiator initiator;
-        ka::p2p::secure_target target;
+        std::shared_ptr<ka::p2p::secure_initiator> initiator;
+        std::shared_ptr<ka::p2p::secure_target> target;
 
         secure_p2p_loopback(std::shared_ptr<p2p_loopback> loop, ka::key_pair const &km_keys, ka::key_pair const &g_keys)
-            : initiator{loop, g_keys},
-              target{loop, km_keys} {
+            : initiator{std::make_shared<ka::p2p::secure_initiator>(loop, g_keys)},
+              target{std::make_shared<ka::p2p::secure_target>(loop, km_keys)} {
             std::thread t{[&]() {
-                TEST_ASSERT(initiator.handshake(5s));
+                TEST_ASSERT(initiator->handshake(5s));
             }};
-            TEST_ASSERT(target.handshake(5s));
+            TEST_ASSERT(target->handshake(5s));
             t.join();
         }
 
@@ -150,11 +150,11 @@ namespace ut {
         ka::keymaker km{bundle.km_kp};
         auto base_loop = std::make_shared<p2p_loopback>();
         secure_p2p_loopback loop{base_loop, km, g};
-        assertive_local_gate lg{loop.initiator, g};
-        ka::p2p::v0::remote_gate rg{loop.target};
+        assertive_local_gate lg{*loop.initiator, g};
+        ka::p2p::v0::remote_gate rg{*loop.target};
 
-        TEST_ASSERT(loop.initiator.did_handshake());
-        TEST_ASSERT(loop.target.did_handshake());
+        TEST_ASSERT(loop.initiator->did_handshake());
+        TEST_ASSERT(loop.target->did_handshake());
 
         std::thread t{[&]() { lg.serve_loop(); }};
 
@@ -302,11 +302,11 @@ namespace ut {
         secure_p2p_loopback loop1{base_loop1, km1, g};
         secure_p2p_loopback loop2{base_loop2, km2, g};
 
-        ka::p2p::v0::remote_gate rg1{loop1.target};
-        ka::p2p::v0::local_gate lg1{loop1.initiator, g};
+        ka::p2p::v0::remote_gate rg1{*loop1.target};
+        ka::p2p::v0::local_gate lg1{*loop1.initiator, g};
 
-        ka::p2p::v0::remote_gate rg2{loop2.target};
-        ka::p2p::v0::local_gate lg2{loop2.initiator, g};
+        ka::p2p::v0::remote_gate rg2{*loop2.target};
+        ka::p2p::v0::local_gate lg2{*loop2.initiator, g};
 
         std::thread t1{[&]() { lg1.serve_loop(); }};
         std::thread t2{[&]() { lg2.serve_loop(); }};
