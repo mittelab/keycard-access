@@ -40,8 +40,7 @@ namespace ka::rpc {
         mismatching_signature,
         transport_error,
         channel_error,
-        invalid_argument,
-        app_specific_error
+        invalid_argument
     };
 
     template <class ...Args>
@@ -87,14 +86,8 @@ namespace ka::rpc {
         [[nodiscard]] r<mlab::bin_data> invoke_with_tuple(std::index_sequence<Is...>, deserialized_args_tuple_t<Args...> t);
     };
 
-    struct bridge_remote_interface {
-        virtual ~bridge_remote_interface() = default;
-
-        [[nodiscard]] virtual r<mlab::bin_data> command_response(mlab::bin_data const &cmd) = 0;
-    };
-
-    struct bridge_local_interface {
-        virtual ~bridge_local_interface() = default;
+    struct bridge_interface_base {
+        virtual ~bridge_interface_base() = default;
 
         [[nodiscard]] virtual r<mlab::bin_data> receive() = 0;
         [[nodiscard]] virtual r<> send(mlab::bin_data const &rsp) = 0;
@@ -102,8 +95,7 @@ namespace ka::rpc {
 
     class bridge {
         std::map<std::string, std::unique_ptr<command_base>> _cmds;
-        std::unique_ptr<bridge_remote_interface> _remote_if;
-        std::unique_ptr<bridge_local_interface> _local_if;
+        std::unique_ptr<bridge_interface_base> _if;
         bool _serve_stop = false;
 
         [[nodiscard]] r<std::string_view> register_command(std::string uuid, std::unique_ptr<command_base> cmd);
@@ -118,7 +110,7 @@ namespace ka::rpc {
     public:
         bridge() = default;
 
-        explicit bridge(std::unique_ptr<bridge_remote_interface> remote_if, std::unique_ptr<bridge_local_interface> local_if);
+        explicit bridge(std::unique_ptr<bridge_interface_base> if_);
 
         bridge(bridge const &) = delete;
         bridge &operator=(bridge const &) = delete;

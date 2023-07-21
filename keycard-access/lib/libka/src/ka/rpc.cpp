@@ -16,8 +16,7 @@ namespace ka::rpc {
 
     command_base::command_base(std::string signature_) : signature{std::move(signature_)} {}
 
-    bridge::bridge(std::unique_ptr<bridge_remote_interface> remote_if, std::unique_ptr<bridge_local_interface> local_if)
-        : _remote_if{std::move(remote_if)}, _local_if{std::move(local_if)} {}
+    bridge::bridge(std::unique_ptr<bridge_interface_base> if_) : _if{std::move(if_)} {}
 
     r<std::string_view> bridge::register_command(std::string uuid, std::unique_ptr<command_base> cmd) {
         auto it = _cmds.lower_bound(uuid);
@@ -30,23 +29,26 @@ namespace ka::rpc {
 
 
     r<mlab::bin_data> bridge::command_response(mlab::bin_data const &payload) const {
-        if (_remote_if == nullptr) {
+        if (_if == nullptr) {
             return error::transport_error;
         } else {
-            return _remote_if->command_response(payload);
+            if (const auto r = _if->send(payload); not r) {
+                return r.error();
+            }
+            return _if->receive();
         }
     }
 
     r<> bridge::serve_loop() {
         _serve_stop = false;
-        if (_local_if == nullptr) {
+        if (_if == nullptr) {
             return error::transport_error;
         }
         while (not _serve_stop) {
             error e{};
-            if (auto r_rcv = _local_if->receive(); r_rcv) {
+            if (auto r_rcv = _if->receive(); r_rcv) {
                 if (auto r_rsp = local_invoke(*r_rcv); r_rsp) {
-                    if (auto r_txf = _local_if->send(*r_rsp); r_txf) {
+                    if (auto r_txf = _if->send(*r_rsp); r_txf) {
                         continue;
                     } else {
                         e = r_txf.error();
