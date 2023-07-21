@@ -375,22 +375,13 @@ namespace ka::rpc {
 
     template <class R, class T, class... Args>
     result_wrap_return<R> bridge::remote_invoke_unique(R (T::*method)(Args...) const, Args... args) {
-        if (const auto r = lookup_uuid(method); not r) {
-            return r.error();
-        } else {
-            return remote_invoke(method, *r, std::forward<Args>(args)...);
-        }
+        return remote_invoke(method, signature_of(method), std::forward<Args>(args)...);
     }
 
     template <class R, class T, class... Args>
     result_wrap_return<R> bridge::remote_invoke_unique(R (T::*method)(Args...), Args... args) {
-        if (const auto r = lookup_uuid(method); not r) {
-            return r.error();
-        } else {
-            return remote_invoke(method, *r, std::forward<Args>(args)...);
-        }
+        return remote_invoke(method, signature_of(method), std::forward<Args>(args)...);
     }
-
 
     template <class R, class T, class... Args>
     result_wrap_return<R> bridge::remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args) {
