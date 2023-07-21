@@ -107,6 +107,17 @@ build esp32 keymaker firmware:
     PIO_ENV: esp32-keymaker
 
 
+build esp32 gate firmware:
+  <<: *build-template
+  script:
+    - pio run -e ${PIO_ENV}
+  rules:
+    - when: always
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+    PIO_ENV: esp32-gate
+
+
 test hardware:
   stage: test
   image: ${CI_REGISTRY}/proj/testinator/esp32:latest
@@ -143,10 +154,10 @@ test hardware:
   script:
     # The package will be releases as Release-PioEnvironment-Tag.Extension, e.g. keycard-access-esp32-1.0.4-beta1.elf
     - >
-      for EXTENSION in bin elf; do
+      for EXTENSION in bin; do
         curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
           --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.${EXTENSION}" \
-          "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-${PIO_ENV}-${VERSION}.${EXTENSION}"
+          "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.${EXTENSION}"
       done
 
 
@@ -156,6 +167,16 @@ upload esp32 keymaker firmware:
     - build esp32 keymaker firmware
   variables:
     PIO_ENV: esp32-keymaker
+    FW_SLUG: ka-keymaker-esp32
+
+
+upload esp32 gate firmware:
+  <<: *upload-template
+  dependencies:
+    - build esp32 gate firmware
+  variables:
+    PIO_ENV: esp32-gate
+    FW_SLUG: ka-keymaker-esp32
 
 
 release:
@@ -165,10 +186,11 @@ release:
   dependencies:
     # NOTE: explicitly list all environments here for which to create a release
     - upload esp32 keymaker firmware
+    - upload esp32 gate firmware
   script:
     # NOTE: explicitly list all environments here for which to create a release, both elf and bin
     # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
     - |
       release-cli create --name "Release $VERSION" --tag-name $CI_COMMIT_TAG \
-        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${VERSION}.elf\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-esp32-${VERSION}.elf\"}" \
-        --assets-link "{\"name\":\"${PIO_PROJ_FOLDER}-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${PIO_PROJ_FOLDER}-esp32-${VERSION}.bin\"}"
+        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.bin\"}" \
+        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.bin\"}"

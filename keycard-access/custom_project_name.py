@@ -14,7 +14,6 @@ def main():
     project_name = env.GetProjectOption("custom_project_name")
     if not project_name:
         project_name = 'keycard-access'
-    env.Replace(PROGNAME=project_name)
     project_name_txt = os.path.join(project_dir, 'project_name.txt')
     with open(project_name_txt, 'wt') as fp:
         print(project_name, file=fp)
