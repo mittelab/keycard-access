@@ -29,8 +29,6 @@ namespace ka::rpc {
     struct serializer {
         static void serialize(mlab::bin_data &bd, T const &t);
         [[nodiscard]] static auto deserialize(mlab::bin_stream &s);
-
-        using deserialize_type_t = decltype(deserialize(std::declval<mlab::bin_stream &>()));
     };
 
     enum struct error : std::uint8_t {
@@ -48,7 +46,7 @@ namespace ka::rpc {
     using r = mlab::result<error, Args...>;
 
     template <class... Args>
-    using deserialized_args_tuple_t = std::tuple<typename serializer<Args>::deserialize_type_t...>;
+    using deserialized_args_tuple_t = std::tuple<decltype(serializer<Args>::deserialize(std::declval<mlab::bin_stream &>()))...>;
 
     template <class... Args>
     [[nodiscard]] std::optional<deserialized_args_tuple_t<Args...>> deserialize(mlab::bin_stream &s);
@@ -239,6 +237,8 @@ namespace ka::rpc {
             bd << mlab::lsb_auto << t;
         } else if constexpr (std::is_same_v<T, std::string_view> or std::is_same_v<T, std::string>) {
             bd << mlab::length_encoded << t;
+        } else if constexpr (std::is_same_v<T, bool>) {
+            bd << t;
         } else {
             static_assert(use_default_serialization<T>::value, "I do not know how to encode this type!");
             static_assert(mlab::is_injectable<T>, "You marked this type for using default serialization, but it's not injectable.");
@@ -256,6 +256,10 @@ namespace ka::rpc {
             std::string retval{};
             s >> mlab::length_encoded >> retval;
             return retval;
+        } else if constexpr (std::is_same_v<T, bool>) {
+            bool b = false;
+            s >> b;
+            return b;
         } else {
             static_assert(use_default_serialization<T>::value, "I do not know how to encode this type!");
             static_assert(mlab::is_extractable<T>, "You marked this type for using default serialization, but it's not extractable.");
