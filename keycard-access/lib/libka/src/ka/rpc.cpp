@@ -186,7 +186,7 @@ namespace ka::p2p {
             ack_response
         };
         constexpr auto default_timeout = 10s;
-    }
+    }// namespace
 
     target_bridge_interface::target_bridge_interface(std::shared_ptr<pn532::p2p::target> tgt) : _tgt{std::move(tgt)} {}
 

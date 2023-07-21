@@ -103,10 +103,10 @@ namespace ka::nvs {
         nvs_handle_t _hdl{};
 
         template <class T>
-        using nvs_getter_t = esp_err_t (*)(nvs_handle_t, const char * , T *);
+        using nvs_getter_t = esp_err_t (*)(nvs_handle_t, const char *, T *);
 
         template <class T>
-        using nvs_sized_getter_t = esp_err_t (*)(nvs_handle_t, const char * , T *, std::size_t *);
+        using nvs_sized_getter_t = esp_err_t (*)(nvs_handle_t, const char *, T *, std::size_t *);
 
         template <class T, nvs_getter_t<T> GetFn>
         [[nodiscard]] r<T> get_known_type(std::string_view key) const;
@@ -154,10 +154,10 @@ namespace ka::nvs {
      */
     class namespc : public const_namespc {
         template <class T>
-        using nvs_setter_t = esp_err_t (*)(nvs_handle_t, const char * , T);
+        using nvs_setter_t = esp_err_t (*)(nvs_handle_t, const char *, T);
 
         template <class T>
-        using nvs_sized_setter_t = esp_err_t (*)(nvs_handle_t, const char * , T *, std::size_t);
+        using nvs_sized_setter_t = esp_err_t (*)(nvs_handle_t, const char *, T *, std::size_t);
 
         template <class T, nvs_setter_t<T> SetFn>
         r<> set_known_type(std::string_view key, T const &value);

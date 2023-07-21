@@ -869,11 +869,9 @@ namespace ka {
                 if (grc.gpio == GPIO_NUM_MAX) {
                     return "on auth: do nothing";
                 } else {
-                    return mlab::concatenate({
-                            "on auth: hold gpio ", parser<gpio_num_t>::to_string(grc.gpio),
-                            grc.level ? " high for " : " low for ",
-                            parser<std::chrono::milliseconds>::to_string(grc.hold_time)
-                    });
+                    return mlab::concatenate({"on auth: hold gpio ", parser<gpio_num_t>::to_string(grc.gpio),
+                                              grc.level ? " high for " : " low for ",
+                                              parser<std::chrono::milliseconds>::to_string(grc.hold_time)});
                 }
             }
         };

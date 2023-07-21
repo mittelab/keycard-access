@@ -17,8 +17,9 @@ namespace ut {
 namespace ka {
     namespace cmd {
         class shell;
-        template <class> struct parser;
-    }
+        template <class>
+        struct parser;
+    }// namespace cmd
 
     struct update_status {
         std::optional<std::string> updating_from = std::nullopt;
@@ -33,12 +34,14 @@ namespace ka {
 
 
         friend struct ut::secure_p2p_loopback;
+
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
 
         void setup_ns_and_ota(std::shared_ptr<nvs::partition> const &partition);
         void generate_keys();
         void load_or_generate_keys();
+
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
@@ -89,11 +92,11 @@ namespace ka {
         struct parser<update_status> {
             [[nodiscard]] static std::string to_string(update_status const &us);
         };
-            template <>
+        template <>
         struct parser<release_info> {
             [[nodiscard]] static std::string to_string(release_info const &ri);
         };
-    }
+    }// namespace cmd
 }// namespace ka
 
 namespace ka {

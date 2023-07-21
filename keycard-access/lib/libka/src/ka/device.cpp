@@ -89,7 +89,6 @@ namespace ka {
                 ESP_LOGE(TAG, "Unable to save secret key! This makes all encrypted data ephemeral!");
             }
         }
-
     }
 
     bool device::updates_automatically() const {

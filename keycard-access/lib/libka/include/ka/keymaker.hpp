@@ -70,13 +70,13 @@ namespace ka {
     [[nodiscard]] constexpr rpc_p2p_error cast_error(rpc::error e);
     [[nodiscard]] constexpr rpc_p2p_error cast_error(p2p::error e);
 
-    template <class ...Args>
+    template <class... Args>
     using rpc_p2p_r = mlab::result<rpc_p2p_error, Args...>;
 
-    template <class ...Args>
+    template <class... Args>
     [[nodiscard]] rpc_p2p_r<Args...> cast_result(rpc::r<Args...> r);
 
-    template <class ...Args>
+    template <class... Args>
     [[nodiscard]] rpc_p2p_r<Args...> cast_result(p2p::r<Args...> r);
 
     class keymaker : public device {
@@ -154,7 +154,7 @@ namespace ka {
 
         void register_commands(ka::cmd::shell &sh) override;
     };
-}
+}// namespace ka
 
 namespace ka {
     constexpr rpc_p2p_error cast_error(rpc::error e) {
@@ -165,7 +165,7 @@ namespace ka {
         return static_cast<rpc_p2p_error>(static_cast<std::uint8_t>(e) | rpc_p2p_bit);
     }
 
-    template <class ...Args>
+    template <class... Args>
     rpc_p2p_r<Args...> cast_result(rpc::r<Args...> r) {
         if (r) {
             return std::move(*r);
@@ -174,7 +174,7 @@ namespace ka {
         }
     }
 
-    template <class ...Args>
+    template <class... Args>
     rpc_p2p_r<Args...> cast_result(p2p::r<Args...> r) {
         if (r) {
             return std::move(*r);

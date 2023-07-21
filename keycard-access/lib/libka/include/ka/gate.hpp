@@ -30,7 +30,7 @@ namespace ka {
 
         template <local_gate_protocol Protocol>
         struct protocol_factory;
-    }
+    }// namespace p2p
 
     class gate;
 

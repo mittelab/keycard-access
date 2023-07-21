@@ -299,4 +299,4 @@ namespace mlab {
         return s;
     }
 
-}
+}// namespace mlab

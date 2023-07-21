@@ -95,6 +95,6 @@ namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::pub_key &pk);
     bin_data &operator<<(bin_data &bd, ka::key_pair const &pk);
     bin_stream &operator>>(bin_stream &s, ka::key_pair &pk);
-}
+}// namespace mlab
 
 #endif//KEYCARDACCESS_KEY_PAIR_HPP

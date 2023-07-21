@@ -328,7 +328,6 @@ namespace ka {
     }
 
 
-
     r<> member_token::delete_gate_file_internal(desfire::app_id aid, desfire::file_id fid, gate_app_master_key const &mkey, bool check_app) {
         if (not gate_id::is_gate_app(aid) or mkey.key_number() != 0) {
             return desfire::error::parameter_error;
