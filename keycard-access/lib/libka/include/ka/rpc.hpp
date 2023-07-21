@@ -42,6 +42,8 @@ namespace ka::rpc {
         invalid_argument
     };
 
+    [[nodiscard]] const char *to_string(error e);
+
     template <class... Args>
     using r = mlab::result<error, Args...>;
 
@@ -153,10 +155,10 @@ namespace ka::rpc {
         [[nodiscard]] r<R> remote_invoke_unique(R (T::*method)(Args...), Args... args);
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke(R (T::*method)(Args...) const, std::string_view uuid, Args... args);
+        [[nodiscard]] r<R> remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args);
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke(R (T::*method)(Args...), std::string_view uuid, Args... args);
+        [[nodiscard]] r<R> remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args);
 
         r<> serve_loop();
 
@@ -384,9 +386,9 @@ namespace ka::rpc {
 
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke(R (T::*method)(Args...) const, std::string_view uuid, Args... args) {
+    r<R> bridge::remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args) {
         mlab::bin_data serialized_args;
-        if constexpr (sizeof...(Args) < 0) {
+        if constexpr (sizeof...(Args) > 0) {
             serialized_args = serialize<Args...>(std::forward<Args>(args)...);
         }
         if (const auto r_invoke = remote_invoke(uuid, serialized_args); r_invoke) {
@@ -409,9 +411,9 @@ namespace ka::rpc {
     }
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke(R (T::*method)(Args...), std::string_view uuid, Args... args) {
+    r<R> bridge::remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args) {
         mlab::bin_data serialized_args;
-        if constexpr (sizeof...(Args) < 0) {
+        if constexpr (sizeof...(Args) > 0) {
             serialized_args = serialize<Args...>(std::forward<Args>(args)...);
         }
         if (const auto r_invoke = remote_invoke(uuid, serialized_args); r_invoke) {

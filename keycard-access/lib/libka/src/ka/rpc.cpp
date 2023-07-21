@@ -10,6 +10,26 @@ using namespace std::chrono_literals;
 
 namespace ka::rpc {
 
+
+    const char *to_string(error e) {
+        switch (e) {
+            case error::parsing_error:
+                return "parsing_error";
+            case error::unknown_command:
+                return "unknown_command";
+            case error::mismatching_signature:
+                return "mismatching_signature";
+            case error::transport_error:
+                return "transport_error";
+            case error::channel_error:
+                return "channel_error";
+            case error::invalid_argument:
+                return "invalid_argument";
+            default:
+                return "UNKNOWN";
+        }
+    }
+
     namespace {
         enum struct command_type : std::uint8_t {
             none = 0x00,
@@ -49,23 +69,10 @@ namespace ka::rpc {
             return error::transport_error;
         }
         while (not _serve_stop) {
-            error e{};
-            if (auto r_rcv = _if->receive(); r_rcv) {
-                if (auto r_rsp = local_invoke(*r_rcv); r_rsp) {
-                    if (auto r_txf = _if->send(std::move(*r_rsp)); r_txf) {
-                        continue;
-                    } else {
-                        e = r_txf.error();
-                    }
-                } else {
-                    e = r_rsp.error();
+            TRY_RESULT_AS(_if->receive(), r_rcv) {
+                TRY_RESULT_AS(local_invoke(*r_rcv), r_rsp) {
+                    TRY(_if->send(std::move(*r_rsp)));
                 }
-            } else {
-                e = r_rcv.error();
-            }
-            // Is the error recoverable?
-            if (e == error::channel_error or e == error::transport_error) {
-                return e;
             }
         }
         return mlab::result_success;
