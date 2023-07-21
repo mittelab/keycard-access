@@ -33,12 +33,14 @@ namespace ut {
             }
 
             pn532::result<> send(mlab::bin_data const &data_to_send, ms timeout) override {
+                std::this_thread::sleep_for(10ms);
                 t2i_data = data_to_send;
                 t2i_avail.release();
                 return mlab::result_success;
             }
 
             pn532::result<mlab::bin_data> communicate(mlab::bin_data const &data_to_send, ms timeout) override {
+                std::this_thread::sleep_for(10ms);
                 i2t_data = data_to_send;
                 i2t_avail.release();
                 if (not t2i_avail.try_acquire_for(timeout)) {
