@@ -9,6 +9,7 @@
 #include <ka/gpio_auth_responder.hpp>
 #include <ka/keymaker.hpp>
 #include <ka/p2p_ops.hpp>
+#include <ka/rpc.hpp>
 #include <ka/secure_p2p.hpp>
 #include <pn532/p2p.hpp>
 #include <unity.h>
@@ -332,5 +333,82 @@ namespace ut {
 
         t1.join();
         t2.join();
+    }
+
+    namespace {
+        struct rpc_test {
+            int multiplier = 4;
+
+            [[nodiscard]] int multiply(int x) const {
+                return x * multiplier;
+            }
+
+            void increase_multiplier() {
+                ++multiplier;
+            }
+        };
+    }// namespace
+
+    void test_rpc() {
+        rpc_test local_instance{-4};
+        rpc_test remote_instance{4};
+
+        auto loop = std::make_shared<p2p_loopback>();
+
+        ka::rpc::bridge local_bridge{std::make_unique<ka::p2p::target_bridge_interface>(loop)};
+        ka::rpc::bridge remote_bridge{std::make_unique<ka::p2p::initiator_bridge_interface>(loop)};
+
+        local_bridge.register_command(&rpc_test::multiply, local_instance);
+        local_bridge.register_command(&rpc_test::increase_multiplier, local_instance);
+        local_bridge.register_command(&ka::rpc::bridge::serve_stop, local_bridge);
+
+        remote_bridge.register_command(&rpc_test::multiply, remote_instance);
+        remote_bridge.register_command(&rpc_test::increase_multiplier, remote_instance);
+        remote_bridge.register_command(&ka::rpc::bridge::serve_stop, remote_bridge);
+
+        std::thread remote_serve{&ka::rpc::bridge::serve_loop, &remote_bridge};
+
+        {
+            auto r_mul = local_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
+            TEST_ASSERT(r_mul);
+            if (r_mul) {
+                TEST_ASSERT(*r_mul == 42 * 4);
+            }
+
+            auto r_inc = local_bridge.remote_invoke_unique(&rpc_test::increase_multiplier);
+            TEST_ASSERT(r_inc);
+
+            r_mul = local_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
+            TEST_ASSERT(r_mul);
+            if (r_mul) {
+                TEST_ASSERT(*r_mul == 42 * 5);
+            }
+
+            TEST_ASSERT(local_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
+            remote_serve.join();
+        }
+
+
+        std::thread local_serve{&ka::rpc::bridge::serve_loop, &local_bridge};
+
+        {
+            auto r_mul = remote_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
+            TEST_ASSERT(r_mul);
+            if (r_mul) {
+                TEST_ASSERT(*r_mul == 42 * -4);
+            }
+
+            auto r_inc = remote_bridge.remote_invoke_unique(&rpc_test::increase_multiplier);
+            TEST_ASSERT(r_inc);
+
+            r_mul = remote_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
+            TEST_ASSERT(r_mul);
+            if (r_mul) {
+                TEST_ASSERT(*r_mul == 42 * -3);
+            }
+
+            TEST_ASSERT(remote_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
+            local_serve.join();
+        }
     }
 }// namespace ut
