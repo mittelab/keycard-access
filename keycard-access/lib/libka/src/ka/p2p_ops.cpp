@@ -116,6 +116,7 @@ namespace ka::p2p::v2 {
         _b.register_command(&local_gate::set_gpio_config, *this);
         _b.register_command(&local_gate::reset_gate, *this);
         _b.register_command(&local_gate::connect_wifi, *this);
+        _b.register_command(&local_gate::disconnect, *this);
         // These two have the same signature, so we must disambiguate manually
         _b.register_command(&local_gate::check_for_updates, *this, "check_for_updates");
         _b.register_command(&local_gate::update_now, *this, "update_now");
