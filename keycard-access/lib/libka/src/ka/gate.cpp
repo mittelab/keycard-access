@@ -92,7 +92,7 @@ namespace ka {
             return member_token_responder::interact(scanner, target);
         } else {
             // Enter a gate configuration loop
-            _g.serve_remote_gate<p2p::v0::local_gate>(scanner.ctrl(), target.index);
+            _g.serve_remote_gate(scanner.ctrl(), target.index);
         }
         return pn532::post_interaction::reject;
     }
@@ -240,18 +240,11 @@ namespace ka {
         return _base_key;
     }
 
-    void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory) {
+    void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx) {
         auto raw_initiator = std::make_shared<pn532::p2p::pn532_initiator>(ctrl, logical_idx);
-        p2p::secure_initiator sec_initiator{raw_initiator, keys()};
-        if (not sec_initiator.handshake()) {
-            ESP_LOGE(TAG, "Unable to handshake with P2P peer.");
-        }
-        auto proto = factory(sec_initiator, *this);
-        if (not proto) {
-            ESP_LOGE(TAG, "Broken factory!");
-            std::abort();
-        }
-        proto->serve_loop();
+        auto sec_initiator = std::make_shared<p2p::secure_initiator>(raw_initiator, keys());
+        p2p::v2::local_gate lg{*this, sec_initiator};
+        lg.serve_loop();
     }
 
 

@@ -51,6 +51,34 @@ namespace ka {
         keymaker_gate_info(keymaker_gate_data const &gd) : gate_pub_info{gd}, keymaker_gate_extra_data{gd} {}
     };
 
+    static constexpr std::uint8_t rpc_p2p_bit = 1 << 7;
+
+    enum struct rpc_p2p_error : std::uint8_t {
+        rpc_parsing_error = static_cast<std::uint8_t>(rpc::error::parsing_error),
+        rpc_unknown_command = static_cast<std::uint8_t>(rpc::error::unknown_command),
+        rpc_mismatching_signature = static_cast<std::uint8_t>(rpc::error::mismatching_signature),
+        rpc_transport_error = static_cast<std::uint8_t>(rpc::error::transport_error),
+        rpc_channel_error = static_cast<std::uint8_t>(rpc::error::channel_error),
+        rpc_invalid_argument = static_cast<std::uint8_t>(rpc::error::invalid_argument),
+        p2p_unauthorized = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::unauthorized),
+        p2p_invalid_argument = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::invalid_argument),
+        p2p_invalid_operation = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::invalid_operation),
+    };
+
+    [[nodiscard]] const char *to_string(rpc_p2p_error e);
+
+    [[nodiscard]] constexpr rpc_p2p_error cast_error(rpc::error e);
+    [[nodiscard]] constexpr rpc_p2p_error cast_error(p2p::v2::error e);
+
+    template <class ...Args>
+    using rpc_p2p_r = mlab::result<rpc_p2p_error, Args...>;
+
+    template <class ...Args>
+    [[nodiscard]] rpc_p2p_r<Args...> cast_result(rpc::r<Args...> r);
+
+    template <class ...Args>
+    [[nodiscard]] rpc_p2p_r<Args...> cast_result(p2p::v2::r<Args...> r);
+
     class keymaker : public device {
         std::shared_ptr<pn532::controller> _ctrl;
         std::vector<keymaker_gate_data> _gates;
@@ -59,17 +87,17 @@ namespace ka {
         class gate_channel;
         class card_channel;
 
-        [[nodiscard]] p2p::r<gate_channel> open_gate_channel() const;
+        [[nodiscard]] rpc_p2p_r<gate_channel> open_gate_channel() const;
         [[nodiscard]] desfire::result<card_channel> open_card_channel() const;
 
-        [[nodiscard]] p2p::r<> configure_gate_internal(keymaker_gate_data &gd);
+        [[nodiscard]] rpc_p2p_r<> configure_gate_internal(keymaker_gate_data &gd);
 
         /**
          * Prints a message with the gate id and checks whether it's registered to us.
          * @return The gate id and a boolean expressing whether the gate is ours.
          * @todo Add a boolean that fail if not ours
          */
-        [[nodiscard]] p2p::r<gate_id, bool> identify_gate(p2p::v0::remote_gate &rg) const;
+        [[nodiscard]] rpc_p2p_r<gate_id, bool> identify_gate(p2p::v2::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
 
@@ -85,16 +113,16 @@ namespace ka {
          */
         explicit keymaker(key_pair kp);
 
-        p2p::r<gate_id> gate_add(std::string notes = "", bool configure = false);
-        p2p::r<> gate_configure(gate_id id, bool force = false);
-        p2p::r<> gate_remove(gate_id id, bool force = false);
-        [[nodiscard]] p2p::r<p2p::gate_update_config> gate_get_update_config() const;
-        [[nodiscard]] p2p::r<p2p::gate_wifi_status> gate_get_wifi_status() const;
-        p2p::r<> gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
-        p2p::r<bool> gate_connect_wifi(std::string_view ssid, std::string_view password);
+        rpc_p2p_r<gate_id> gate_add(std::string notes = "", bool configure = false);
+        rpc_p2p_r<> gate_configure(gate_id id, bool force = false);
+        rpc_p2p_r<> gate_remove(gate_id id, bool force = false);
+        [[nodiscard]] rpc_p2p_r<p2p::gate_update_config> gate_get_update_config() const;
+        [[nodiscard]] rpc_p2p_r<p2p::gate_wifi_status> gate_get_wifi_status() const;
+        rpc_p2p_r<> gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
+        rpc_p2p_r<bool> gate_connect_wifi(std::string_view ssid, std::string_view password);
         void gate_set_notes(gate_id id, std::string notes);
         [[nodiscard]] gate_status gate_get_status(gate_id id) const;
-        [[nodiscard]] p2p::r<keymaker_gate_info> gate_inspect(gate_id id = std::numeric_limits<gate_id>::max()) const;
+        [[nodiscard]] rpc_p2p_r<keymaker_gate_info> gate_inspect(gate_id id = std::numeric_limits<gate_id>::max()) const;
         [[nodiscard]] std::vector<keymaker_gate_info> gate_list() const;
 
         [[nodiscard]] r<desfire::any_key> card_recover_root_key(desfire::any_key test_root_key = desfire::any_key{desfire::cipher_type::none}) const;
@@ -107,18 +135,45 @@ namespace ka {
         [[nodiscard]] r<identity> card_get_identity() const;
         [[nodiscard]] r<std::vector<keymaker_gate_info>> card_list_enrolled_gates() const;
 
-        p2p::r<release_info> gate_update_check();
-        [[nodiscard]] p2p::r<update_status> gate_is_updating() const;
-        p2p::r<release_info> gate_update_now();
-        p2p::r<> gate_update_manually(std::string_view fw_url);
-        p2p::r<> gate_set_backend_url(std::string_view url, std::string_view api_key);
-        [[nodiscard]] p2p::r<std::string> gate_get_backend_url() const;
-        [[nodiscard]] p2p::r<gpio_responder_config> gate_get_gpio_config() const;
-        p2p::r<> gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time);
+        rpc_p2p_r<release_info> gate_update_check();
+        [[nodiscard]] rpc_p2p_r<update_status> gate_is_updating() const;
+        rpc_p2p_r<release_info> gate_update_now();
+        rpc_p2p_r<> gate_update_manually(std::string_view fw_url);
+        rpc_p2p_r<> gate_set_backend_url(std::string_view url, std::string_view api_key);
+        [[nodiscard]] rpc_p2p_r<std::string> gate_get_backend_url() const;
+        [[nodiscard]] rpc_p2p_r<gpio_responder_config> gate_get_gpio_config() const;
+        rpc_p2p_r<> gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time);
 
         void register_commands(ka::cmd::shell &sh) override;
     };
+}
 
+namespace ka {
+    constexpr rpc_p2p_error cast_error(rpc::error e) {
+        return static_cast<rpc_p2p_error>(e);
+    }
+
+    constexpr rpc_p2p_error cast_error(p2p::v2::error e) {
+        return static_cast<rpc_p2p_error>(static_cast<std::uint8_t>(e) | rpc_p2p_bit);
+    }
+
+    template <class ...Args>
+    rpc_p2p_r<Args...> cast_result(rpc::r<Args...> r) {
+        if (r) {
+            return std::move(*r);
+        } else {
+            return cast_error(r.error());
+        }
+    }
+
+    template <class ...Args>
+    rpc_p2p_r<Args...> cast_result(p2p::v2::r<Args...> r) {
+        if (r) {
+            return std::move(*r);
+        } else {
+            return cast_error(r.error());
+        }
+    }
 }// namespace ka
 
 namespace mlab {

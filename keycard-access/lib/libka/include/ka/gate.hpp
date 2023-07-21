@@ -124,10 +124,7 @@ namespace ka {
          */
         void reset();
 
-        template <p2p::local_gate_protocol Protocol>
         void serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx);
-
-        void serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx, p2p::protocol_factory_base const &factory);
 
         /**
          * @return `nullopt` if this gate was already configured.
@@ -145,15 +142,6 @@ namespace ka {
         [[nodiscard]] r<identity> read_encrypted_gate_file(member_token &token, bool check_app, bool check_file) const;
         void try_authenticate(member_token &token, gate_auth_responder &responder) const;
     };
-}// namespace ka
-
-namespace ka {
-
-    template <p2p::local_gate_protocol Protocol>
-    void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx) {
-        serve_remote_gate(ctrl, logical_idx, p2p::protocol_factory<Protocol>{});
-    }
-
 }// namespace ka
 
 #endif//KEYCARDACCESS_GATE_HPP

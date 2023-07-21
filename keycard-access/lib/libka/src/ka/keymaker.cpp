@@ -127,10 +127,8 @@ namespace ka {
     class keymaker::gate_channel {
         std::shared_ptr<pn532::controller> _ctrl = {};
         std::shared_ptr<pn532::p2p::pn532_target> _raw_target = {};
-        std::unique_ptr<p2p::secure_target> _sec_target = {};
-        std::unique_ptr<p2p::remote_gate_base> _remote_gate = {};
-        unsigned _remote_proto_version = std::numeric_limits<unsigned>::max();
-        unsigned _active_proto_version = std::numeric_limits<unsigned>::max();
+        std::shared_ptr<p2p::secure_target> _sec_target = {};
+        std::unique_ptr<p2p::v2::remote_gate> _remote_gate = {};
 
     public:
         gate_channel() = default;
@@ -162,52 +160,43 @@ namespace ka {
             }
         }
 
-        [[nodiscard]] p2p::r<> connect(key_pair const &kp) {
+        [[nodiscard]] rpc_p2p_r<> connect(key_pair const &kp) {
             if (_raw_target == nullptr) {
-                return p2p::error::invalid;
+                return rpc_p2p_error::rpc_transport_error;
             }
             std::array<std::uint8_t, 5> nfcid_data{};
             std::copy_n(std::begin(kp.raw_pk()), nfcid_data.size(), std::begin(nfcid_data));
             if (const auto r_rf_on = _ctrl->rf_configuration_field(false, true); not r_rf_on) {
-                return p2p::channel_error_to_p2p_error(r_rf_on.error());
+                ESP_LOGW(TAG, "Unable to turn on RF: %s", to_string(r_rf_on.error()));
+                return rpc_p2p_error::rpc_channel_error;
             }
             if (const auto r_init = _raw_target->init_as_dep_target(nfcid_data); r_init) {
-                _sec_target = std::make_unique<p2p::secure_target>(_raw_target, kp);
+                _sec_target = std::make_shared<p2p::secure_target>(_raw_target, kp);
                 if (const auto r_hshake = _sec_target->handshake(); r_hshake) {
                     const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key().raw_pk());
                     ESP_LOGI(TAG, "Connected to peer with public key %s", pk_s.c_str());
                     // Try build a remote_channel
-                    _remote_gate = std::make_unique<p2p::remote_gate_base>(*_sec_target);
-                    if (const auto r_hello = _remote_gate->hello(); r_hello) {
-                        const auto fw_s = r_hello->to_string();
+                    _remote_gate = std::make_unique<p2p::v2::remote_gate>(_sec_target);
+                    if (const auto r_fw_info = _remote_gate->get_fw_info(); r_fw_info) {
+                        const auto fw_s = r_fw_info->to_string();
                         ESP_LOGI(TAG, "Peer is gate running %s", fw_s.c_str());
-                        ESP_LOGI(TAG, "Peer implements protocol version %u.", r_hello->proto_version);
-                        _remote_proto_version = r_hello->proto_version;
-                        switch (_remote_proto_version) {
-                            case 0:
-                                _remote_gate = std::make_unique<p2p::v0::remote_gate>(*_sec_target);
-                                break;
-                            default:
-                                ESP_LOGW(TAG, "Unsupported gate protocol version %u.", _remote_proto_version);
-                                return mlab::result_success;
-                        }
-                        _active_proto_version = _remote_proto_version;
-                        ESP_LOGI(TAG, "Connected over gate protocol %u.", _active_proto_version);
                         return mlab::result_success;
                     } else {
                         ESP_LOGE(TAG, "Peer is not a gate.");
                         _remote_gate->bye();
                         _remote_gate = nullptr;
                         _sec_target = nullptr;
-                        return r_hello.error();
+                        return cast_error(r_fw_info.error());
                     }
                 } else {
                     // Delete
                     _sec_target = nullptr;
-                    return p2p::channel_error_to_p2p_error(r_hshake.error());
+                    ESP_LOGW(TAG, "Unable to handshake: %s", to_string(r_hshake.error()));
+                    return rpc_p2p_error::rpc_channel_error;
                 }
             } else {
-                return p2p::channel_error_to_p2p_error(r_init.error());
+                ESP_LOGW(TAG, "Unable to init as DEP target: %s", to_string(r_init.error()));
+                return rpc_p2p_error::rpc_channel_error;
             }
         }
 
@@ -215,51 +204,28 @@ namespace ka {
             return _raw_target != nullptr and _sec_target != nullptr and _remote_gate != nullptr;
         }
 
-        [[nodiscard]] unsigned active_proto_version() const {
-            return _active_proto_version;
-        }
-
-
-        [[nodiscard]] unsigned remote_proto_version() const {
-            return _remote_proto_version;
-        }
-
-        [[nodiscard]] p2p::remote_gate_base &remote_gate() {
+        [[nodiscard]] p2p::v2::remote_gate &remote_gate() {
             assert(_remote_gate != nullptr);
             return *_remote_gate;
         }
 
-        [[nodiscard]] p2p::remote_gate_base const &remote_gate() const {
+        [[nodiscard]] p2p::v2::remote_gate const &remote_gate() const {
             assert(_remote_gate != nullptr);
             return *_remote_gate;
-        }
-
-        template <p2p::remote_gate_protocol Proto = p2p::remote_gate_base>
-        [[nodiscard]] p2p::r<std::reference_wrapper<Proto const>> remote_gate() const {
-            if (not *this) {
-                ESP_LOGE(TAG, "You should check that the channel is open first.");
-                return p2p::error::invalid;
-            }
-            if constexpr (std::is_same_v<Proto, p2p::remote_gate_base>) {
-                return *_remote_gate;
-            } else if constexpr (std::is_same_v<Proto, p2p::v0::remote_gate>) {
-                if (active_proto_version() == 0) {
-                    return std::cref(reinterpret_cast<Proto const &>(*_remote_gate));
-                }
-            }
-            ESP_LOGE(TAG, "You should make sure this version of the protocol is supported!");
-            return p2p::error::invalid;
-        }
-
-        template <p2p::remote_gate_protocol Proto = p2p::remote_gate_base>
-        [[nodiscard]] p2p::r<std::reference_wrapper<Proto>> remote_gate() {
-            TRY_RESULT(static_cast<gate_channel const *>(this)->remote_gate<Proto>()) {
-                return std::ref(const_cast<Proto &>(r->get()));
-            }
         }
     };
 
-    p2p::r<keymaker::gate_channel> keymaker::open_gate_channel() const {
+
+    const char *to_string(rpc_p2p_error e) {
+        const auto b = static_cast<std::uint8_t>(e);
+        if (0 != (b & rpc_p2p_bit)) {
+            return to_string(static_cast<p2p::v2::error>(b & ~rpc_p2p_bit));
+        } else {
+            return to_string(static_cast<rpc::error>(b));
+        }
+    }
+
+    rpc_p2p_r<keymaker::gate_channel> keymaker::open_gate_channel() const {
         if (not _ctrl) {
             ESP_LOGE(TAG, "Unable to communicate without a PN532 connected.");
             std::abort();
@@ -285,37 +251,39 @@ namespace ka {
         }
     }
 
-    p2p::r<> keymaker::configure_gate_internal(keymaker_gate_data &gd) {
+    rpc_p2p_r<> keymaker::configure_gate_internal(keymaker_gate_data &gd) {
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
-                    if (r_ours->first != std::numeric_limits<gate_id>::max()) {
-                        if (not r_ours->second) {
-                            ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
-                        } else if (gd.pk != r_chn->peer_pub_key()) {
-                            if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
-                                ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
-                            }
-                        } else {
-                            ESP_LOGE(TAG, "This gate is already configured.");
+            auto &rg = r_chn->remote_gate();
+            TRY_RESULT_AS(identify_gate(rg), r_ours) {
+                if (r_ours->first != std::numeric_limits<gate_id>::max()) {
+                    if (not r_ours->second) {
+                        ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
+                    } else if (gd.pk != r_chn->peer_pub_key()) {
+                        if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
+                            ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
                         }
-                        return p2p::error::invalid;
+                    } else {
+                        ESP_LOGE(TAG, "This gate is already configured.");
                     }
+                    return rpc_p2p_error::p2p_invalid_operation;
                 }
-                TRY_RESULT(r_rg->get().register_gate(gd.id)) {
-                    gd.pk = r_chn->peer_pub_key();
-                    gd.bk = *r;
-                    gd.status = gate_status::configured;
-                    if (not save_gate(_gates.back())) {
-                        return p2p::error::invalid;
-                    }
+            }
+            TRY_CAST_RESULT(rg.register_gate(gd.id)) {
+                if (not *r) {
+                    return cast_error(r->error());
+                }
+                gd.pk = r_chn->peer_pub_key();
+                gd.bk = **r;
+                gd.status = gate_status::configured;
+                if (not save_gate(_gates.back())) {
+                    return rpc_p2p_error::p2p_invalid_operation;
                 }
             }
         }
         return mlab::result_success;
     }
 
-    p2p::r<gate_id> keymaker::gate_add(std::string notes, bool configure) {
+    rpc_p2p_r<gate_id> keymaker::gate_add(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
         _gates.push_back(keymaker_gate_data{id, {}, {}, gate_status::initialized, std::move(notes)});
         if (configure) {
@@ -329,7 +297,7 @@ namespace ka {
             }
         } else {
             if (not save_gate(_gates.back())) {
-                return p2p::error::invalid;
+                return rpc_p2p_error::p2p_invalid_operation;
             }
             ESP_LOGI(TAG, "Gate registered but not configured.");
             ESP_LOGW(TAG, "Run gate-configure --gate-id %lu", std::uint32_t{id});
@@ -337,16 +305,16 @@ namespace ka {
         return id;
     }
 
-    p2p::r<> keymaker::gate_configure(gate_id id, bool force) {
+    rpc_p2p_r<> keymaker::gate_configure(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
-            return p2p::error::arg_error;
+            return rpc_p2p_error::p2p_invalid_argument;
         }
         auto &gd = _gates[std::uint32_t{id}];
         if (gd.status != gate_status::initialized) {
             ESP_LOG_LEVEL((force ? ESP_LOG_WARN : ESP_LOG_ERROR), TAG, "Gate status is %s.", to_string(gd.status));
             if (not force) {
-                return p2p::error::invalid;
+                return rpc_p2p_error::p2p_invalid_operation;
             }
         }
         ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
@@ -358,17 +326,17 @@ namespace ka {
         }
     }
 
-    p2p::r<> keymaker::gate_remove(gate_id id, bool force) {
+    rpc_p2p_r<> keymaker::gate_remove(gate_id id, bool force) {
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate %lu not found.", std::uint32_t{id});
-            return p2p::error::arg_error;
+            return rpc_p2p_error::p2p_invalid_argument;
         }
         auto &gd = _gates[std::uint32_t{id}];
         if (gd.status == gate_status::initialized) {
             ESP_LOGW(TAG, "The gate was never configured!");
             gd.status = gate_status::deleted;
             if (not save_gate(gd)) {
-                return p2p::error::invalid;
+                return rpc_p2p_error::p2p_invalid_operation;
             }
         }
         if (gd.status == gate_status::deleted) {
@@ -379,34 +347,33 @@ namespace ka {
         }
         auto pk_s = mlab::data_to_hex_string(gd.pk.raw_pk());
         ESP_LOGI(TAG, "Bring closer a gate with public key %s...", pk_s.c_str());
-        auto open_and_reset = [&]() -> p2p::r<> {
+        auto open_and_reset = [&]() -> rpc_p2p_r<> {
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    if (r_chn->peer_pub_key() != gd.pk) {
-                        ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
-                        return p2p::error::invalid;
-                    }
-                    TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
-                        if (r_ours->first == std::numeric_limits<gate_id>::max()) {
-                            ESP_LOGW(TAG, "This gate is not configured or was already deleted.");
-                            return mlab::result_success;
-                        } else if (not r_ours->second) {
-                            ESP_LOGE(TAG, "This gate is not ours.");
-                            return p2p::error::invalid;
-                        } else if (r_ours->first != id) {
-                            ESP_LOGE(TAG, "This is not gate %lu, it's gate %lu.", std::uint32_t{id}, std::uint32_t{r_ours->first});
-                            return p2p::error::invalid;
-                        }
-                    }
-                    TRY(r_rg->get().reset_gate());
+                if (r_chn->peer_pub_key() != gd.pk) {
+                    ESP_LOGE(TAG, "This is not gate %lu, has a different public key.", std::uint32_t{id});
+                    return rpc_p2p_error::p2p_invalid_operation;
                 }
+                auto &rg = r_chn->remote_gate();
+                TRY_RESULT_AS(identify_gate(rg), r_ours) {
+                    if (r_ours->first == std::numeric_limits<gate_id>::max()) {
+                        ESP_LOGW(TAG, "This gate is not configured or was already deleted.");
+                        return mlab::result_success;
+                    } else if (not r_ours->second) {
+                        ESP_LOGE(TAG, "This gate is not ours.");
+                        return rpc_p2p_error::p2p_invalid_operation;
+                    } else if (r_ours->first != id) {
+                        ESP_LOGE(TAG, "This is not gate %lu, it's gate %lu.", std::uint32_t{id}, std::uint32_t{r_ours->first});
+                        return rpc_p2p_error::p2p_invalid_operation;
+                    }
+                }
+                TRY_CAST(rg.reset_gate());
             }
             return mlab::result_success;
         };
         if (const auto r = open_and_reset(); r) {
             gd.status = gate_status::deleted;
             if (not save_gate(gd)) {
-                return p2p::error::invalid;
+                return rpc_p2p_error::p2p_invalid_operation;
             }
             return mlab::result_success;
         } else {
@@ -414,7 +381,7 @@ namespace ka {
                 ESP_LOGW(TAG, "The gate was not found or could not be reset, but we will force-delete it.");
                 gd.status = gate_status::deleted;
                 if (not save_gate(gd)) {
-                    return p2p::error::invalid;
+                    return rpc_p2p_error::p2p_invalid_operation;
                 }
             } else {
                 ESP_LOGE(TAG, "The gate was not found or could not be reset.");
@@ -448,10 +415,10 @@ namespace ka {
         return mlab::result_success;
     }
 
-    p2p::r<gate_id, bool> keymaker::identify_gate(p2p::v0::remote_gate &rg) const {
+    rpc_p2p_r<gate_id, bool> keymaker::identify_gate(p2p::v2::remote_gate &rg) const {
         gate_id gid = std::numeric_limits<gate_id>::max();
         bool ours = false;
-        TRY_RESULT(rg.get_registration_info()) {
+        TRY_CAST_RESULT(rg.get_registration_info()) {
             if (r->id != std::numeric_limits<gate_id>::max()) {
                 gid = r->id;
                 ours = r->keymaker_pk == keys();
@@ -464,179 +431,146 @@ namespace ka {
         return {gid, ours};
     }
 
-    p2p::r<p2p::gate_update_config> keymaker::gate_get_update_config() const {
+    rpc_p2p_r<p2p::gate_update_config> keymaker::gate_get_update_config() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().get_update_settings()) {
-                    return std::move(*r);
-                }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.get_update_settings());
+        }
+    }
+
+    rpc_p2p_r<p2p::gate_wifi_status> keymaker::gate_get_wifi_status() const {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.get_wifi_status());
+        }
+    }
+
+    rpc_p2p_r<> keymaker::gate_set_update_config(std::string_view update_channel, bool automatic_updates) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.set_update_settings(update_channel, automatic_updates));
+        }
+    }
+
+    rpc_p2p_r<bool> keymaker::gate_connect_wifi(std::string_view ssid, std::string_view password) {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            TRY_CAST_RESULT(rg.connect_wifi(ssid, password)) {
+                return cast_result(*r);
             }
         }
     }
 
-    p2p::r<p2p::gate_wifi_status> keymaker::gate_get_wifi_status() const {
+    rpc_p2p_r<release_info> keymaker::gate_update_check() {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().get_wifi_status()) {
-                    return std::move(*r);
-                }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            TRY_CAST_RESULT(rg.check_for_updates()) {
+                return cast_result(*r);
             }
         }
     }
 
-    p2p::r<> keymaker::gate_set_update_config(std::string_view update_channel, bool automatic_updates) {
+    rpc_p2p_r<update_status> keymaker::gate_is_updating() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY(r_rg->get().set_update_settings(update_channel, automatic_updates));
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.is_updating());
         }
-        return mlab::result_success;
     }
 
-    p2p::r<bool> keymaker::gate_connect_wifi(std::string_view ssid, std::string_view password) {
+    rpc_p2p_r<release_info> keymaker::gate_update_now() {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().connect_wifi(ssid, password)) {
-                    if (not *r) {
-                        ESP_LOGW(TAG, "Wifi did not connect within the given timespan.");
-                    }
-                    return r;
-                }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            TRY_CAST_RESULT(rg.update_now()) {
+                return cast_result(*r);
             }
         }
     }
 
-    p2p::r<release_info> keymaker::gate_update_check() {
+    rpc_p2p_r<> keymaker::gate_update_manually(std::string_view fw_url) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().check_for_updates()) {
-                    return r;
-                }
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.update_manually(fw_url));
         }
     }
 
-    p2p::r<update_status> keymaker::gate_is_updating() const {
+    rpc_p2p_r<> keymaker::gate_set_backend_url(std::string_view url, std::string_view api_key) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().is_updating()) {
-                    return r;
-                }
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.set_backend_url(url, api_key));
         }
     }
 
-    p2p::r<release_info> keymaker::gate_update_now() {
+    rpc_p2p_r<std::string> keymaker::gate_get_backend_url() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().update_now()) {
-                    return r;
-                }
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.get_backend_url());
         }
     }
 
-    p2p::r<> keymaker::gate_update_manually(std::string_view fw_url) {
+    rpc_p2p_r<gpio_responder_config> keymaker::gate_get_gpio_config() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().update_manually(fw_url)) {
-                    return r;
-                }
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.get_gpio_config());
         }
     }
 
-    p2p::r<> keymaker::gate_set_backend_url(std::string_view url, std::string_view api_key) {
+    rpc_p2p_r<> keymaker::gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time) {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().set_backend_url(url, api_key)) {
-                    return r;
-                }
-            }
-        }
-    }
-
-    p2p::r<std::string> keymaker::gate_get_backend_url() const {
-        ESP_LOGI(TAG, "Bring closer a gate...");
-        TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().get_backend_url()) {
-                    return r;
-                }
-            }
-        }
-    }
-
-    p2p::r<gpio_responder_config> keymaker::gate_get_gpio_config() const {
-        ESP_LOGI(TAG, "Bring closer a gate...");
-        TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().get_gpio_config()) {
-                    return r;
-                }
-            }
-        }
-    }
-
-    p2p::r<> keymaker::gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time) {
-        ESP_LOGI(TAG, "Bring closer a gate...");
-        TRY_RESULT_AS(open_gate_channel(), r_chn) {
-            TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                TRY(identify_gate(r_rg->get()));
-                TRY_RESULT(r_rg->get().set_gpio_config({gpio, level, hold_time})) {
-                    return r;
-                }
-            }
+            auto &rg = r_chn->remote_gate();
+            TRY(identify_gate(rg));
+            return cast_result(rg.set_gpio_config({gpio, level, hold_time}));
         }
     }
 
 
-    p2p::r<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
+    rpc_p2p_r<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
         std::optional<pub_key> exp_pk = std::nullopt;
         bool ours = true;
         if (id == std::numeric_limits<gate_id>::max()) {
             ESP_LOGI(TAG, "Bring closer a gate...");
             TRY_RESULT_AS(open_gate_channel(), r_chn) {
                 exp_pk = r_chn->peer_pub_key();
-                TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
-                    TRY_RESULT_AS(identify_gate(r_rg->get()), r_ours) {
-                        if (r_ours->first != std::numeric_limits<gate_id>::max()) {
-                            id = r_ours->first;
-                            ours = r_ours->second;
-                        }
+                auto &rg = r_chn->remote_gate();
+                TRY_RESULT_AS(identify_gate(rg), r_ours) {
+                    if (r_ours->first != std::numeric_limits<gate_id>::max()) {
+                        id = r_ours->first;
+                        ours = r_ours->second;
                     }
                 }
             }
         }
         if (id == std::numeric_limits<gate_id>::max()) {
-            return p2p::error::p2p_app_error;
+            return rpc_p2p_error::rpc_channel_error;
         }
         if (not ours) {
             return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
         }
         if (std::uint32_t{id} >= _gates.size()) {
             ESP_LOGE(TAG, "Gate not found.");
-            return p2p::error::arg_error;
+            return rpc_p2p_error::p2p_invalid_argument;
         }
         auto const &gd = _gates[std::uint32_t{id}];
         if (exp_pk and *exp_pk != gd.pk) {
@@ -677,22 +611,22 @@ namespace ka {
             }
         };
         template <class T>
-        struct parser<p2p::r<T>> {
-            [[nodiscard]] static std::string to_string(p2p::r<T> const &r) {
+        struct parser<rpc_p2p_r<T>> {
+            [[nodiscard]] static std::string to_string(rpc_p2p_r<T> const &r) {
                 if (r) {
                     return parser<T>::to_string(*r);
                 } else {
-                    return ka::p2p::to_string(r.error());
+                    return ka::to_string(r.error());
                 }
             }
         };
         template <>
-        struct parser<p2p::r<>> {
-            [[nodiscard]] static std::string to_string(p2p::r<> const &r) {
+        struct parser<rpc_p2p_r<>> {
+            [[nodiscard]] static std::string to_string(rpc_p2p_r<> const &r) {
                 if (r) {
                     return "success";
                 } else {
-                    return ka::p2p::to_string(r.error());
+                    return ka::to_string(r.error());
                 }
             }
         };
