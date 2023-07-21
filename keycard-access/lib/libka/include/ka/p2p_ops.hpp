@@ -6,6 +6,7 @@
 #define KEYCARD_ACCESS_P2P_OPS_HPP
 
 #include <ka/data.hpp>
+#include <ka/rpc.hpp>
 #include <ka/key_pair.hpp>
 #include <pn532/p2p.hpp>
 
@@ -22,6 +23,27 @@ namespace semver {
 namespace ka::p2p {
     class secure_target;
     class secure_initiator;
+
+    struct gate_update_config {
+        std::string update_channel = {};
+        bool enable_automatic_update = false;
+    };
+
+    struct gate_registration_info : ka::gate_pub_info {
+        pub_key keymaker_pk;
+
+        gate_registration_info() = default;
+        gate_registration_info(gate_id id_, pub_key pk_, pub_key km_pk_) : gate_pub_info{id_, pk_}, keymaker_pk{km_pk_} {}
+        gate_registration_info(gate_pub_info pi_, pub_key km_pk_) : gate_pub_info{pi_}, keymaker_pk{km_pk_} {}
+    };
+
+    struct gate_wifi_status {
+        /**
+         * Empty = no SSID.
+         */
+        std::string ssid = {};
+        bool operational = false;
+    };
 
     enum struct error : std::uint8_t {
         malformed,           ///< Command is malformed or unsupported
@@ -147,33 +169,12 @@ namespace ka::p2p {
 
 
     namespace v0 {
-        struct gate_registration_info : ka::gate_pub_info {
-            pub_key keymaker_pk;
-
-            gate_registration_info() = default;
-            gate_registration_info(gate_id id_, pub_key pk_, pub_key km_pk_) : gate_pub_info{id_, pk_}, keymaker_pk{km_pk_} {}
-            gate_registration_info(gate_pub_info pi_, pub_key km_pk_) : gate_pub_info{pi_}, keymaker_pk{km_pk_} {}
-        };
-
-        struct update_config {
-            std::string update_channel = {};
-            bool enable_automatic_update = false;
-        };
-
-        struct wifi_status {
-            /**
-             * Empty = no SSID.
-             */
-            std::string ssid = {};
-            bool operational = false;
-        };
-
         class remote_gate : public remote_gate_base {
         public:
             using remote_gate_base::remote_gate_base;
             [[nodiscard]] r<gate_fw_info> hello() override;
 
-            [[nodiscard]] virtual r<update_config> get_update_settings();
+            [[nodiscard]] virtual r<gate_update_config> get_update_settings();
             [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
             [[nodiscard]] virtual r<release_info> check_for_updates();
             [[nodiscard]] virtual r<update_status> is_updating();
@@ -183,7 +184,7 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<std::string> get_backend_url();
             [[nodiscard]] virtual r<gpio_responder_config> get_gpio_config();
             [[nodiscard]] virtual r<> set_gpio_config(gpio_responder_config cfg);
-            [[nodiscard]] virtual r<wifi_status> get_wifi_status();
+            [[nodiscard]] virtual r<gate_wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<bool> connect_wifi(std::string_view ssid, std::string_view password);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info();
             [[nodiscard]] virtual r<gate_base_key> register_gate(gate_id requested_id);
@@ -194,7 +195,7 @@ namespace ka::p2p {
         protected:
             [[nodiscard]] r<serve_outcome> try_serve_command(std::uint8_t command_code, mlab::bin_data const &body) override;
 
-            [[nodiscard]] virtual r<update_config> get_update_settings(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<gate_update_config> get_update_settings(mlab::bin_data const &body);
             [[nodiscard]] virtual r<> set_update_settings(mlab::bin_data const &body);
             [[nodiscard]] virtual r<release_info> check_for_updates(mlab::bin_data const &body);
             [[nodiscard]] virtual r<update_status> is_updating(mlab::bin_data const &body);
@@ -204,7 +205,7 @@ namespace ka::p2p {
             [[nodiscard]] virtual r<std::string> get_backend_url(mlab::bin_data const &body);
             [[nodiscard]] virtual r<gpio_responder_config> get_gpio_config(mlab::bin_data const &body);
             [[nodiscard]] virtual r<> set_gpio_config(mlab::bin_data const &body);
-            [[nodiscard]] virtual r<wifi_status> get_wifi_status(mlab::bin_data const &body);
+            [[nodiscard]] virtual r<gate_wifi_status> get_wifi_status(mlab::bin_data const &body);
             [[nodiscard]] virtual r<bool> connect_wifi(mlab::bin_data const &body);
             [[nodiscard]] virtual r<gate_registration_info> get_registration_info(mlab::bin_data const &body);
             [[nodiscard]] virtual r<gate_base_key> register_gate(mlab::bin_data const &body);
@@ -214,9 +215,9 @@ namespace ka::p2p {
             using local_gate_base::local_gate_base;
 
             [[nodiscard]] inline std::uint8_t protocol_version() const override { return 0; }
-            [[nodiscard]] virtual r<update_config> get_update_settings();
+            [[nodiscard]] virtual r<gate_update_config> get_update_settings();
             [[nodiscard]] virtual r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
-            [[nodiscard]] virtual r<wifi_status> get_wifi_status();
+            [[nodiscard]] virtual r<gate_wifi_status> get_wifi_status();
             [[nodiscard]] virtual r<release_info> check_for_updates();
             [[nodiscard]] virtual r<update_status> is_updating();
             [[nodiscard]] virtual r<release_info> update_now();
@@ -236,21 +237,23 @@ namespace ka::p2p {
 }// namespace ka::p2p
 
 namespace mlab {
+    bin_stream &operator>>(bin_stream &s, ka::fw_info &fwinfo);
     bin_stream &operator>>(bin_stream &s, ka::p2p::gate_fw_info &fwinfo);
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::gate_registration_info &rinfo);
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_registration_info &rinfo);
     bin_stream &operator>>(bin_stream &s, semver::version &v);
     bin_stream &operator>>(bin_stream &s, ka::gate_id &gid);
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_config &usettings);
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings);
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_update_config &usettings);
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_wifi_status &wfsettings);
     bin_stream &operator>>(bin_stream &s, ka::release_info &ri);
     bin_stream &operator>>(bin_stream &s, ka::update_status &us);
 
+    bin_data &operator<<(bin_data &bd, ka::fw_info const &fwinfo);
     bin_data &operator<<(bin_data &bd, ka::p2p::gate_fw_info const &fwinfo);
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::gate_registration_info const &rinfo);
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_registration_info const &rinfo);
     bin_data &operator<<(bin_data &bd, semver::version const &v);
     bin_data &operator<<(bin_data &bd, ka::gate_id const &gid);
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_config const &usettings);
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings);
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_update_config const &usettings);
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_wifi_status const &wfsettings);
     bin_data &operator<<(bin_data &bd, ka::release_info const &ri);
     bin_data &operator<<(bin_data &bd, ka::update_status const &us);
 }// namespace mlab

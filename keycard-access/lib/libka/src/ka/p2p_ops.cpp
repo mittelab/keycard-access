@@ -290,8 +290,8 @@ namespace ka::p2p {
             return r;
         }
 
-        r<update_config> remote_gate::get_update_settings() {
-            return command_parse_response<update_config>(commands::get_update_settings);
+        r<gate_update_config> remote_gate::get_update_settings() {
+            return command_parse_response<gate_update_config>(commands::get_update_settings);
         }
 
         r<> remote_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
@@ -349,8 +349,8 @@ namespace ka::p2p {
             return command_parse_response<void>(commands::set_gpio_config, cfg);
         }
 
-        r<wifi_status> remote_gate::get_wifi_status() {
-            return command_parse_response<wifi_status>(commands::get_wifi_status);
+        r<gate_wifi_status> remote_gate::get_wifi_status() {
+            return command_parse_response<gate_wifi_status>(commands::get_wifi_status);
         }
 
         r<bool> remote_gate::connect_wifi(std::string_view ssid, std::string_view password) {
@@ -372,7 +372,7 @@ namespace ka::p2p {
             return command_parse_response<void>(commands::reset_gate);
         }
 
-        r<update_config> local_gate::get_update_settings(mlab::bin_data const &body) {
+        r<gate_update_config> local_gate::get_update_settings(mlab::bin_data const &body) {
             if (not assert_stream_healthy(mlab::bin_stream{body})) {
                 return error::malformed;
             }
@@ -455,7 +455,7 @@ namespace ka::p2p {
             return set_gpio_config(cfg);
         }
 
-        r<wifi_status> local_gate::get_wifi_status(mlab::bin_data const &body) {
+        r<gate_wifi_status> local_gate::get_wifi_status(mlab::bin_data const &body) {
             if (not assert_stream_healthy(mlab::bin_stream{body})) {
                 return error::malformed;
             }
@@ -558,15 +558,15 @@ namespace ka::p2p {
             return serve_outcome::unknown;
         }
 
-        r<update_config> local_gate::get_update_settings() {
-            return update_config{std::string{g().update_channel()}, g().updates_automatically()};
+        r<gate_update_config> local_gate::get_update_settings() {
+            return gate_update_config{std::string{g().update_channel()}, g().updates_automatically()};
         }
 
-        r<wifi_status> local_gate::get_wifi_status() {
+        r<gate_wifi_status> local_gate::get_wifi_status() {
             if (const auto ssid = g().wifi_get_ssid(); ssid) {
-                return wifi_status{*ssid, g().wifi_test()};
+                return gate_wifi_status{*ssid, g().wifi_test()};
             }
-            return wifi_status{"", false};
+            return gate_wifi_status{"", false};
         }
 
         r<release_info> local_gate::check_for_updates() {
@@ -667,6 +667,21 @@ namespace ka::p2p {
 }// namespace ka::p2p
 
 namespace mlab {
+    bin_stream &operator>>(bin_stream &s, ka::fw_info &fwinfo) {
+        s >> fwinfo.semantic_version;
+        s >> length_encoded >> fwinfo.commit_info;
+        s >> length_encoded >> fwinfo.app_name;
+        s >> length_encoded >> fwinfo.platform_code;
+        return s;
+    }
+
+    bin_data &operator<<(bin_data &bd, ka::fw_info const &fwinfo) {
+        return bd << fwinfo.semantic_version
+                  << length_encoded << fwinfo.commit_info
+                  << length_encoded << fwinfo.app_name
+                  << length_encoded << fwinfo.platform_code;
+    }
+
     bin_stream &operator>>(bin_stream &s, ka::p2p::gate_fw_info &fwinfo) {
         s >> fwinfo.semantic_version;
         s >> length_encoded >> fwinfo.commit_info;
@@ -684,12 +699,12 @@ namespace mlab {
                   << fwinfo.proto_version;
     }
 
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::gate_registration_info &rinfo) {
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_registration_info &rinfo) {
         s >> rinfo.id >> rinfo.pk >> rinfo.keymaker_pk;
         return s;
     }
 
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::gate_registration_info const &rinfo) {
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_registration_info const &rinfo) {
         return bd << prealloc(ka::raw_pub_key::array_size * 2 + 4) << rinfo.id << rinfo.pk << rinfo.keymaker_pk;
     }
 
@@ -706,16 +721,16 @@ namespace mlab {
         return bd << lsb32 << std::uint32_t(gid);
     }
 
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::update_config &usettings) {
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_update_config &usettings) {
         s >> length_encoded >> usettings.update_channel >> usettings.enable_automatic_update;
         return s;
     };
 
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::update_config const &usettings) {
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_update_config const &usettings) {
         return bd << length_encoded << usettings.update_channel << usettings.enable_automatic_update;
     }
 
-    bin_stream &operator>>(bin_stream &s, ka::p2p::v0::wifi_status &wfsettings) {
+    bin_stream &operator>>(bin_stream &s, ka::p2p::gate_wifi_status &wfsettings) {
         s >> length_encoded >> wfsettings.ssid >> wfsettings.operational;
         return s;
     }
@@ -750,7 +765,7 @@ namespace mlab {
         return bd << ri.semantic_version << length_encoded << ri.firmware_url;
     }
 
-    bin_data &operator<<(bin_data &bd, ka::p2p::v0::wifi_status const &wfsettings) {
+    bin_data &operator<<(bin_data &bd, ka::p2p::gate_wifi_status const &wfsettings) {
         return bd << length_encoded << wfsettings.ssid << wfsettings.operational;
     }
 

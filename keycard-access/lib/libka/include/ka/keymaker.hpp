@@ -88,8 +88,8 @@ namespace ka {
         p2p::r<gate_id> gate_add(std::string notes = "", bool configure = false);
         p2p::r<> gate_configure(gate_id id, bool force = false);
         p2p::r<> gate_remove(gate_id id, bool force = false);
-        [[nodiscard]] p2p::r<p2p::v0::update_config> gate_get_update_config() const;
-        [[nodiscard]] p2p::r<p2p::v0::wifi_status> gate_get_wifi_status() const;
+        [[nodiscard]] p2p::r<p2p::gate_update_config> gate_get_update_config() const;
+        [[nodiscard]] p2p::r<p2p::gate_wifi_status> gate_get_wifi_status() const;
         p2p::r<> gate_set_update_config(std::string_view update_channel = "", bool automatic_updates = true);
         p2p::r<bool> gate_connect_wifi(std::string_view ssid, std::string_view password);
         void gate_set_notes(gate_id id, std::string notes);

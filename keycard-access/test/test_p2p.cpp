@@ -70,8 +70,8 @@ namespace ut {
         struct assertive_local_gate : public ka::p2p::v0::local_gate {
             using local_gate::local_gate;
 
-            ka::p2p::r<ka::p2p::v0::update_config> get_update_settings() override {
-                return ka::p2p::v0::update_config{"Foo bar", false};
+            ka::p2p::r<ka::p2p::gate_update_config> get_update_settings() override {
+                return ka::p2p::gate_update_config{"Foo bar", false};
             }
 
             ka::p2p::r<> set_update_settings(std::string_view update_channel, bool automatic_updates) override {
@@ -80,8 +80,8 @@ namespace ut {
                 return mlab::result_success;
             }
 
-            ka::p2p::r<ka::p2p::v0::wifi_status> get_wifi_status() override {
-                return ka::p2p::v0::wifi_status{"Nope", false};
+            ka::p2p::r<ka::p2p::gate_wifi_status> get_wifi_status() override {
+                return ka::p2p::gate_wifi_status{"Nope", false};
             }
 
             ka::p2p::r<bool> connect_wifi(std::string_view ssid, std::string_view password) override {
@@ -90,8 +90,8 @@ namespace ut {
                 return false;
             }
 
-            ka::p2p::r<ka::p2p::v0::gate_registration_info> get_registration_info() override {
-                return ka::p2p::v0::gate_registration_info{ka::gate_id{32}, g().public_info().pk, g().public_info().pk};
+            ka::p2p::r<ka::p2p::gate_registration_info> get_registration_info() override {
+                return ka::p2p::gate_registration_info{ka::gate_id{32}, g().public_info().pk, g().public_info().pk};
             }
 
             ka::p2p::r<ka::gate_base_key> register_gate(ka::gate_id requested_id) override {

@@ -464,7 +464,7 @@ namespace ka {
         return {gid, ours};
     }
 
-    p2p::r<p2p::v0::update_config> keymaker::gate_get_update_config() const {
+    p2p::r<p2p::gate_update_config> keymaker::gate_get_update_config() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
@@ -476,7 +476,7 @@ namespace ka {
         }
     }
 
-    p2p::r<p2p::v0::wifi_status> keymaker::gate_get_wifi_status() const {
+    p2p::r<p2p::gate_wifi_status> keymaker::gate_get_wifi_status() const {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             TRY_RESULT_AS(r_chn->remote_gate<p2p::v0::remote_gate>(), r_rg) {
@@ -728,15 +728,15 @@ namespace ka {
         };
 
         template <>
-        struct parser<p2p::v0::update_config> {
-            [[nodiscard]] static std::string to_string(p2p::v0::update_config const &us) {
+        struct parser<p2p::gate_update_config> {
+            [[nodiscard]] static std::string to_string(p2p::gate_update_config const &us) {
                 return mlab::concatenate({us.enable_automatic_update ? "automatic, from " : "not automatic, from ",
                                           us.update_channel});
             }
         };
         template <>
-        struct parser<p2p::v0::wifi_status> {
-            [[nodiscard]] static std::string to_string(p2p::v0::wifi_status const &ws) {
+        struct parser<p2p::gate_wifi_status> {
+            [[nodiscard]] static std::string to_string(p2p::gate_wifi_status const &ws) {
                 if (ws.ssid.empty()) {
                     return "not associated";
                 }
