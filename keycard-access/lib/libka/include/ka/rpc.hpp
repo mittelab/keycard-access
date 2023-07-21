@@ -90,6 +90,9 @@ namespace ka::rpc {
         [[nodiscard]] virtual r<> send(mlab::bin_data data) = 0;
     };
 
+    template <class T>
+    using result_wrap_return = std::conditional_t<std::is_void_v<T>, r<>, r<T>>;
+
     class bridge {
         std::map<std::string, std::unique_ptr<command_base>> _cmds;
         std::unique_ptr<bridge_interface_base> _if;
@@ -147,16 +150,16 @@ namespace ka::rpc {
         [[nodiscard]] r<> remote_supports(R (T::*method)(Args...), std::string_view uuid = "") const;
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke_unique(R (T::*method)(Args...) const, Args... args);
+        [[nodiscard]] result_wrap_return<R> remote_invoke_unique(R (T::*method)(Args...) const, Args... args);
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke_unique(R (T::*method)(Args...), Args... args);
+        [[nodiscard]] result_wrap_return<R> remote_invoke_unique(R (T::*method)(Args...), Args... args);
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args);
+        [[nodiscard]] result_wrap_return<R> remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args);
 
         template <class R, class T, class... Args>
-        [[nodiscard]] r<R> remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args);
+        [[nodiscard]] result_wrap_return<R> remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args);
 
         r<> serve_loop();
 
@@ -371,7 +374,7 @@ namespace ka::rpc {
 
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke_unique(R (T::*method)(Args...) const, Args... args) {
+    result_wrap_return<R> bridge::remote_invoke_unique(R (T::*method)(Args...) const, Args... args) {
         if (const auto r = lookup_uuid(method); not r) {
             return r.error();
         } else {
@@ -380,7 +383,7 @@ namespace ka::rpc {
     }
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke_unique(R (T::*method)(Args...), Args... args) {
+    result_wrap_return<R> bridge::remote_invoke_unique(R (T::*method)(Args...), Args... args) {
         if (const auto r = lookup_uuid(method); not r) {
             return r.error();
         } else {
@@ -390,7 +393,7 @@ namespace ka::rpc {
 
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args) {
+    result_wrap_return<R> bridge::remote_invoke(R (T::*)(Args...) const, std::string_view uuid, Args... args) {
         mlab::bin_data serialized_args;
         if constexpr (sizeof...(Args) > 0) {
             serialized_args = serialize<Args...>(std::forward<Args>(args)...);
@@ -415,7 +418,7 @@ namespace ka::rpc {
     }
 
     template <class R, class T, class... Args>
-    r<R> bridge::remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args) {
+    result_wrap_return<R> bridge::remote_invoke(R (T::*)(Args...), std::string_view uuid, Args... args) {
         mlab::bin_data serialized_args;
         if constexpr (sizeof...(Args) > 0) {
             serialized_args = serialize<Args...>(std::forward<Args>(args)...);
