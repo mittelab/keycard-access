@@ -60,15 +60,15 @@ namespace ka {
         rpc_transport_error = static_cast<std::uint8_t>(rpc::error::transport_error),
         rpc_channel_error = static_cast<std::uint8_t>(rpc::error::channel_error),
         rpc_invalid_argument = static_cast<std::uint8_t>(rpc::error::invalid_argument),
-        p2p_unauthorized = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::unauthorized),
-        p2p_invalid_argument = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::invalid_argument),
-        p2p_invalid_operation = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::v2::error::invalid_operation),
+        p2p_unauthorized = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::error::unauthorized),
+        p2p_invalid_argument = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::error::invalid_argument),
+        p2p_invalid_operation = rpc_p2p_bit | static_cast<std::uint8_t>(p2p::error::invalid_operation),
     };
 
     [[nodiscard]] const char *to_string(rpc_p2p_error e);
 
     [[nodiscard]] constexpr rpc_p2p_error cast_error(rpc::error e);
-    [[nodiscard]] constexpr rpc_p2p_error cast_error(p2p::v2::error e);
+    [[nodiscard]] constexpr rpc_p2p_error cast_error(p2p::error e);
 
     template <class ...Args>
     using rpc_p2p_r = mlab::result<rpc_p2p_error, Args...>;
@@ -77,7 +77,7 @@ namespace ka {
     [[nodiscard]] rpc_p2p_r<Args...> cast_result(rpc::r<Args...> r);
 
     template <class ...Args>
-    [[nodiscard]] rpc_p2p_r<Args...> cast_result(p2p::v2::r<Args...> r);
+    [[nodiscard]] rpc_p2p_r<Args...> cast_result(p2p::r<Args...> r);
 
     class keymaker : public device {
         std::shared_ptr<pn532::controller> _ctrl;
@@ -97,7 +97,7 @@ namespace ka {
          * @return The gate id and a boolean expressing whether the gate is ours.
          * @todo Add a boolean that fail if not ours
          */
-        [[nodiscard]] rpc_p2p_r<gate_id, bool> identify_gate(p2p::v2::remote_gate &rg) const;
+        [[nodiscard]] rpc_p2p_r<gate_id, bool> identify_gate(p2p::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
 
@@ -153,7 +153,7 @@ namespace ka {
         return static_cast<rpc_p2p_error>(e);
     }
 
-    constexpr rpc_p2p_error cast_error(p2p::v2::error e) {
+    constexpr rpc_p2p_error cast_error(p2p::error e) {
         return static_cast<rpc_p2p_error>(static_cast<std::uint8_t>(e) | rpc_p2p_bit);
     }
 
@@ -167,7 +167,7 @@ namespace ka {
     }
 
     template <class ...Args>
-    rpc_p2p_r<Args...> cast_result(p2p::v2::r<Args...> r) {
+    rpc_p2p_r<Args...> cast_result(p2p::r<Args...> r) {
         if (r) {
             return std::move(*r);
         } else {

@@ -122,7 +122,7 @@ namespace ka {
         std::shared_ptr<pn532::controller> _ctrl = {};
         std::shared_ptr<pn532::p2p::pn532_target> _raw_target = {};
         std::shared_ptr<p2p::secure_target> _sec_target = {};
-        std::unique_ptr<p2p::v2::remote_gate> _remote_gate = {};
+        std::unique_ptr<p2p::remote_gate> _remote_gate = {};
 
     public:
         gate_channel() = default;
@@ -170,7 +170,7 @@ namespace ka {
                     const auto pk_s = mlab::data_to_hex_string(_sec_target->peer_pub_key().raw_pk());
                     ESP_LOGI(TAG, "Connected to peer with public key %s", pk_s.c_str());
                     // Try build a remote_channel
-                    _remote_gate = std::make_unique<p2p::v2::remote_gate>(_sec_target);
+                    _remote_gate = std::make_unique<p2p::remote_gate>(_sec_target);
                     if (const auto r_fw_info = _remote_gate->get_fw_info(); r_fw_info) {
                         const auto fw_s = r_fw_info->to_string();
                         ESP_LOGI(TAG, "Peer is gate running %s", fw_s.c_str());
@@ -198,12 +198,12 @@ namespace ka {
             return _raw_target != nullptr and _sec_target != nullptr and _remote_gate != nullptr;
         }
 
-        [[nodiscard]] p2p::v2::remote_gate &remote_gate() {
+        [[nodiscard]] p2p::remote_gate &remote_gate() {
             assert(_remote_gate != nullptr);
             return *_remote_gate;
         }
 
-        [[nodiscard]] p2p::v2::remote_gate const &remote_gate() const {
+        [[nodiscard]] p2p::remote_gate const &remote_gate() const {
             assert(_remote_gate != nullptr);
             return *_remote_gate;
         }
@@ -213,7 +213,7 @@ namespace ka {
     const char *to_string(rpc_p2p_error e) {
         const auto b = static_cast<std::uint8_t>(e);
         if (0 != (b & rpc_p2p_bit)) {
-            return to_string(static_cast<p2p::v2::error>(b & ~rpc_p2p_bit));
+            return to_string(static_cast<p2p::error>(b & ~rpc_p2p_bit));
         } else {
             return to_string(static_cast<rpc::error>(b));
         }
@@ -409,7 +409,7 @@ namespace ka {
         return mlab::result_success;
     }
 
-    rpc_p2p_r<gate_id, bool> keymaker::identify_gate(p2p::v2::remote_gate &rg) const {
+    rpc_p2p_r<gate_id, bool> keymaker::identify_gate(p2p::remote_gate &rg) const {
         gate_id gid = std::numeric_limits<gate_id>::max();
         bool ours = false;
         TRY_CAST_RESULT(rg.get_registration_info()) {

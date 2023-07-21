@@ -243,7 +243,7 @@ namespace ka {
     void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx) {
         auto raw_initiator = std::make_shared<pn532::p2p::pn532_initiator>(ctrl, logical_idx);
         auto sec_initiator = std::make_shared<p2p::secure_initiator>(raw_initiator, keys());
-        p2p::v2::local_gate lg{*this, sec_initiator};
+        p2p::local_gate lg{*this, sec_initiator};
         lg.serve_loop();
     }
 

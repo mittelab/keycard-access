@@ -149,15 +149,15 @@ namespace ut {
         auto base_loop = std::make_shared<p2p_loopback>();
         secure_p2p_loopback loop{base_loop, km, g};
 
-        ka::p2p::v2::local_gate lg{g, loop.initiator};
-        ka::p2p::v2::remote_gate rg{loop.target};
+        ka::p2p::local_gate lg{g, loop.initiator};
+        ka::p2p::remote_gate rg{loop.target};
 
         TEST_ASSERT(loop.initiator->did_handshake());
         TEST_ASSERT(loop.target->did_handshake());
 
         ka::wifi::instance().set_max_attempts(1);
 
-        std::thread local_serve{&ka::p2p::v2::local_gate::serve_loop, &lg};
+        std::thread local_serve{&ka::p2p::local_gate::serve_loop, &lg};
 
         {
             ESP_LOGI("UT", "Testing %s", "get_fw_info");
@@ -265,7 +265,7 @@ namespace ut {
             if (r) {
                 TEST_ASSERT(not *r);
                 if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_argument);
+                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_argument);
                 }
             }
         }
@@ -318,7 +318,7 @@ namespace ut {
             if (r) {
                 TEST_ASSERT(not *r);
                 if (not *r) {
-                    TEST_ASSERT((*r).error() == ka::p2p::v2::error::invalid_operation);
+                    TEST_ASSERT((*r).error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -331,7 +331,7 @@ namespace ut {
             if (r) {
                 TEST_ASSERT(not *r);
                 if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -369,7 +369,7 @@ namespace ut {
             if (r) {
                 TEST_ASSERT(not *r);
                 if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -382,7 +382,7 @@ namespace ut {
             if (r) {
                 TEST_ASSERT(not *r);
                 if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::v2::error::invalid_operation);
+                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -405,17 +405,17 @@ namespace ut {
         secure_p2p_loopback loop1{base_loop1, km1, g};
         secure_p2p_loopback loop2{base_loop2, km2, g};
 
-        ka::p2p::v2::remote_gate rg1{loop1.target};
-        ka::p2p::v2::local_gate lg1{g, loop1.initiator};
+        ka::p2p::remote_gate rg1{loop1.target};
+        ka::p2p::local_gate lg1{g, loop1.initiator};
 
-        ka::p2p::v2::remote_gate rg2{loop2.target};
-        ka::p2p::v2::local_gate lg2{g, loop2.initiator};
+        ka::p2p::remote_gate rg2{loop2.target};
+        ka::p2p::local_gate lg2{g, loop2.initiator};
 
         std::thread t1{[&]() { lg1.serve_loop(); }};
         std::thread t2{[&]() { lg2.serve_loop(); }};
 
-        auto is_unauthorized = [](auto const &r) { return r and not *r and r->error() == ka::p2p::v2::error::unauthorized; };
-        auto is_invalid = [](auto const &r) { return r and not *r and r->error() == ka::p2p::v2::error::invalid_operation; };
+        auto is_unauthorized = [](auto const &r) { return r and not *r and r->error() == ka::p2p::error::unauthorized; };
+        auto is_invalid = [](auto const &r) { return r and not *r and r->error() == ka::p2p::error::invalid_operation; };
 
         // Do the setup with km1
         TEST_ASSERT(rg1.get_fw_info());

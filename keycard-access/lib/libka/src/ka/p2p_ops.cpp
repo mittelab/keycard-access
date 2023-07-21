@@ -40,8 +40,8 @@ namespace ka::rpc {
     struct use_default_serialization<ka::gate_base_key> : std::true_type {};
 
     template <class T>
-    struct serializer<ka::p2p::v2::r<T>> {
-        static void serialize(mlab::bin_data &bd, ka::p2p::v2::r<T> const &r) {
+    struct serializer<ka::p2p::r<T>> {
+        static void serialize(mlab::bin_data &bd, ka::p2p::r<T> const &r) {
             bd << bool(r);
             if (r) {
                 serializer<T>::serialize(bd, *r);
@@ -50,49 +50,49 @@ namespace ka::rpc {
             }
         }
 
-        [[nodiscard]] static ka::p2p::v2::r<T> deserialize(mlab::bin_stream &s) {
+        [[nodiscard]] static ka::p2p::r<T> deserialize(mlab::bin_stream &s) {
             bool is_ok = false;
             s >> is_ok;
             if (not s.bad()) {
                 if (is_ok) {
                     return serializer<T>::deserialize(s);
                 } else {
-                    ka::p2p::v2::error e{};
+                    ka::p2p::error e{};
                     s >> e;
                     return e;
                 }
             }
-            return ka::p2p::v2::error{};
+            return ka::p2p::error{};
         }
     };
 
     template <>
-    struct serializer<ka::p2p::v2::r<>> {
-        static void serialize(mlab::bin_data &bd, ka::p2p::v2::r<> const &r) {
+    struct serializer<ka::p2p::r<>> {
+        static void serialize(mlab::bin_data &bd, ka::p2p::r<> const &r) {
             bd << bool(r);
             if (not r) {
                 bd << r.error();
             }
         }
 
-        [[nodiscard]] static ka::p2p::v2::r<> deserialize(mlab::bin_stream &s) {
+        [[nodiscard]] static ka::p2p::r<> deserialize(mlab::bin_stream &s) {
             bool is_ok = false;
             s >> is_ok;
             if (not s.bad()) {
                 if (is_ok) {
                     return mlab::result_success;
                 } else {
-                    ka::p2p::v2::error e{};
+                    ka::p2p::error e{};
                     s >> e;
                     return e;
                 }
             }
-            return ka::p2p::v2::error{};
+            return ka::p2p::error{};
         }
     };
 }// namespace ka::rpc
 
-namespace ka::p2p::v2 {
+namespace ka::p2p {
 
     const char *to_string(error e) {
         switch (e) {
@@ -345,7 +345,7 @@ namespace ka::p2p::v2 {
     rpc::r<> remote_gate::bye() {
         return _b.remote_invoke_unique(&local_gate::disconnect);
     }
-}// namespace ka::p2p::v2
+}// namespace ka::p2p
 
 namespace mlab {
     bin_stream &operator>>(bin_stream &s, ka::fw_info &fwinfo) {

@@ -45,100 +45,97 @@ namespace ka::p2p {
         bool operational = false;
     };
 
-    namespace v2 {
+    enum struct error : std::uint8_t {
+        unauthorized = 0,
+        invalid_argument,
+        invalid_operation
+    };
 
-        enum struct error : std::uint8_t {
-            unauthorized = 0,
-            invalid_argument,
-            invalid_operation
-        };
+    [[nodiscard]] const char *to_string(error e);
 
-        [[nodiscard]] const char *to_string(error e);
+    template <class... Args>
+    using r = mlab::result<error, Args...>;
 
-        template <class... Args>
-        using r = mlab::result<error, Args...>;
+    class local_gate {
+        gate &_g;
+        std::shared_ptr<secure_initiator> _sec_layer;
+        rpc::bridge _b;
 
-        class local_gate {
-            gate &_g;
-            std::shared_ptr<secure_initiator> _sec_layer;
-            rpc::bridge _b;
+        [[nodiscard]] r<> assert_peer_is_keymaker(bool allow_unconfigured = false) const;
+        [[nodiscard]] pub_key peer_pub_key() const;
 
-            [[nodiscard]] r<> assert_peer_is_keymaker(bool allow_unconfigured = false) const;
-            [[nodiscard]] pub_key peer_pub_key() const;
+    public:
+        explicit local_gate(gate &g, std::shared_ptr<secure_initiator> initiator);
 
-        public:
-            explicit local_gate(gate &g, std::shared_ptr<secure_initiator> initiator);
+        void serve_loop();
 
-            void serve_loop();
-
-            /**
+        /**
              * @addtogroup RemoteMethods
              * @{
              */
 
-            [[nodiscard]] fw_info get_fw_info() const;
-            [[nodiscard]] gate_update_config get_update_settings() const;
-            [[nodiscard]] gate_wifi_status get_wifi_status() const;
-            [[nodiscard]] update_status is_updating() const;
-            [[nodiscard]] gpio_responder_config get_gpio_config() const;
-            [[nodiscard]] std::string get_backend_url() const;
-            [[nodiscard]] gate_registration_info get_registration_info() const;
+        [[nodiscard]] fw_info get_fw_info() const;
+        [[nodiscard]] gate_update_config get_update_settings() const;
+        [[nodiscard]] gate_wifi_status get_wifi_status() const;
+        [[nodiscard]] update_status is_updating() const;
+        [[nodiscard]] gpio_responder_config get_gpio_config() const;
+        [[nodiscard]] std::string get_backend_url() const;
+        [[nodiscard]] gate_registration_info get_registration_info() const;
 
-            [[nodiscard]] r<release_info> check_for_updates();
-            [[nodiscard]] r<gate_base_key> register_gate(gate_id requested_id);
+        [[nodiscard]] r<release_info> check_for_updates();
+        [[nodiscard]] r<gate_base_key> register_gate(gate_id requested_id);
 
-            r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
-            r<> update_manually(std::string_view fw_url);
-            r<> set_backend_url(std::string_view url, std::string_view api_key);
-            r<> set_gpio_config(gpio_responder_config cfg);
-            r<> reset_gate();
-            r<release_info> update_now();
-            r<bool> connect_wifi(std::string_view ssid, std::string_view password);
+        r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
+        r<> update_manually(std::string_view fw_url);
+        r<> set_backend_url(std::string_view url, std::string_view api_key);
+        r<> set_gpio_config(gpio_responder_config cfg);
+        r<> reset_gate();
+        r<release_info> update_now();
+        r<bool> connect_wifi(std::string_view ssid, std::string_view password);
 
-            void disconnect();
+        void disconnect();
 
-            /**
+        /**
              * @}
              */
-        };
+    };
 
-        class remote_gate {
-            std::shared_ptr<secure_target> _sec_layer;
-            mutable rpc::bridge _b;
+    class remote_gate {
+        std::shared_ptr<secure_target> _sec_layer;
+        mutable rpc::bridge _b;
 
-        public:
-            explicit remote_gate(std::shared_ptr<secure_target> target);
+    public:
+        explicit remote_gate(std::shared_ptr<secure_target> target);
 
-            /**
+        /**
              * @addtogroup RemoteMethods
              * @{
              */
 
-            [[nodiscard]] rpc::r<fw_info> get_fw_info() const;
-            [[nodiscard]] rpc::r<gate_update_config> get_update_settings() const;
-            [[nodiscard]] rpc::r<gate_wifi_status> get_wifi_status() const;
-            [[nodiscard]] rpc::r<update_status> is_updating() const;
-            [[nodiscard]] rpc::r<gpio_responder_config> get_gpio_config() const;
-            [[nodiscard]] rpc::r<std::string> get_backend_url() const;
-            [[nodiscard]] rpc::r<gate_registration_info> get_registration_info() const;
+        [[nodiscard]] rpc::r<fw_info> get_fw_info() const;
+        [[nodiscard]] rpc::r<gate_update_config> get_update_settings() const;
+        [[nodiscard]] rpc::r<gate_wifi_status> get_wifi_status() const;
+        [[nodiscard]] rpc::r<update_status> is_updating() const;
+        [[nodiscard]] rpc::r<gpio_responder_config> get_gpio_config() const;
+        [[nodiscard]] rpc::r<std::string> get_backend_url() const;
+        [[nodiscard]] rpc::r<gate_registration_info> get_registration_info() const;
 
-            [[nodiscard]] rpc::r<r<release_info>> check_for_updates();
-            [[nodiscard]] rpc::r<r<gate_base_key>> register_gate(gate_id requested_id);
+        [[nodiscard]] rpc::r<r<release_info>> check_for_updates();
+        [[nodiscard]] rpc::r<r<gate_base_key>> register_gate(gate_id requested_id);
 
-            rpc::r<r<>> set_update_settings(std::string_view update_channel, bool automatic_updates);
-            rpc::r<r<>> update_manually(std::string_view fw_url);
-            rpc::r<r<>> set_backend_url(std::string_view url, std::string_view api_key);
-            rpc::r<r<>> set_gpio_config(gpio_responder_config cfg);
-            rpc::r<r<>> reset_gate();
-            rpc::r<r<release_info>> update_now();
-            rpc::r<r<bool>> connect_wifi(std::string_view ssid, std::string_view password);
+        rpc::r<r<>> set_update_settings(std::string_view update_channel, bool automatic_updates);
+        rpc::r<r<>> update_manually(std::string_view fw_url);
+        rpc::r<r<>> set_backend_url(std::string_view url, std::string_view api_key);
+        rpc::r<r<>> set_gpio_config(gpio_responder_config cfg);
+        rpc::r<r<>> reset_gate();
+        rpc::r<r<release_info>> update_now();
+        rpc::r<r<bool>> connect_wifi(std::string_view ssid, std::string_view password);
 
-            rpc::r<> bye();
-            /**
+        rpc::r<> bye();
+        /**
              * @}
              */
-        };
-    }// namespace v2
+    };
 }// namespace ka::p2p
 
 namespace mlab {
