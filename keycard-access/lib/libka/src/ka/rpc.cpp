@@ -8,8 +8,9 @@
 
 using namespace std::chrono_literals;
 
+#define TAG "RPC"
 #undef MLAB_RESULT_LOG_PREFIX
-#define MLAB_RESULT_LOG_PREFIX "RPC"
+#define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka::rpc {
 
@@ -48,7 +49,7 @@ namespace ka::rpc {
     r<std::string_view> bridge::register_command(std::string uuid, std::unique_ptr<command_base> cmd) {
         auto it = _cmds.lower_bound(uuid);
         if (it != std::end(_cmds) and it->first == uuid) {
-            ESP_LOGE("RPC", "Duplicate command uuid %s", uuid.data());
+            ESP_LOGE(TAG, "Duplicate command uuid %s", uuid.data());
             return error::invalid_argument;
         }
         return std::string_view{_cmds.insert(it, std::make_pair(std::move(uuid), std::move(cmd)))->first};
@@ -138,6 +139,7 @@ namespace ka::rpc {
         if (auto it = _cmds.find(std::string{uuid}); it != std::end(_cmds)) {
             return it->second->command_response(s);
         } else {
+            ESP_LOGW(TAG, "No command found with uuid %s", uuid.data());
             return error::unknown_command;
         }
     }
