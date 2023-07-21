@@ -6,19 +6,19 @@
 #define KEYCARD_ACCESS_RPC_HPP
 
 
+#include <ka/misc.hpp>
+#include <map>
 #include <mlab/bin_data.hpp>
 #include <mlab/result.hpp>
 #include <mlab/strutils.hpp>
-#include <ka/misc.hpp>
 #include <mlab/type_name.hpp>
 #include <type_traits>
 #include <utility>
-#include <map>
 
-namespace pn532 {
+namespace pn532::p2p {
     struct target;
     struct initiator;
-}
+}// namespace pn532::p2p
 
 namespace ka::rpc {
 
@@ -35,7 +35,6 @@ namespace ka::rpc {
 
     enum struct error : std::uint8_t {
         parsing_error = 0,
-        no_handler,
         unknown_command,
         mismatching_signature,
         transport_error,
@@ -43,19 +42,16 @@ namespace ka::rpc {
         invalid_argument
     };
 
-    template <class ...Args>
+    template <class... Args>
     using r = mlab::result<error, Args...>;
 
-    template <class ...Args>
+    template <class... Args>
     using deserialized_args_tuple_t = std::tuple<typename serializer<Args>::deserialize_type_t...>;
 
-    template <class ...Args>
-    using serialized_args_tuple_t = std::tuple<Args...>;
-
-    template <class ...Args>
+    template <class... Args>
     [[nodiscard]] std::optional<deserialized_args_tuple_t<Args...>> deserialize(mlab::bin_stream &s);
 
-    template <class ...Args>
+    template <class... Args>
     [[nodiscard]] mlab::bin_data serialize(Args... args);
 
     template <class R, class T, class... Args>
@@ -78,11 +74,12 @@ namespace ka::rpc {
         using typename ka::target_method<R, T, Args...>::fn_ptr_t;
         using typename ka::target_method<R, T, Args...>::target_ptr_t;
 
-        explicit templated_command(fn_ptr_t method, target_ptr_t ptr = nullptr);
+        explicit templated_command(fn_ptr_t method, target_ptr_t ptr);
 
         [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_stream &s) override;
+
     private:
-        template <std::size_t ...Is>
+        template <std::size_t... Is>
         [[nodiscard]] r<mlab::bin_data> invoke_with_tuple(std::index_sequence<Is...>, deserialized_args_tuple_t<Args...> t);
     };
 
@@ -90,7 +87,7 @@ namespace ka::rpc {
         virtual ~bridge_interface_base() = default;
 
         [[nodiscard]] virtual r<mlab::bin_data> receive() = 0;
-        [[nodiscard]] virtual r<> send(mlab::bin_data const &rsp) = 0;
+        [[nodiscard]] virtual r<> send(mlab::bin_data data) = 0;
     };
 
     class bridge {
@@ -102,11 +99,12 @@ namespace ka::rpc {
 
         [[nodiscard]] r<mlab::bin_data> remote_invoke(std::string_view uuid, mlab::bin_data const &body);
 
-        [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data const &payload) const;
+        [[nodiscard]] r<mlab::bin_data> command_response(mlab::bin_data payload) const;
 
         [[nodiscard]] r<mlab::bin_data> local_invoke(mlab::bin_data const &packed_cmd) const;
 
         [[nodiscard]] r<mlab::bin_data> local_invoke(std::string_view uuid, mlab::bin_stream &s) const;
+
     public:
         bridge() = default;
 
@@ -119,10 +117,10 @@ namespace ka::rpc {
         bridge &operator=(bridge &&) = default;
 
         template <class R, class T, class... Args>
-        r<std::string_view> register_command(R (T::*method)(Args...), std::string uuid = "", T *handler = nullptr);
+        r<std::string_view> register_command(R (T::*method)(Args...), T &handler, std::string uuid = "");
 
         template <class R, class T, class... Args>
-        r<std::string_view> register_command(R (T::*method)(Args...) const, std::string uuid = "", T const *handler = nullptr);
+        r<std::string_view> register_command(R (T::*method)(Args...) const, T const &handler, std::string uuid = "");
 
         [[nodiscard]] bool contains(std::string_view uuid) const;
 
@@ -165,10 +163,63 @@ namespace ka::rpc {
         void serve_stop();
     };
 
-}
+}// namespace ka::rpc
+
+namespace pn532::p2p {
+    struct target;
+    struct initiator;
+}// namespace pn532::p2p
+
+namespace ka::p2p {
+
+    enum struct bridge_last_action {
+        command,
+        response
+    };
+
+    class p2p_bridge_interface_base : public ka::rpc::bridge_interface_base {
+        bridge_last_action _last_action = bridge_last_action::response;
+
+    protected:
+        [[nodiscard]] virtual ka::rpc::r<> send_command(mlab::bin_data data) = 0;
+        [[nodiscard]] virtual ka::rpc::r<> send_response(mlab::bin_data data) = 0;
+        [[nodiscard]] virtual ka::rpc::r<mlab::bin_data> receive_command() = 0;
+        [[nodiscard]] virtual ka::rpc::r<mlab::bin_data> receive_response() = 0;
+
+    public:
+        p2p_bridge_interface_base() = default;
+
+        [[nodiscard]] ka::rpc::r<mlab::bin_data> receive() final;
+        [[nodiscard]] ka::rpc::r<> send(mlab::bin_data data) final;
+    };
+
+    class target_bridge_interface : public p2p_bridge_interface_base {
+        std::shared_ptr<pn532::p2p::target> _tgt;
+
+        [[nodiscard]] ka::rpc::r<> send_command(mlab::bin_data data) final;
+        [[nodiscard]] ka::rpc::r<> send_response(mlab::bin_data data) final;
+        [[nodiscard]] ka::rpc::r<mlab::bin_data> receive_command() final;
+        [[nodiscard]] ka::rpc::r<mlab::bin_data> receive_response() final;
+
+    public:
+        explicit target_bridge_interface(std::shared_ptr<pn532::p2p::target> tgt);
+    };
+
+    class initiator_bridge_interface : public p2p_bridge_interface_base {
+        std::shared_ptr<pn532::p2p::initiator> _ini;
+
+        [[nodiscard]] ka::rpc::r<> send_command(mlab::bin_data data) final;
+        [[nodiscard]] ka::rpc::r<> send_response(mlab::bin_data data) final;
+        [[nodiscard]] ka::rpc::r<mlab::bin_data> receive_command() final;
+        [[nodiscard]] ka::rpc::r<mlab::bin_data> receive_response() final;
+
+    public:
+        explicit initiator_bridge_interface(std::shared_ptr<pn532::p2p::initiator> ini);
+    };
+
+}// namespace ka::p2p
 
 namespace ka::rpc {
-
 
     template <>
     struct use_default_serialization<bool> : std::true_type {};
@@ -212,7 +263,7 @@ namespace ka::rpc {
         }
     }
 
-    template <class ...Args>
+    template <class... Args>
     std::optional<deserialized_args_tuple_t<Args...>> deserialize(mlab::bin_stream &s) {
         auto retval = deserialized_args_tuple_t<Args...>{serializer<std::decay_t<Args>>::deserialize(s)...};
         if (s.bad() or not s.eof()) {
@@ -221,7 +272,7 @@ namespace ka::rpc {
         return retval;
     }
 
-    template <class ...Args>
+    template <class... Args>
     mlab::bin_data serialize(Args... args) {
         mlab::bin_data bd;
         (serializer<std::decay_t<Args>>::serialize(bd, args), ...);
@@ -239,39 +290,45 @@ namespace ka::rpc {
     }
 
     template <class R, class T, class... Args>
-    template <std::size_t ...Is>
+    template <std::size_t... Is>
     r<mlab::bin_data> templated_command<R, T, Args...>::invoke_with_tuple(std::index_sequence<Is...>, deserialized_args_tuple_t<Args...> t) {
-        if (ka::target_method<R, T, Args...>::target == nullptr) {
-            return error::no_handler;
+        if constexpr (std::is_void_v<R>) {
+            ka::target_method<R, T, Args...>::operator()(std::get<Is>(t)...);
+            return mlab::bin_data{};
+        } else {
+            return serialize<R>(ka::target_method<R, T, Args...>::operator()(std::get<Is>(t)...));
         }
-        return serialize<R>(ka::target_method<R, T, Args...>::operator()(std::get<Is>(t)...));
     }
 
     template <class R, class T, class... Args>
     templated_command<R, T, Args...>::templated_command(fn_ptr_t method, target_ptr_t ptr)
         : command_base{signature_of(method)},
-          ka::target_method<R, T, Args...>{ptr, method}
-    {}
+          ka::target_method<R, T, Args...>{ptr, method} {}
 
     template <class R, class T, class... Args>
     r<mlab::bin_data> templated_command<R, T, Args...>::command_response(mlab::bin_stream &s) {
-        if (auto args_tuple = deserialize<Args...>(s); args_tuple) {
-            return invoke_with_tuple(std::index_sequence_for<Args...>{}, std::move(*args_tuple));
+        if constexpr (sizeof...(Args) == 0) {
+            if (s.eof()) {
+                return invoke_with_tuple(std::index_sequence_for<Args...>{}, std::tuple<>{});
+            }
         } else {
-            return error::parsing_error;
+            if (auto args_tuple = deserialize<Args...>(s); args_tuple) {
+                return invoke_with_tuple(std::index_sequence_for<Args...>{}, std::move(*args_tuple));
+            }
         }
+        return error::parsing_error;
     }
 
     template <class R, class T, class... Args>
-    r<std::string_view> bridge::register_command(R (T::*method)(Args...), std::string uuid, T *handler) {
+    r<std::string_view> bridge::register_command(R (T::*method)(Args...), T &handler, std::string uuid) {
         return register_command(uuid.empty() ? signature_of(method) : std::move(uuid),
-                                std::make_unique<templated_command<R, T, Args...>>(method, handler));
+                                std::make_unique<templated_command<R, T, Args...>>(method, &handler));
     }
 
     template <class R, class T, class... Args>
-    r<std::string_view> bridge::register_command(R (T::*method)(Args...) const, std::string uuid, T const *handler) {
+    r<std::string_view> bridge::register_command(R (T::*method)(Args...) const, T const &handler, std::string uuid) {
         return register_command(uuid.empty() ? signature_of(method) : std::move(uuid),
-                                std::make_unique<templated_command<R, T, Args...>>(method, handler));
+                                std::make_unique<templated_command<R, const T, Args...>>(method, &handler));
     }
 
     template <class R, class T, class... Args>
@@ -328,12 +385,23 @@ namespace ka::rpc {
 
     template <class R, class T, class... Args>
     r<R> bridge::remote_invoke(R (T::*method)(Args...) const, std::string_view uuid, Args... args) {
-        if (const auto r_invoke = remote_invoke(uuid, serialize<Args...>(std::forward<Args>(args)...)); r_invoke) {
-            mlab::bin_stream s{*r_invoke};
-            if (const auto r = deserialize<R>(s); r) {
-                return std::move(std::get<0>(*r));
+        mlab::bin_data serialized_args;
+        if constexpr (sizeof...(Args) < 0) {
+            serialized_args = serialize<Args...>(std::forward<Args>(args)...);
+        }
+        if (const auto r_invoke = remote_invoke(uuid, serialized_args); r_invoke) {
+            if constexpr (std::is_void_v<R>) {
+                if (not r_invoke->empty()) {
+                    return error::parsing_error;
+                }
+                return mlab::result_success;
             } else {
-                return error::parsing_error;
+                mlab::bin_stream s{*r_invoke};
+                if (const auto r = deserialize<R>(s); r) {
+                    return std::move(std::get<0>(*r));
+                } else {
+                    return error::parsing_error;
+                }
             }
         } else {
             return r_invoke.error();
@@ -342,17 +410,28 @@ namespace ka::rpc {
 
     template <class R, class T, class... Args>
     r<R> bridge::remote_invoke(R (T::*method)(Args...), std::string_view uuid, Args... args) {
-        if (const auto r_invoke = remote_invoke(uuid, serialize<Args...>(std::forward<Args>(args)...)); r_invoke) {
-            mlab::bin_stream s{*r_invoke};
-            if (const auto r = deserialize<R>(s); r) {
-                return std::move(std::get<0>(*r));
+        mlab::bin_data serialized_args;
+        if constexpr (sizeof...(Args) < 0) {
+            serialized_args = serialize<Args...>(std::forward<Args>(args)...);
+        }
+        if (const auto r_invoke = remote_invoke(uuid, serialized_args); r_invoke) {
+            if constexpr (std::is_void_v<R>) {
+                if (not r_invoke->empty()) {
+                    return error::parsing_error;
+                }
+                return mlab::result_success;
             } else {
-                return error::parsing_error;
+                mlab::bin_stream s{*r_invoke};
+                if (const auto r = deserialize<R>(s); r) {
+                    return std::move(std::get<0>(*r));
+                } else {
+                    return error::parsing_error;
+                }
             }
         } else {
             return r_invoke.error();
         }
     }
-}
+}// namespace ka::rpc
 
 #endif//KEYCARD_ACCESS_RPC_HPP

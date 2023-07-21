@@ -3,6 +3,10 @@
 //
 
 #include <ka/rpc.hpp>
+#include <mlab/result_macro.hpp>
+#include <pn532/p2p.hpp>
+
+using namespace std::chrono_literals;
 
 namespace ka::rpc {
 
@@ -28,11 +32,11 @@ namespace ka::rpc {
     }
 
 
-    r<mlab::bin_data> bridge::command_response(mlab::bin_data const &payload) const {
+    r<mlab::bin_data> bridge::command_response(mlab::bin_data payload) const {
         if (_if == nullptr) {
             return error::transport_error;
         } else {
-            if (const auto r = _if->send(payload); not r) {
+            if (const auto r = _if->send(std::move(payload)); not r) {
                 return r.error();
             }
             return _if->receive();
@@ -48,7 +52,7 @@ namespace ka::rpc {
             error e{};
             if (auto r_rcv = _if->receive(); r_rcv) {
                 if (auto r_rsp = local_invoke(*r_rcv); r_rsp) {
-                    if (auto r_txf = _if->send(*r_rsp); r_txf) {
+                    if (auto r_txf = _if->send(std::move(*r_rsp)); r_txf) {
                         continue;
                     } else {
                         e = r_txf.error();
@@ -76,7 +80,7 @@ namespace ka::rpc {
         payload << mlab::prealloc(uuid.size() + 6)
                 << command_type::query_signature
                 << mlab::length_encoded << uuid;
-        if (const auto r_cmd = command_response(payload); r_cmd) {
+        if (const auto r_cmd = command_response(std::move(payload)); r_cmd) {
             mlab::bin_stream s{*r_cmd};
             if (auto opt_sign = deserialize<std::string>(s); opt_sign) {
                 return std::move(std::get<0>(*opt_sign));
@@ -89,16 +93,12 @@ namespace ka::rpc {
     }
 
     r<mlab::bin_data> bridge::remote_invoke(std::string_view uuid, mlab::bin_data const &body) {
-        if (auto it = _cmds.find(std::string{uuid}); it != std::end(_cmds)) {
-            mlab::bin_data payload;
-            payload << mlab::prealloc(uuid.size() + 5 + body.size())
-                    << command_type::user_command
-                    << mlab::length_encoded << uuid
-                    << body;
-            return command_response(payload);
-        } else {
-            return error::invalid_argument;
-        }
+        mlab::bin_data payload;
+        payload << mlab::prealloc(uuid.size() + 5 + body.size())
+                << command_type::user_command
+                << mlab::length_encoded << uuid
+                << body;
+        return command_response(std::move(payload));
     }
 
     r<mlab::bin_data> bridge::local_invoke(mlab::bin_data const &packed_cmd) const {
@@ -160,15 +160,228 @@ namespace ka::rpc {
         }
         return {};
     }
-
-    struct bar {
-        int foo(std::string_view) { return 32; }
-    };
-
-    void baz() {
-        rpc::templated_command<int, bar, std::string_view> cmd{&bar::foo};
-
-        bridge b{};
-        b.register_command(&bar::foo);
-    }
 }// namespace ka::rpc
+
+namespace ka::p2p {
+
+    namespace {
+        enum struct proto : std::uint8_t {
+            send_command,
+            req_command,
+            ack_command,
+            req_response,
+            send_response,
+            ack_response
+        };
+    }
+
+    target_bridge_interface::target_bridge_interface(std::shared_ptr<pn532::p2p::target> tgt) : _tgt{std::move(tgt)} {}
+
+    initiator_bridge_interface::initiator_bridge_interface(std::shared_ptr<pn532::p2p::initiator> ini) : _ini{std::move(ini)} {}
+
+    ka::rpc::r<> target_bridge_interface::send_response(mlab::bin_data data) {
+        if (_tgt == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (const auto r_req_resp = _tgt->receive(5s); r_req_resp) {
+            if (r_req_resp->size() != 1 or r_req_resp->back() != static_cast<std::uint8_t>(proto::req_response)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "req_response");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_resp->data(), r_req_resp->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the initiator requested a response
+        } else {
+            MLAB_FAIL_MSG("_tgt->receive()", r_req_resp);
+            return ka::rpc::error::channel_error;
+        }
+        // Actually send response, append the marker
+        data << proto::send_response;
+        if (const auto r_send_resp = _tgt->send(data, 5s); r_send_resp) {
+            return mlab::result_success;
+        } else {
+            MLAB_FAIL_MSG("_tgt->send()", r_send_resp);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<> target_bridge_interface::send_command(mlab::bin_data data) {
+        if (_tgt == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (const auto r_req_cmd = _tgt->receive(5s); r_req_cmd) {
+            if (r_req_cmd->size() != 1 or r_req_cmd->back() != static_cast<std::uint8_t>(proto::req_command)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "req_command");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_cmd->data(), r_req_cmd->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the initiator requested a response
+        } else {
+            MLAB_FAIL_MSG("_tgt->receive()", r_req_cmd);
+            return ka::rpc::error::channel_error;
+        }
+        // Actually send command, append the marker
+        data << proto::send_command;
+        if (const auto r_send_cmd = _tgt->send(data, 5s); r_send_cmd) {
+            return mlab::result_success;
+        } else {
+            MLAB_FAIL_MSG("_tgt->send()", r_send_cmd);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<mlab::bin_data> target_bridge_interface::receive_command() {
+        if (_tgt == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (auto r_send_cmd = _tgt->receive(5s); r_send_cmd) {
+            if (r_send_cmd->empty() or r_send_cmd->back() != static_cast<std::uint8_t>(proto::send_command)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_cmd->data(), r_send_cmd->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Signal that it was acknowledged
+            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_command), 5s); not r_send_ack) {
+                MLAB_FAIL_MSG("_tgt->send(ack_command)", r_send_ack);
+                return ka::rpc::error::channel_error;
+            }
+            // Good the initiator sent a command
+            r_send_cmd->pop_back();
+            return std::move(*r_send_cmd);
+        } else {
+            MLAB_FAIL_MSG("_tgt->receive()", r_send_cmd);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<mlab::bin_data> target_bridge_interface::receive_response() {
+        if (_tgt == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (auto r_send_resp = _tgt->receive(5s); r_send_resp) {
+            if (r_send_resp->empty() or r_send_resp->back() != static_cast<std::uint8_t>(proto::send_response)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_resp->data(), r_send_resp->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Signal that it was acknowledged
+            if (const auto r_send_ack = _tgt->send(mlab::bin_data::chain(proto::ack_response), 5s); not r_send_ack) {
+                MLAB_FAIL_MSG("_tgt->send(ack_response)", r_send_ack);
+                return ka::rpc::error::channel_error;
+            }
+            // Good the initiator sent a response
+            r_send_resp->pop_back();
+            return std::move(*r_send_resp);
+        } else {
+            MLAB_FAIL_MSG("_tgt->receive()", r_send_resp);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<> initiator_bridge_interface::send_command(mlab::bin_data data) {
+        if (_ini == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        data << proto::send_command;
+        if (const auto r_send_cmd = _ini->communicate(data, 5s); r_send_cmd) {
+            if (r_send_cmd->size() != 1 or r_send_cmd->back() != static_cast<std::uint8_t>(proto::ack_command)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "ack_command");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_cmd->data(), r_send_cmd->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the target acknowledged the command
+            return mlab::result_success;
+        } else {
+            MLAB_FAIL_MSG("_ini->communicate()", r_send_cmd);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<> initiator_bridge_interface::send_response(mlab::bin_data data) {
+        if (_ini == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        data << proto::send_response;
+        if (const auto r_send_resp = _ini->communicate(data, 5s); r_send_resp) {
+            if (r_send_resp->size() != 1 or r_send_resp->back() != static_cast<std::uint8_t>(proto::ack_response)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "ack_response");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_send_resp->data(), r_send_resp->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the target acknowledged the response
+            return mlab::result_success;
+        } else {
+            MLAB_FAIL_MSG("_ini->communicate()", r_send_resp);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<mlab::bin_data> initiator_bridge_interface::receive_command() {
+        if (_ini == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (auto r_req_cmd = _ini->communicate(mlab::bin_data::chain(proto::req_command), 5s); r_req_cmd) {
+            if (r_req_cmd->empty() or r_req_cmd->back() != static_cast<std::uint8_t>(proto::send_command)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "send_command");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_cmd->data(), r_req_cmd->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the target sent a command
+            r_req_cmd->pop_back();
+            return std::move(*r_req_cmd);
+        } else {
+            MLAB_FAIL_MSG("_ini->communicate()", r_req_cmd);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<mlab::bin_data> initiator_bridge_interface::receive_response() {
+        if (_ini == nullptr) {
+            return ka::rpc::error::transport_error;
+        }
+        // Perform everything as a two-stroke engine triggered by the initiator
+        if (auto r_req_resp = _ini->communicate(mlab::bin_data::chain(proto::req_response), 5s); r_req_resp) {
+            if (r_req_resp->empty() or r_req_resp->back() != static_cast<std::uint8_t>(proto::send_response)) {
+                ESP_LOGE("P2P", "Expected: %s, got:", "send_response");
+                ESP_LOG_BUFFER_HEX_LEVEL("P2P", r_req_resp->data(), r_req_resp->size(), ESP_LOG_ERROR);
+                return ka::rpc::error::transport_error;
+            }
+            // Good the target sent a response
+            r_req_resp->pop_back();
+            return std::move(*r_req_resp);
+        } else {
+            MLAB_FAIL_MSG("_ini->communicate()", r_req_resp);
+            return ka::rpc::error::channel_error;
+        }
+    }
+
+    ka::rpc::r<mlab::bin_data> p2p_bridge_interface_base::receive() {
+        switch (_last_action) {
+            case bridge_last_action::response:
+                _last_action = bridge_last_action::command;
+                return receive_command();
+            case bridge_last_action::command:
+                _last_action = bridge_last_action::response;
+                return receive_response();
+        }
+        return ka::rpc::error::transport_error;
+    }
+
+    ka::rpc::r<> p2p_bridge_interface_base::send(mlab::bin_data data) {
+        switch (_last_action) {
+            case bridge_last_action::response:
+                _last_action = bridge_last_action::command;
+                return send_command(std::move(data));
+            case bridge_last_action::command:
+                _last_action = bridge_last_action::response;
+                return send_response(std::move(data));
+        }
+        return ka::rpc::error::transport_error;
+    }
+}// namespace ka::p2p
