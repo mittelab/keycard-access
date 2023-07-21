@@ -11,3 +11,4 @@ sdkconfig.*
 docs/_build
 compile_commands.json.bak
 version.txt
+project_name.txt
