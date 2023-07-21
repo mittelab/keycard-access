@@ -21,32 +21,68 @@ namespace ut {
     namespace {
         using ms = std::chrono::milliseconds;
 
-        struct p2p_loopback : public pn532::p2p::initiator, public pn532::p2p::target {
-            mlab::bin_data i2t_data, t2i_data;
-            std::binary_semaphore i2t_avail{0}, t2i_avail{0};
+        struct p2p_loopback final : public pn532::p2p::initiator, public pn532::p2p::target {
+            mlab::bin_data i2t_data;
+            mlab::bin_data t2i_data;
+
+            std::atomic<bool> i2t_available{false};
+            std::atomic<bool> t2i_available{false};
+
+            std::mutex i2t_mutex{};
+            std::mutex t2i_mutex{};
 
             pn532::result<mlab::bin_data> receive(ms timeout) override {
-                if (not i2t_avail.try_acquire_for(timeout)) {
-                    return pn532::channel_error::timeout;
+                mlab::reduce_timeout rt{timeout};
+                while (rt) {
+                    if (i2t_available) {
+                        std::unique_lock<std::mutex> lock{i2t_mutex};
+                        i2t_available = false;
+                        return i2t_data;
+                    }
+                    std::this_thread::sleep_for(10ms);
                 }
-                return i2t_data;
+                return pn532::channel_error::timeout;
             }
 
-            pn532::result<> send(mlab::bin_data const &data_to_send, ms timeout) override {
-                std::this_thread::sleep_for(10ms);
+            pn532::result<> send(mlab::bin_data const &data_to_send, ms) override {
+                if (t2i_available) {
+                    ESP_LOGE("UT", "No one has consumed this target data!");
+                    return pn532::channel_error::timeout;
+                }
+                std::unique_lock<std::mutex> lock{t2i_mutex, std::try_to_lock};
+                if (not lock) {
+                    ESP_LOGE("UT", "No one else other than this thread should be locking t2i_mutex.");
+                    return pn532::channel_error::timeout;
+                }
                 t2i_data = data_to_send;
-                t2i_avail.release();
+                t2i_available = true;
                 return mlab::result_success;
             }
 
             pn532::result<mlab::bin_data> communicate(mlab::bin_data const &data_to_send, ms timeout) override {
-                std::this_thread::sleep_for(10ms);
-                i2t_data = data_to_send;
-                i2t_avail.release();
-                if (not t2i_avail.try_acquire_for(timeout)) {
-                    return pn532::channel_error::timeout;
+                {
+                    if (i2t_available) {
+                        ESP_LOGE("UT", "No one has consumed initiator target data!");
+                        return pn532::channel_error::timeout;
+                    }
+                    std::unique_lock<std::mutex> lock{i2t_mutex, std::try_to_lock};
+                    if (not lock) {
+                        ESP_LOGE("UT", "No one else other than this thread should be locking i2t_mutex.");
+                        return pn532::channel_error::timeout;
+                    }
+                    i2t_data = data_to_send;
+                    i2t_available = true;
                 }
-                return t2i_data;
+                mlab::reduce_timeout rt{timeout};
+                while (rt) {
+                    if (t2i_available) {
+                        std::unique_lock<std::mutex> lock{t2i_mutex};
+                        t2i_available = false;
+                        return t2i_data;
+                    }
+                    std::this_thread::sleep_for(10ms);
+                }
+                return pn532::channel_error::timeout;
             }
         };
     }// namespace
