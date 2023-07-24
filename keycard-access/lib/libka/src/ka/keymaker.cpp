@@ -747,6 +747,9 @@ namespace ka {
             }
 
             [[nodiscard]] static std::string type_description() {
+                /**
+                 * @todo What about auto? Do we ever use this?
+                 */
                 return "auto|(aes|des|3des2k|3des:<hex key>)";
             }
 

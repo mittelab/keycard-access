@@ -241,6 +241,9 @@ namespace ka {
 
 
     bool device::change_password(std::string_view oldpw, std::string_view newpw) {
+        /**
+         * @todo prompt for this twice instead of taking arguments, and make sure they are sufficiently long
+         */
         if (not _kp_storage.exists()) {
             ESP_LOGE(TAG, "No storage is active.");
             return false;
