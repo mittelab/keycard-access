@@ -26,7 +26,8 @@ class PartitionRange(NamedTuple):
 def read_sdkconfig() -> Dict:
     sdkconfig_json = os.path.join(env.subst('$BUILD_DIR'), 'config', 'sdkconfig.json')
     if not os.path.isfile(sdkconfig_json):
-        print('partitions: warning, could not find "sdkconfig.json" file', file=sys.stderr)
+        print('partitions: warning, could not find "sdkconfig.json" file, you need to run a full build first',
+              file=sys.stderr)
     with open(sdkconfig_json, 'r') as fp:
         return json.load(fp)
 
@@ -155,7 +156,11 @@ def main():
         partitions_csv = partitions_csv_candidate
 
     # Obtain the three main partitions
-    part_partitions_table = get_partition_table_partition(read_sdkconfig())
+    try:
+        sdkconfig = read_sdkconfig()
+    except FileNotFoundError:
+        return
+    part_partitions_table = get_partition_table_partition(sdkconfig)
     part_bootloader = get_bootloader_partition(part_partitions_table, board)
     part_boot_app = get_boot_partition(part_partitions_table, framework_dir, partitions_csv)
     part_ota_data = get_otadata_partition(part_partitions_table, framework_dir, partitions_csv)
