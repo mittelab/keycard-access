@@ -85,7 +85,7 @@ namespace ka {
             }
 
             // What is the expected firmware name for this version?
-            const auto fw_name = mlab::concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".bin"});
+            const auto fw_name = mlab::concatenate({fw_bin_prefix, "-", release.semantic_version.to_string(), ".ota"});
 
             // Does it have the correct firmware version?
             for (auto const &link : entry["assets"]["links"]) {
