@@ -98,7 +98,7 @@ build esp32 keymaker firmware:
   <<: *build-template
   script:
     - pio run -e ${PIO_ENV}
-    - pio run -t mergebin
+    - pio run -e ${PIO_ENV} -t mergebin
   rules:
     - when: always
   variables:
@@ -110,7 +110,7 @@ build esp32 gate firmware:
   <<: *build-template
   script:
     - pio run -e ${PIO_ENV}
-    - pio run -t mergebin
+    - pio run -e ${PIO_ENV} -t mergebin
   rules:
     - when: always
   variables:
