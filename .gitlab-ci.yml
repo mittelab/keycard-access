@@ -74,14 +74,12 @@ check format:
     - git config --global --add safe.directory $CI_PROJECT_DIR
     - cd "${PIO_PROJ_FOLDER}"
     # Remove the cached firmwares to ensure we will rebuild
-    - rm -f .pio/build/${PIO_ENV}/*.{bin,elf,map}
+    - rm -f .pio/build/${PIO_ENV}/*.bin
     - rm -f .pio/build/${PIO_ENV}/config/sdkconfig.json
   artifacts:
     paths:
       - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.bin"
-      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.elf"
-      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.map"
       - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/config/sdkconfig.json"
 
 
@@ -100,6 +98,7 @@ build esp32 keymaker firmware:
   <<: *build-template
   script:
     - pio run -e ${PIO_ENV}
+    - pio run -t mergebin
   rules:
     - when: always
   variables:
@@ -111,6 +110,7 @@ build esp32 gate firmware:
   <<: *build-template
   script:
     - pio run -e ${PIO_ENV}
+    - pio run -t mergebin
   rules:
     - when: always
   variables:
@@ -152,11 +152,14 @@ test hardware:
   stage: upload
   image: curlimages/curl:latest
   script:
-    # The package will be releases as Release-PioEnvironment-Tag.Extension, e.g. keycard-access-esp32-1.0.4-beta1.elf
-    - >
+    - |
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
         --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.bin" \
         "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.ota"
+    - |
+      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+        --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/merged.bin" \
+        "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.bin"
 
 
 upload esp32 keymaker firmware:
@@ -186,9 +189,11 @@ release:
     - upload esp32 keymaker firmware
     - upload esp32 gate firmware
   script:
-    # NOTE: explicitly list all environments here for which to create a release, both elf and bin
+    # NOTE: explicitly list all environments here for which to create a release,
     # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
     - |
       release-cli create --name "Release $VERSION" --tag-name $CI_COMMIT_TAG \
         --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.ota\"}" \
-        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.ota\"}"
+        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.ota\"}" \
+        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.bin\"}" \
+        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.bin\"}"

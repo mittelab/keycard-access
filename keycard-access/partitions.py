@@ -118,7 +118,7 @@ def add_merge_bin_target(platform: Any, board: Any, all_images: List[Tuple[str, 
     mcu = board.get('build.mcu', 'esp32')
     flash_size = board.get('upload.flash_size', '4M')
 
-    merge_output = os.path.join('$BUILD_DIR', f'merged-{mcu}-{flash_size}.bin')
+    merge_output = os.path.join('$BUILD_DIR', f'merged.bin')
 
     merge_cmd = ['"$PYTHONEXE"', f'"{esptool_py}"',
                  '--chip', mcu,
