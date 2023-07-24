@@ -18,7 +18,7 @@ def main():
     if git is None:
         print('set_version: unable to find git executable.', file=sys.stderr)
     else:
-        r = subprocess.run([git, 'describe', '--tags', '--match', 'v*.*.*', '--dirty'],
+        r = subprocess.run([git, 'describe', '--tags', '--match', 'v*.*.*', '--dirty', '--always'],
                            stdout=subprocess.PIPE, stderr=sys.stderr, universal_newlines=True)
         if r.returncode == 0:
             version_content = r.stdout
