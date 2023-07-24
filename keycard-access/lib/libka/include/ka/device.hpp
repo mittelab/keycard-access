@@ -28,7 +28,12 @@ namespace ka {
     class device_keypair_storage {
         std::shared_ptr<nvs::namespc> _ns = nullptr;
     public:
-        explicit device_keypair_storage(std::shared_ptr<nvs::namespc> ns);
+        explicit device_keypair_storage(nvs::partition &partition);
+
+        /**
+         * This will not save anything, fail to load and claim no key exist.
+         */
+        device_keypair_storage() = default;
 
         [[nodiscard]] std::optional<key_pair> load(std::string_view password);
         void save(key_pair const &kp, std::string_view password);
@@ -36,10 +41,10 @@ namespace ka {
     };
 
     class device {
-        std::shared_ptr<nvs::namespc> _device_ns;
         device_keypair_storage _kp_storage;
-        std::unique_ptr<ota_watch> _ota;
         key_pair _kp;
+        std::shared_ptr<nvs::namespc> _device_ns;
+        std::unique_ptr<ota_watch> _ota;
 
         friend struct ut::secure_p2p_loopback;
 
@@ -52,7 +57,12 @@ namespace ka {
         void regenerate_keys(std::string_view password);
     public:
         /**
-         * Construct a device loading it from the NVS partition. All changes will be persisted.
+         * Constructs a device loading all data but the key pair @p kp from the NVS partition. All changes will be persisted.
+         */
+        explicit device(nvs::partition &partition, device_keypair_storage kp_storage, key_pair kp);
+
+        /**
+         * Construct a device loading it from the NVS partition, including the password-protected key pair. All changes will be persisted.
          */
         explicit device(nvs::partition &partition, std::string_view password);
 

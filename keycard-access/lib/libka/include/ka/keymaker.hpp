@@ -106,9 +106,10 @@ namespace ka {
 
     public:
         /**
-         * Construct a device loading it from the NVS partition. All changes will be persisted.
+         * Constructs a device loading all data but the key pair @p kp from the NVS partition. All changes will be persisted.
          */
-        explicit keymaker(nvs::partition &partition, std::string_view password, std::shared_ptr<pn532::controller> ctrl);
+        explicit keymaker(nvs::partition &partition, device_keypair_storage kp_storage, key_pair kp, std::shared_ptr<pn532::controller> ctrl);
+
 
         /**
          * Construct a keymaker the given key pair. Testing purposes, changes will not be persisted

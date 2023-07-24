@@ -17,6 +17,9 @@
 #define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
+    namespace {
+        constexpr auto gate_namespace = "ka-gates";
+    }
     using namespace ka::cmd_literals;
 
     const char *to_string(gate_status gs) {
@@ -51,10 +54,10 @@ namespace ka {
         _gates = keymaker_gate_data::load_from(*_gate_ns);
     }
 
-    keymaker::keymaker(nvs::partition &partition, std::string_view password, std::shared_ptr<pn532::controller> ctrl)
-        : device{partition, password},
+    keymaker::keymaker(nvs::partition &partition, device_keypair_storage kp_storage, key_pair kp, std::shared_ptr<pn532::controller> ctrl)
+        : device{partition, std::move(kp_storage), kp},
           _ctrl{std::move(ctrl)},
-          _gate_ns{partition.open_namespc("ka-gates")} {
+          _gate_ns{partition.open_namespc(gate_namespace)} {
         turn_rf_off();
         restore_gates();
     }

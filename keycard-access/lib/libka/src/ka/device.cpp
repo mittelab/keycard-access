@@ -13,8 +13,11 @@ using namespace ka::cmd_literals;
 #define MLAB_RESULT_LOG_PREFIX TAG
 
 namespace ka {
+    namespace {
+        constexpr auto default_namespace = "ka-device";
+    }
 
-    device_keypair_storage::device_keypair_storage(std::shared_ptr<nvs::namespc> ns) : _ns{std::move(ns)} {}
+    device_keypair_storage::device_keypair_storage(nvs::partition &partition) : _ns{partition.open_namespc(default_namespace)} {}
 
     bool device_keypair_storage::exists() {
         if (_ns == nullptr) {
@@ -50,10 +53,6 @@ namespace ka {
     }
 
     void device::restore_kp(std::string_view password) {
-        if (_device_ns == nullptr) {
-            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "restore keypair");
-            return;
-        }
         if (_kp_storage.exists()) {
             if (auto opt_kp = _kp_storage.load(password); opt_kp) {
                 _kp = *opt_kp;
@@ -63,7 +62,7 @@ namespace ka {
                 ESP_LOGE(TAG, "Incorrect password or broken key pair storage.");
                 ESP_LOGE(TAG, "A random, ephemeral key pair will be used.");
                 _kp.generate_random();
-                _kp_storage = device_keypair_storage{nullptr};
+                _kp_storage = device_keypair_storage{};
             }
         } else {
             regenerate_keys(password);
@@ -102,20 +101,31 @@ namespace ka {
         }
     }
 
+    device::device(nvs::partition &partition, device_keypair_storage kp_storage, key_pair kp)
+        : _kp_storage{std::move(kp_storage)},
+          _kp{kp},
+          _device_ns{partition.open_namespc(default_namespace)},
+          _ota{std::make_unique<ota_watch>()} {
+        ESP_LOGI(TAG, "Using public key:");
+        ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
+        restore_ota();
+    }
+
     device::device(nvs::partition &partition, std::string_view password)
-        : _device_ns{partition.open_namespc("ka-device")},
-          _kp_storage{_device_ns},
-          _ota{std::make_unique<ota_watch>()},
-          _kp{} {
+        : _kp_storage{partition},
+          _kp{},
+          _device_ns{partition.open_namespc(default_namespace)},
+          _ota{std::make_unique<ota_watch>()}
+    {
         restore_kp(password);
         restore_ota();
     }
 
     device::device(key_pair kp)
-        : _device_ns{nullptr},
-          _kp_storage{nullptr},
-          _ota{nullptr},
-          _kp{kp} {
+        : _kp_storage{},
+          _kp{kp},
+          _device_ns{nullptr},
+          _ota{nullptr} {
     }
 
     bool device::updates_automatically() const {
