@@ -14,6 +14,41 @@ using namespace ka::cmd_literals;
 
 namespace ka {
 
+    device_keypair_storage::device_keypair_storage(std::shared_ptr<nvs::namespc> ns) : _ns{std::move(ns)} {
+        if (_ns == nullptr) {
+            ESP_LOGE(TAG, "You must specify a nonempty namespace.");
+        }
+    }
+
+    bool device_keypair_storage::exists() {
+        if (_ns == nullptr) {
+            return false;
+        }
+        return bool(_ns->get_blob("secret-key"));
+    }
+
+    std::optional<key_pair> device_keypair_storage::load(std::string_view password) {
+        if (_ns == nullptr) {
+            return std::nullopt;
+        }
+        if (const auto r = _ns->get_blob("secret-key"); not r) {
+            if (r.error() != nvs::error::not_found) {
+                MLAB_FAIL_MSG("_ns->get_blob(\"secret-key\")", r);
+            }
+            return std::nullopt;
+        } else {
+            return key_pair::load_encrypted(*r, password);
+        }
+    }
+
+    void device_keypair_storage::save(const ka::key_pair &kp, std::string_view password) {
+        if (_ns != nullptr) {
+            if (const auto r = _ns->set_blob("secret-key", kp.save_encrypted(password)); not r) {
+                MLAB_FAIL_MSG("_ns->set_blob(\"secret-key\")", r);
+            }
+        }
+    }
+
     device::device(std::shared_ptr<nvs::partition> const &partition) : device{} {
         setup_ns_and_ota(partition);
         load_or_generate_keys();

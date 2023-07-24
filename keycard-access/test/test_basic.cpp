@@ -33,6 +33,16 @@ namespace ut {
         mlab::bin_data test_buffer = message;
 
         TEST_ASSERT(k1.blind_check_ciphertext(k2, test_buffer, buffer));
+
+        auto bd = k1.save_encrypted("");
+        auto k3 = ka::key_pair::load_encrypted(bd, "");
+
+        TEST_ASSERT(k3 == k1);
+
+        bd = k1.save_encrypted("foobar");
+        k3 = ka::key_pair::load_encrypted(bd, "foobar");
+
+        TEST_ASSERT(k3 == k1);
     }
 
     void test_keys() {

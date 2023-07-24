@@ -25,6 +25,16 @@ namespace ka {
         std::optional<std::string> updating_from = std::nullopt;
     };
 
+    class device_keypair_storage {
+        std::shared_ptr<nvs::namespc> _ns = nullptr;
+    public:
+        explicit device_keypair_storage(std::shared_ptr<nvs::namespc> ns);
+
+        [[nodiscard]] std::optional<key_pair> load(std::string_view password);
+        void save(key_pair const &kp, std::string_view password);
+        [[nodiscard]] bool exists();
+    };
+
     class device {
         key_pair _kp = {};
         std::unique_ptr<ota_watch> _ota = nullptr;

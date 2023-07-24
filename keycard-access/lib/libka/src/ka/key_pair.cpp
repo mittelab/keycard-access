@@ -9,6 +9,7 @@
 #include <sodium/crypto_kdf_blake2b.h>
 #include <sodium/crypto_pwhash_argon2id.h>
 #include <sodium/crypto_scalarmult_curve25519.h>
+#include <sodium/crypto_secretbox.h>
 #include <sodium/randombytes.h>
 
 #ifndef KEYCARD_ACCESS_SALT
@@ -23,21 +24,33 @@ namespace ka {
         constexpr unsigned long long pwhash_opslimit = 4;
         constexpr std::array<uint8_t, 16> pwhash_salt{KEYCARD_ACCESS_SALT};
 
-        template <class>
-        struct size_of_array {};
-        template <std::size_t N>
-        struct size_of_array<std::array<char, N>> {
-            static constexpr std::size_t size = N;
-        };
-        template <std::size_t N>
-        struct size_of_array<std::array<std::uint8_t, N>> {
-            static constexpr std::size_t size = N;
-        };
+        [[nodiscard]] std::optional<std::array<std::uint8_t, 32>> hash_password(std::string_view password) {
+            static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
+            std::array<std::uint8_t, 32> hash{};
+            if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
+                password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
+                ESP_LOGE("KA", "Password must be between %u and %u characters long.",
+                         crypto_pwhash_argon2id_PASSWD_MIN,
+                         crypto_pwhash_argon2id_PASSWD_MAX);
+                return std::nullopt;
+            }
+            if (0 != crypto_pwhash_argon2id(
+                             hash.data(), hash.size(),
+                             password.data(), password.length(),
+                             pwhash_salt.data(),
+                             pwhash_opslimit, pwhash_memlimit,
+                             crypto_pwhash_argon2id_ALG_ARGON2ID13)) {
+                ESP_LOGE("KA", "Unable to hash password, out of memory.");
+                return std::nullopt;
+            }
+            return hash;
+        }
     }// namespace
 
     static_assert(raw_pub_key::array_size == crypto_box_PUBLICKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_box_SECRETKEYBYTES);
     static_assert(raw_sec_key::array_size == crypto_kdf_blake2b_KEYBYTES);
+    static_assert(crypto_secretbox_KEYBYTES == 32);
     static_assert(pwhash_salt.size() == crypto_pwhash_argon2id_SALTBYTES);
     static_assert(pwhash_memlimit >= crypto_pwhash_argon2id_MEMLIMIT_MIN and pwhash_memlimit <= crypto_pwhash_argon2id_MEMLIMIT_MAX);
     static_assert(pwhash_opslimit >= crypto_pwhash_argon2id_OPSLIMIT_MIN and pwhash_opslimit <= crypto_pwhash_argon2id_OPSLIMIT_MAX);
@@ -161,38 +174,67 @@ namespace ka {
     }
 
     void key_pair::generate_from_pwhash(std::string_view password) {
-        static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
-        if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
-            password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
-            ESP_LOGE("KA", "Password must be between %u and %u characters long.",
-                     crypto_pwhash_argon2id_PASSWD_MIN,
-                     crypto_pwhash_argon2id_PASSWD_MAX);
-            return;
-        }
-        if (0 != crypto_pwhash_argon2id(
-                         _sk.data(), _sk.size(),
-                         password.data(), password.length(),
-                         pwhash_salt.data(),
-                         pwhash_opslimit, pwhash_memlimit,
-                         crypto_pwhash_argon2id_ALG_ARGON2ID13)) {
-            ESP_LOGE("KA", "Unable to derive key from password, out of memory.");
-            _pk = {};
-            _sk = {};
-        } else {
+        if (const auto hash = hash_password(password); hash) {
             // Derive public key
             if (const auto [pub_key_raw, success] = derive_pub_key(); success) {
                 _pk = pub_key_raw;
+                return;
             } else {
                 ESP_LOGE("KA", "Unable to derive a public key from the secret key.");
-                _pk = {};
-                _sk = {};
             }
+        } else {
+            ESP_LOGE("KA", "Unable to derive key from password");
         }
+        _pk = {};
+        _sk = {};
     }
 
     pub_key key_pair::drop_secret_key() const {
         return pub_key{raw_pk()};
     }
+
+
+    mlab::bin_data key_pair::save_encrypted(std::string_view password) const {
+        if (const auto hash = hash_password(password); not hash) {
+            ESP_LOGE("KA", "Unable to hash password.");
+            return {};
+        } else {
+            mlab::bin_data retval;
+            retval.resize(raw_sec_key::array_size + crypto_secretbox_MACBYTES + crypto_secretbox_NONCEBYTES);
+            auto message_view = mlab::make_range(raw_sk());
+            auto nonce_view = retval.data_view(0, crypto_secretbox_NONCEBYTES);
+            auto ciphertext_view = retval.data_view(crypto_secretbox_NONCEBYTES);
+            auto key_view = mlab::make_range(*hash);
+            // Generate the nonce
+            randombytes_buf(nonce_view.data(), nonce_view.size());
+            if (0 != crypto_secretbox_easy(ciphertext_view.data(), message_view.data(), message_view.size(), nonce_view.data(), key_view.data())) {
+                ESP_LOGE("KA", "Unable to encrypt symmetrically.");
+                return {};
+            }
+            return retval;
+        }
+    }
+
+    std::optional<key_pair> key_pair::load_encrypted(mlab::bin_data const &bd, std::string_view password) {
+        if (const auto hash = hash_password(password); not hash) {
+            ESP_LOGE("KA", "Unable to hash password.");
+            return {};
+        } else {
+            if (bd.size() != raw_sec_key::array_size + crypto_secretbox_MACBYTES + crypto_secretbox_NONCEBYTES) {
+                ESP_LOGE("KA", "Invalid ciphertext length.");
+                return std::nullopt;
+            }
+            auto nonce_view = bd.data_view(0, crypto_secretbox_NONCEBYTES);
+            auto ciphertext_view = bd.data_view(crypto_secretbox_NONCEBYTES);
+            auto key_view = mlab::make_range(*hash);
+            raw_sec_key sk{};
+            if (0 != crypto_secretbox_open_easy(sk.data(), ciphertext_view.data(), ciphertext_view.size(), nonce_view.data(), key_view.data())) {
+                return std::nullopt;
+            }
+            return key_pair{sk};
+        }
+    }
+
 
     bool key_pair::encrypt_for(pub_key const &recipient, mlab::bin_data &message) const {
         // Use the same buffer for everything. Store the message length

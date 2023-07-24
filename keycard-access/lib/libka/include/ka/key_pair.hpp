@@ -82,6 +82,9 @@ namespace ka {
         [[nodiscard]] bool decrypt_from(pub_key const &sender, mlab::bin_data &ciphertext) const;
         [[nodiscard]] bool blind_check_ciphertext(pub_key const &recipient, mlab::bin_data &expected_message, mlab::bin_data const &previous_ciphertext) const;
 
+        [[nodiscard]] mlab::bin_data save_encrypted(std::string_view password) const;
+        [[nodiscard]] static std::optional<key_pair> load_encrypted(mlab::bin_data const &bd, std::string_view password);
+
         [[nodiscard]] bool is_valid() const;
 
         void generate_random();
