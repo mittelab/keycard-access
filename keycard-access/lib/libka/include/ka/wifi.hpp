@@ -90,7 +90,7 @@ namespace ka {
         wifi_ps_type_t _orig_ps_mode = WIFI_PS_MIN_MODEM;
 
     public:
-        explicit wifi_session(std::chrono::milliseconds timeout = 30s, wifi_session_usage usage = wifi_session_usage::as_found);
+        explicit wifi_session(std::chrono::milliseconds timeout = 10s, wifi_session_usage usage = wifi_session_usage::as_found);
 
         wifi_session(wifi_session const &) = delete;
         wifi_session &operator=(wifi_session const &) = delete;

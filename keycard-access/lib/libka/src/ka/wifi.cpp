@@ -241,7 +241,7 @@ namespace ka {
         : _instance_any_id{nullptr},
           _instance_got_ip{nullptr},
           _attempts{0},
-          _max_attempts{5},
+          _max_attempts{2},
           _status{wifi_status::idle},
           _mutex{},
           _status_change{},
