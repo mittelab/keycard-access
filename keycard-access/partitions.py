@@ -26,7 +26,7 @@ class PartitionRange(NamedTuple):
 def read_sdkconfig() -> Dict:
     sdkconfig_json = os.path.join(env.subst('$BUILD_DIR'), 'config', 'sdkconfig.json')
     if not os.path.isfile(sdkconfig_json):
-        print('ensure_partitions: warning, could not find "sdkconfig.json" file', file=sys.stderr)
+        print('partitions: warning, could not find "sdkconfig.json" file', file=sys.stderr)
     with open(sdkconfig_json, 'r') as fp:
         return json.load(fp)
 
@@ -48,7 +48,7 @@ def query_parttool(partition_table_partition: PartitionRange, framework_dir: str
         cmd.extend(['--partition-type', part_type_subtype[0], '--partition-subtype', part_type_subtype[1]])
 
     if (r := exec_command(cmd))['returncode'] != 0:
-        print('ensure_partitions: error, unable to call ESP-IDF\'s parttool.py', file=sys.stderr)
+        print('partitions: error, unable to call ESP-IDF\'s parttool.py', file=sys.stderr)
         print(r['out'], file=sys.stderr)
         print(r['err'], file=sys.stderr)
         return None
@@ -62,7 +62,7 @@ def query_parttool(partition_table_partition: PartitionRange, framework_dir: str
 def get_boot_partition(partition_table_partition: PartitionRange, framework_dir: str,
                        partitions_csv: str) -> PartitionRange:
     if (p := query_parttool(partition_table_partition, framework_dir, partitions_csv)) is None:
-        print(f'ensure_partitions: error, parttool was unable to determine the boot partition from {partitions_csv}',
+        print(f'partitions: error, parttool was unable to determine the boot partition from {partitions_csv}',
               file=sys.stderr)
         env.Exit(1)
         sys.exit(1)
@@ -96,7 +96,7 @@ def test_unsupported_partitions(partitions_csv: str):
             if row[0].startswith('#'):
                 continue
             if len(row) != 6:
-                print(f'ensure_partitions: warning, invalid partition table entry: {row}', file=sys.stderr)
+                print(f'partitions: warning, invalid partition table entry: {row}', file=sys.stderr)
                 continue
             part_type, part_subtype = row[1:3]
             if part_type == 'data':
@@ -108,15 +108,41 @@ def test_unsupported_partitions(partitions_csv: str):
                     # These are factory or ota partitions, parttool tells us which one we have to write to, the others
                     # are irrelevant.
                     continue
-            print(f'ensure_partitions: warning, partition {row[0]} of type {part_type} ({part_subtype}) will not be '
+            print(f'partitions: warning, partition {row[0]} of type {part_type} ({part_subtype}) will not be '
                   f'flashed because building is skipped (-t nobuild)!', file=sys.stderr)
 
 
-def main():
-    if 'nobuild' not in COMMAND_LINE_TARGETS:
-        print(f'ensure_partitions: info, build is not skipped, all partitions will be built and flashed, I hope.')
-        return
+def add_merge_bin_target(platform: Any, board: Any, all_images: List[Tuple[str, str]]):
+    esptool_py = os.path.join(platform.get_package_dir('tool-esptoolpy') or '', 'esptool.py')
+    mcu = board.get('build.mcu', 'esp32')
+    flash_size = board.get('upload.flash_size', '4M')
 
+    merge_output = os.path.join('$BUILD_DIR', f'merged-{mcu}-{flash_size}.bin')
+
+    merge_cmd = ['"$PYTHONEXE"', f'"{esptool_py}"',
+                 '--chip', mcu,
+                 'merge_bin',
+                 '--output', f'"{merge_output}"',
+                 '--flash_mode', '${__get_board_flash_mode(__env__)}',
+                 '--flash_freq', '${__get_board_f_flash(__env__)}',
+                 '--flash_size', flash_size]
+
+    merge_deps = []
+
+    # Wrap in quotes paths and select dependencies
+    for bin_offset, bin_file in all_images:
+        merge_deps.append(bin_file)
+        merge_cmd.append(bin_offset)
+        merge_cmd.append(f'"{bin_file}"')
+
+    merge_cmd = ' '.join(merge_cmd)
+
+    merge_action = env.VerboseAction(merge_cmd, 'Merging all bin files into one...')
+
+    env.AddCustomTarget('mergebin', merge_deps, [merge_action], 'Generate a pre-bundled flash image')
+
+
+def main():
     board: Any = env.BoardConfig()
     platform: Any = env.PioPlatform()
 
@@ -146,12 +172,21 @@ def main():
     if part_ota_data:
         flash_extra_images.append((hex(part_ota_data.offset), os.path.join('$BUILD_DIR', 'ota_data_initial.bin')))
 
-    print(f'ensure_partitions: info, FLASH_EXTRA_IMAGES {flash_extra_images}')
-    print(f'ensure_partitions: info, ESP32_APP_OFFSET {hex(part_boot_app.offset)}')
+    print(f'partitions: info, FLASH_EXTRA_IMAGES {flash_extra_images}')
+    print(f'partitions: info, ESP32_APP_OFFSET {hex(part_boot_app.offset)}')
 
-    # Patch the environment
-    env.Prepend(FLASH_EXTRA_IMAGES=flash_extra_images)
-    env.Replace(ESP32_APP_OFFSET=hex(part_boot_app.offset))
+    # More nonsense coming from platformio-espressif32. If PROGNAME is "program", then it will be patched into FIRMWARE
+    main_app_fw_name = 'firmware.bin' if env.get('PROGNAME', 'program') == 'program' else '${PROGNAME}.bin'
+
+    add_merge_bin_target(platform, board, [(hex(part_boot_app.offset), os.path.join('$BUILD_DIR', main_app_fw_name))] +
+                         flash_extra_images)
+
+    if 'nobuild' in COMMAND_LINE_TARGETS:
+        # Patch the environment
+        env.Prepend(FLASH_EXTRA_IMAGES=flash_extra_images)
+        env.Replace(ESP32_APP_OFFSET=hex(part_boot_app.offset))
+    else:
+        print(f'partitions: info, build is not skipped, all partitions will be built and flashed, I hope.')
 
     # Add some white space
     print('')
