@@ -747,14 +747,14 @@ namespace ka {
             }
 
             [[nodiscard]] static std::string type_description() {
-                /**
-                 * @todo What about auto? Do we ever use this?
-                 */
                 return "auto|(aes|des|3des2k|3des:<hex key>)";
             }
 
             [[nodiscard]] static ka::cmd::r<desfire::any_key> parse(std::string_view s) {
                 auto parse_internal = [&]() -> std::optional<desfire::any_key> {
+                    if (s == "auto") {
+                        return desfire::any_key{desfire::cipher_type::none};
+                    }
                     const auto colon_pos = s.find_first_of(':');
                     auto opt_ct = parser<desfire::cipher_type>::parse(s.substr(0, colon_pos));
                     if (not opt_ct) {
