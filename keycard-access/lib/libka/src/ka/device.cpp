@@ -115,8 +115,7 @@ namespace ka {
         : _kp_storage{partition},
           _kp{},
           _device_ns{partition.open_namespc(default_namespace)},
-          _ota{std::make_unique<ota_watch>()}
-    {
+          _ota{std::make_unique<ota_watch>()} {
         restore_kp(password);
         restore_ota();
     }

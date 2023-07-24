@@ -521,6 +521,12 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
+            TRY_RESULT_AS(identify_gate(rg), r_ours) {
+                if (not r_ours->second) {
+                    ESP_LOGE(TAG, "This gate is not ours.");
+                    return rpc_p2p_error::p2p_unauthorized;
+                }
+            }
             TRY(identify_gate(rg));
             return cast_result(rg.set_backend_url(url, api_key));
         }
@@ -548,7 +554,12 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY_RESULT_AS(identify_gate(rg), r_ours) {
+                if (not r_ours->second) {
+                    ESP_LOGE(TAG, "This gate is not ours.");
+                    return rpc_p2p_error::p2p_unauthorized;
+                }
+            }
             return cast_result(rg.set_gpio_config({gpio, level, hold_time}));
         }
     }

@@ -27,6 +27,7 @@ namespace ka {
 
     class device_keypair_storage {
         std::shared_ptr<nvs::namespc> _ns = nullptr;
+
     public:
         explicit device_keypair_storage(nvs::partition &partition);
 
@@ -55,6 +56,7 @@ namespace ka {
         [[nodiscard]] inline key_pair const &keys() const;
 
         void regenerate_keys(std::string_view password);
+
     public:
         /**
          * Constructs a device loading all data but the key pair @p kp from the NVS partition. All changes will be persisted.
