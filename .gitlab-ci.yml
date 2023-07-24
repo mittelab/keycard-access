@@ -176,7 +176,7 @@ upload esp32 gate firmware:
     - build esp32 gate firmware
   variables:
     PIO_ENV: esp32-gate
-    FW_SLUG: ka-keymaker-esp32
+    FW_SLUG: ka-gate-esp32
 
 
 release:
