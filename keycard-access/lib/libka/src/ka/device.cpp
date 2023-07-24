@@ -14,11 +14,7 @@ using namespace ka::cmd_literals;
 
 namespace ka {
 
-    device_keypair_storage::device_keypair_storage(std::shared_ptr<nvs::namespc> ns) : _ns{std::move(ns)} {
-        if (_ns == nullptr) {
-            ESP_LOGE(TAG, "You must specify a nonempty namespace.");
-        }
-    }
+    device_keypair_storage::device_keypair_storage(std::shared_ptr<nvs::namespc> ns) : _ns{std::move(ns)} {}
 
     bool device_keypair_storage::exists() {
         if (_ns == nullptr) {
@@ -42,88 +38,84 @@ namespace ka {
     }
 
     void device_keypair_storage::save(const ka::key_pair &kp, std::string_view password) {
-        if (_ns != nullptr) {
-            if (const auto r = _ns->set_blob("secret-key", kp.save_encrypted(password)); not r) {
-                MLAB_FAIL_MSG("_ns->set_blob(\"secret-key\")", r);
-            }
+        if (_ns == nullptr) {
+            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "save keypair");
+            return;
         }
+        void([&]() -> nvs::r<> {
+            TRY(_ns->set_blob("secret-key", kp.save_encrypted(password)));
+            TRY(_ns->commit());
+            return mlab::result_success;
+        }());
     }
 
-    device::device(std::shared_ptr<nvs::partition> const &partition) : device{} {
-        setup_ns_and_ota(partition);
-        load_or_generate_keys();
-    }
-
-    device::device(std::shared_ptr<nvs::partition> const &partition, std::string_view password) : device{} {
-        setup_ns_and_ota(partition);
-        _kp = key_pair{pwhash, password};
-        ESP_LOGI(TAG, "Loaded key pair; public key:");
-        ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
-    }
-
-    device::device(key_pair kp) {
-        _kp = kp;
-    }
-
-    void device::setup_ns_and_ota(const std::shared_ptr<nvs::partition> &partition) {
-        _ota = std::make_unique<ota_watch>();
-        if (partition) {
-            _device_ns = partition->open_namespc("ka-device");
+    void device::restore_kp(std::string_view password) {
+        if (_device_ns == nullptr) {
+            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "restore keypair");
+            return;
         }
-        if (_device_ns) {
-            // Now get update stuff
-            if (const auto r = _device_ns->get_str("update-channel"); r) {
-                _ota->set_update_channel(*r);
-            } else if (r.error() == nvs::error::not_found) {
-                set_update_channel(update_channel(), false);
-            } else {
-                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update channel", to_string(r.error()));
-            }
-
-            if (const auto r = _device_ns->get_u8("update-enabled"); r) {
-                if (*r != 0) {
-                    _ota->start();
-                }
-            } else if (r.error() == nvs::error::not_found) {
-                set_update_automatically(updates_automatically());
-            } else {
-                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update enable flag", to_string(r.error()));
-            }
-        }
-    }
-
-    void device::load_or_generate_keys() {
-        if (_device_ns) {
-            if (const auto r = _device_ns->get_parse_blob<key_pair>("secret-key"); r) {
-                _kp = *r;
+        if (_kp_storage.exists()) {
+            if (auto opt_kp = _kp_storage.load(password); opt_kp) {
+                _kp = *opt_kp;
                 ESP_LOGI(TAG, "Loaded key pair; public key:");
                 ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
-                return;
-            } else if (r.error() != nvs::error::not_found) {
-                ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "secret key", to_string(r.error()));
+            } else {
+                ESP_LOGE(TAG, "Incorrect password or broken key pair storage.");
+                ESP_LOGE(TAG, "A random, ephemeral key pair will be used.");
+                _kp.generate_random();
+                _kp_storage = device_keypair_storage{nullptr};
             }
+        } else {
+            regenerate_keys(password);
         }
-        generate_keys();
     }
 
-    void device::generate_keys() {
+    void device::regenerate_keys(std::string_view password) {
+        ESP_LOGI(TAG, "Generating a new key pair; public key:");
         _kp.generate_random();
-        ESP_LOGI(TAG, "Generated random key pair; public key:");
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
-        if (_device_ns) {
-#ifndef CONFIG_NVS_ENCRYPTION
-            ESP_LOGW(TAG, "Encryption is disabled!");
-#endif
-            auto update_nvs = [&]() -> nvs::r<> {
-                TRY(_device_ns->set_encode_blob("secret-key", _kp));
-                TRY(_device_ns->commit());
-                return mlab::result_success;
-            };
+        _kp_storage.save(_kp, password);
+    }
 
-            if (not update_nvs()) {
-                ESP_LOGE(TAG, "Unable to save secret key! This makes all encrypted data ephemeral!");
-            }
+    void device::restore_ota() {
+        if (_device_ns == nullptr) {
+            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "restore update options");
+            return;
         }
+
+        if (const auto r = _device_ns->get_str("update-channel"); r) {
+            _ota->set_update_channel(*r);
+        } else if (r.error() == nvs::error::not_found) {
+            set_update_channel(update_channel(), false);
+        } else {
+            ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update channel", to_string(r.error()));
+        }
+
+        if (const auto r = _device_ns->get_u8("update-enabled"); r) {
+            if (*r != 0) {
+                _ota->start();
+            }
+        } else if (r.error() == nvs::error::not_found) {
+            set_update_automatically(updates_automatically());
+        } else {
+            ESP_LOGE(TAG, "Unable to retrieve %s, error %s", "update enable flag", to_string(r.error()));
+        }
+    }
+
+    device::device(nvs::partition &partition, std::string_view password)
+        : _device_ns{partition.open_namespc("ka-device")},
+          _kp_storage{_device_ns},
+          _ota{std::make_unique<ota_watch>()},
+          _kp{} {
+        restore_kp(password);
+        restore_ota();
+    }
+
+    device::device(key_pair kp)
+        : _device_ns{nullptr},
+          _kp_storage{nullptr},
+          _ota{nullptr},
+          _kp{kp} {
     }
 
     bool device::updates_automatically() const {
@@ -236,6 +228,28 @@ namespace ka {
         wf.reconfigure(ssid, password);
         return wf.ensure_connected();
     }
+
+
+    bool device::change_password(std::string_view oldpw, std::string_view newpw) {
+        if (not _kp_storage.exists()) {
+            ESP_LOGE(TAG, "No storage is active.");
+            return false;
+        }
+        if (const auto r_kp = _kp_storage.load(oldpw); r_kp) {
+            if (*r_kp == keys()) {
+                _kp_storage.save(keys(), newpw);
+                return true;
+            } else {
+                ESP_LOGE(TAG, "Saved keys and memorized keys differ!");
+                return false;
+            }
+        } else {
+            ESP_LOGE(TAG, "Unable to load the stored key pair, wrong password?");
+            return false;
+        }
+    }
+
+
     namespace cmd {
         template <>
         struct parser<fw_info> {
@@ -271,6 +285,7 @@ namespace ka {
         sh.register_command("update-manually", *this, &device::update_manually, {"firmware-url"_pos});
         sh.register_command("update-check-only", *this, &device::check_for_updates, {});
         sh.register_command("update-get-current-version", *this, &device::get_firmware_info, {});
+        sh.register_command("change-password", *this, &device::change_password, {{"old"}, {"new"}});
     }
 
 }// namespace ka

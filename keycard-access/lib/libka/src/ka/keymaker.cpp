@@ -32,35 +32,37 @@ namespace ka {
         }
     }
 
-    void keymaker::setup_ns_and_rf(std::shared_ptr<nvs::partition> const &partition) {
-        if (partition) {
-            if (_gate_ns = partition->open_namespc("ka-gates"); _gate_ns) {
-                _gates = keymaker_gate_data::load_from(*_gate_ns);
-            }
-        }
+    void keymaker::turn_rf_off() {
         // Turn off the field, we will turn it on on-demand
-        if (_ctrl) {
-            void([&]() -> pn532::result<> {
-                TRY(_ctrl->rf_configuration_field(false, false));
-                return mlab::result_success;
-            }());
+        if (not _ctrl) {
+            return;
         }
+        void([&]() -> pn532::result<> {
+            TRY(_ctrl->rf_configuration_field(false, false));
+            return mlab::result_success;
+        }());
     }
 
-    keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl, std::string_view password)
+    void keymaker::restore_gates() {
+        if (_gate_ns == nullptr) {
+            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "restore gates");
+            return;
+        }
+        _gates = keymaker_gate_data::load_from(*_gate_ns);
+    }
+
+    keymaker::keymaker(nvs::partition &partition, std::string_view password, std::shared_ptr<pn532::controller> ctrl)
         : device{partition, password},
-          _ctrl{std::move(ctrl)} {
-        setup_ns_and_rf(partition);
-    }
-
-    keymaker::keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl)
-        : device{partition},
-          _ctrl{std::move(ctrl)} {
-        setup_ns_and_rf(partition);
+          _ctrl{std::move(ctrl)},
+          _gate_ns{partition.open_namespc("ka-gates")} {
+        turn_rf_off();
+        restore_gates();
     }
 
     keymaker::keymaker(key_pair kp)
-        : device{kp} {}
+        : device{kp},
+          _ctrl{nullptr},
+          _gate_ns{nullptr} {}
 
     class keymaker::card_channel {
         std::shared_ptr<pn532::controller> _ctrl = {};

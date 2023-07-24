@@ -36,33 +36,25 @@ namespace ka {
     };
 
     class device {
-        key_pair _kp = {};
-        std::unique_ptr<ota_watch> _ota = nullptr;
-        std::shared_ptr<nvs::namespc> _device_ns = nullptr;
-
-        device() = default;
-
+        std::shared_ptr<nvs::namespc> _device_ns;
+        device_keypair_storage _kp_storage;
+        std::unique_ptr<ota_watch> _ota;
+        key_pair _kp;
 
         friend struct ut::secure_p2p_loopback;
+
+        void restore_kp(std::string_view password);
+        void restore_ota();
 
     protected:
         [[nodiscard]] inline key_pair const &keys() const;
 
-        void setup_ns_and_ota(std::shared_ptr<nvs::partition> const &partition);
-        void generate_keys();
-        void load_or_generate_keys();
-
+        void regenerate_keys(std::string_view password);
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
          */
-        explicit device(std::shared_ptr<nvs::partition> const &partition);
-
-        /**
-         * Construct a device loading it from the NVS, but using password hashing for the key pair.
-         * All changes but the key pair will be persisted.
-         */
-        explicit device(std::shared_ptr<nvs::partition> const &partition, std::string_view password);
+        explicit device(nvs::partition &partition, std::string_view password);
 
         /**
          * Construct a device the given key pair. Testing purposes, changes will not be persisted
@@ -93,6 +85,8 @@ namespace ka {
         [[nodiscard]] std::optional<std::string> wifi_get_ssid() const;
         [[nodiscard]] bool wifi_test();
         bool wifi_connect(std::string_view ssid, std::string_view password);
+
+        [[nodiscard]] bool change_password(std::string_view oldpw, std::string_view newpw);
 
         virtual void register_commands(cmd::shell &sh);
     };

@@ -81,8 +81,8 @@ namespace ka {
 
     class keymaker : public device {
         std::shared_ptr<pn532::controller> _ctrl;
+        std::shared_ptr<nvs::namespc> _gate_ns;
         std::vector<keymaker_gate_data> _gates;
-        std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
 
         class gate_channel;
         class card_channel;
@@ -101,19 +101,14 @@ namespace ka {
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
 
-        void setup_ns_and_rf(std::shared_ptr<nvs::partition> const &partition);
+        void restore_gates();
+        void turn_rf_off();
 
     public:
         /**
          * Construct a device loading it from the NVS partition. All changes will be persisted.
          */
-        explicit keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl);
-
-        /**
-         * Construct a device loading it from the NVS partition, but using password hashing for the key pair.
-         * All changes but the key pair will be persisted.
-         */
-        explicit keymaker(std::shared_ptr<nvs::partition> const &partition, std::shared_ptr<pn532::controller> ctrl, std::string_view password);
+        explicit keymaker(nvs::partition &partition, std::string_view password, std::shared_ptr<pn532::controller> ctrl);
 
         /**
          * Construct a keymaker the given key pair. Testing purposes, changes will not be persisted

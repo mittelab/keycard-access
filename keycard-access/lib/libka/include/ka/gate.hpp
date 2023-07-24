@@ -91,18 +91,20 @@ namespace ka {
     };
 
     class gate final : public device {
+        std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
+
         gate_id _id = std::numeric_limits<gate_id>::max();
         pub_key _km_pk = {};
         gate_base_key _base_key = {};
 
-        std::shared_ptr<nvs::namespc> _gate_ns = nullptr;
+        void restore_attributes();
 
     public:
         /**
          * Construct a gate loading it from the NVS partition. All changes will be persisted.
          * @see device::device(std::shared_ptr<nvs::partition> const &)
          */
-        explicit gate(std::shared_ptr<nvs::partition> const &partition);
+        explicit gate(nvs::partition &partition);
 
         /**
          * Construct an unconfigured gate with the given key pair. Testing purposes, changes will not be persisted

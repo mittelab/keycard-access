@@ -138,49 +138,66 @@ namespace ka {
         return _id;
     }
 
-    gate::gate(std::shared_ptr<nvs::partition> const &partition) : device{partition} {
-        if (partition) {
-            _gate_ns = partition->open_namespc("ka-gate");
+    void gate::restore_attributes() {
+        if (_gate_ns == nullptr) {
+            ESP_LOGE(TAG, "Unable to %s, no storage was opened.", "restore gate attributes");
+            return;
         }
-        if (_gate_ns) {
-            auto load_from_nvs = [&]() -> bool {
-                if (const auto r = _gate_ns->get_u32("id"); r) {
-                    _id = gate_id{*r};
-                } else if (r.error() == nvs::error::not_found) {
-                    return false;// Set up as new gate
-                } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "gate id", to_string(r.error()));
-                }
-                if (const auto r = _gate_ns->get_parse_blob<pub_key>("keymaker-pubkey"); r) {
-                    _km_pk = *r;
-                } else if (r.error() == nvs::error::not_found) {
-                    return false;// Set up as new gate
-                } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "public key", to_string(r.error()));
-                }
-                if (const auto r = _gate_ns->get_parse_blob<gate_base_key>("base-key"); r) {
-                    _base_key = *r;
-                } else if (r.error() == nvs::error::not_found) {
-                    return false;// Set up as new gate
-                } else {
-                    ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "app base key", to_string(r.error()));
-                }
-                return true;
-            };
 
-            if (not load_from_nvs()) {
-                // Reset
-                _id = std::numeric_limits<gate_id>::max();
-                _km_pk = {};
-                _base_key = {};
+        auto load_from_nvs = [&]() -> bool {
+            if (const auto r = _gate_ns->get_u32("id"); r) {
+                _id = gate_id{*r};
+            } else if (r.error() == nvs::error::not_found) {
+                return false;// Set up as new gate
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "gate id", to_string(r.error()));
             }
+
+            if (const auto r = _gate_ns->get_parse_blob<pub_key>("keymaker-pubkey"); r) {
+                _km_pk = *r;
+            } else if (r.error() == nvs::error::not_found) {
+                return false;// Set up as new gate
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "keymaker public key", to_string(r.error()));
+            }
+
+            if (const auto r = _gate_ns->get_parse_blob<gate_base_key>("base-key"); r) {
+                _base_key = *r;
+            } else if (r.error() == nvs::error::not_found) {
+                return false;// Set up as new gate
+            } else {
+                ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "app base key", to_string(r.error()));
+            }
+            return true;
+        };
+
+        if (not load_from_nvs()) {
+            // Reset
+            _id = std::numeric_limits<gate_id>::max();
+            _km_pk = {};
+            _base_key = {};
         }
     }
 
-    gate::gate(key_pair kp) : device{kp} {}
+    gate::gate(nvs::partition &partition)
+        : device{partition, "" /* explicitly use no password, we rely on flash encryption here */},
+          _gate_ns{partition.open_namespc("ka-gate")},
+          _id{std::numeric_limits<gate_id>::max()},
+          _km_pk{},
+          _base_key{} {
+        restore_attributes();
+    }
+
+    gate::gate(key_pair kp)
+        : device{kp},
+          _gate_ns{nullptr},
+          _id{std::numeric_limits<gate_id>::max()},
+          _km_pk{},
+          _base_key{} {}
 
     gate::gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey, gate_base_key base_key)
         : device{kp},
+          _gate_ns{nullptr},
           _id{gid},
           _km_pk{keymaker_pubkey},
           _base_key{base_key} {}
@@ -199,7 +216,7 @@ namespace ka {
                 return mlab::result_success;
             }());
         }
-        device::generate_keys();
+        device::regenerate_keys("" /* explicitly use no password, we rely on flash encryption here */);
     }
 
     gate_token_key gate::derive_token_key(const ka::token_id &token_id, std::uint8_t key_no) const {

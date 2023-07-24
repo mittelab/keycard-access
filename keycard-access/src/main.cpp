@@ -26,7 +26,8 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
         password = console.read_line();
     } while (password == std::nullopt);
 
-    ka::keymaker km{ka::nvs::instance().open_default_partition(), std::move(ctrl), std::move(*password)};
+    auto partition = ka::nvs::instance().open_default_partition();
+    ka::keymaker km{*partition, *password, std::move(ctrl)};
     ka::cmd::shell sh;
     sh.register_help_command();
     km.register_commands(sh);
@@ -39,7 +40,8 @@ void keymaker_main(std::shared_ptr<pn532::controller> ctrl) {
 }
 
 [[noreturn]] void gate_main(std::shared_ptr<pn532::controller> const &ctrl) {
-    ka::gate g{ka::nvs::instance().open_default_partition()};
+    auto partition = ka::nvs::instance().open_default_partition();
+    ka::gate g{*partition};
     if (g.is_configured()) {
         ESP_LOGI(TAG, "Gate configured as gate %lu with keymaker public key:", std::uint32_t{g.id()});
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, g.keymaker_pk().raw_pk().data(), g.keymaker_pk().raw_pk().size(), ESP_LOG_INFO);
