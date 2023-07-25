@@ -110,23 +110,22 @@ namespace ka::p2p {
         : _g{g},
           _sec_layer{std::move(initiator)},
           _b{std::make_unique<initiator_bridge_interface>(_sec_layer)} {
-        _b.register_command(&local_gate::get_fw_info, *this);
-        _b.register_command(&local_gate::get_update_settings, *this);
-        _b.register_command(&local_gate::get_wifi_status, *this);
-        _b.register_command(&local_gate::is_updating, *this);
-        _b.register_command(&local_gate::get_gpio_config, *this);
-        _b.register_command(&local_gate::get_backend_url, *this);
-        _b.register_command(&local_gate::get_registration_info, *this);
-        _b.register_command(&local_gate::register_gate, *this);
-        _b.register_command(&local_gate::set_update_settings, *this);
-        _b.register_command(&local_gate::update_manually, *this);
-        _b.register_command(&local_gate::set_backend_url, *this);
-        _b.register_command(&local_gate::set_gpio_config, *this);
-        _b.register_command(&local_gate::reset_gate, *this);
-        _b.register_command(&local_gate::connect_wifi, *this);
-        _b.register_command(&local_gate::disconnect, *this);
-        _b.register_command(&local_gate::restart, *this);
-        // These two have the same signature, so we must disambiguate manually
+        _b.register_command(&local_gate::get_fw_info, *this, "get_fw_info");
+        _b.register_command(&local_gate::get_update_settings, *this, "get_update_settings");
+        _b.register_command(&local_gate::get_wifi_status, *this, "get_wifi_status");
+        _b.register_command(&local_gate::is_updating, *this, "is_updating");
+        _b.register_command(&local_gate::get_gpio_config, *this, "get_gpio_config");
+        _b.register_command(&local_gate::get_backend_url, *this, "get_backend_url");
+        _b.register_command(&local_gate::get_registration_info, *this, "get_registration_info");
+        _b.register_command(&local_gate::register_gate, *this, "register_gate");
+        _b.register_command(&local_gate::set_update_settings, *this, "set_update_settings");
+        _b.register_command(&local_gate::update_manually, *this, "update_manually");
+        _b.register_command(&local_gate::set_backend_url, *this, "set_backend_url");
+        _b.register_command(&local_gate::set_gpio_config, *this, "set_gpio_config");
+        _b.register_command(&local_gate::reset_gate, *this, "reset_gate");
+        _b.register_command(&local_gate::connect_wifi, *this, "connect_wifi");
+        _b.register_command(&local_gate::disconnect, *this, "disconnect");
+        _b.register_command(&local_gate::restart, *this, "restart");
         _b.register_command(&local_gate::check_for_updates, *this, "check_for_updates");
         _b.register_command(&local_gate::update_now, *this, "update_now");
     }
@@ -291,31 +290,31 @@ namespace ka::p2p {
     }
 
     rpc::r<fw_info> remote_gate::get_fw_info() const {
-        return _b.remote_invoke_unique(&local_gate::get_fw_info);
+        return _b.remote_invoke(&local_gate::get_fw_info, "get_fw_info");
     }
 
     rpc::r<gate_update_config> remote_gate::get_update_settings() const {
-        return _b.remote_invoke_unique(&local_gate::get_update_settings);
+        return _b.remote_invoke(&local_gate::get_update_settings, "get_update_settings");
     }
 
     rpc::r<gate_wifi_status> remote_gate::get_wifi_status() const {
-        return _b.remote_invoke_unique(&local_gate::get_wifi_status);
+        return _b.remote_invoke(&local_gate::get_wifi_status, "get_wifi_status");
     }
 
     rpc::r<update_status> remote_gate::is_updating() const {
-        return _b.remote_invoke_unique(&local_gate::is_updating);
+        return _b.remote_invoke(&local_gate::is_updating, "is_updating");
     }
 
     rpc::r<gpio_responder_config> remote_gate::get_gpio_config() const {
-        return _b.remote_invoke_unique(&local_gate::get_gpio_config);
+        return _b.remote_invoke(&local_gate::get_gpio_config, "get_gpio_config");
     }
 
     rpc::r<std::string> remote_gate::get_backend_url() const {
-        return _b.remote_invoke_unique(&local_gate::get_backend_url);
+        return _b.remote_invoke(&local_gate::get_backend_url, "get_backend_url");
     }
 
     rpc::r<gate_registration_info> remote_gate::get_registration_info() const {
-        return _b.remote_invoke_unique(&local_gate::get_registration_info);
+        return _b.remote_invoke(&local_gate::get_registration_info, "get_registration_info");
     }
 
     rpc::r<r<release_info>> remote_gate::check_for_updates() {
@@ -323,27 +322,27 @@ namespace ka::p2p {
     }
 
     rpc::r<r<gate_base_key>> remote_gate::register_gate(gate_id requested_id) {
-        return _b.remote_invoke_unique(&local_gate::register_gate, requested_id);
+        return _b.remote_invoke(&local_gate::register_gate, "register_gate", requested_id);
     }
 
     rpc::r<r<>> remote_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
-        return _b.remote_invoke_unique(&local_gate::set_update_settings, update_channel, automatic_updates);
+        return _b.remote_invoke(&local_gate::set_update_settings, "set_update_settings", update_channel, automatic_updates);
     }
 
     rpc::r<r<>> remote_gate::update_manually(std::string_view fw_url) {
-        return _b.remote_invoke_unique(&local_gate::update_manually, fw_url);
+        return _b.remote_invoke(&local_gate::update_manually, "update_manually", fw_url);
     }
 
     rpc::r<r<>> remote_gate::set_backend_url(std::string_view url, std::string_view api_key) {
-        return _b.remote_invoke_unique(&local_gate::set_backend_url, url, api_key);
+        return _b.remote_invoke(&local_gate::set_backend_url, "set_backend_url", url, api_key);
     }
 
     rpc::r<r<>> remote_gate::set_gpio_config(gpio_responder_config cfg) {
-        return _b.remote_invoke_unique(&local_gate::set_gpio_config, cfg);
+        return _b.remote_invoke(&local_gate::set_gpio_config, "set_gpio_config", cfg);
     }
 
     rpc::r<r<>> remote_gate::reset_gate() {
-        return _b.remote_invoke_unique(&local_gate::reset_gate);
+        return _b.remote_invoke(&local_gate::reset_gate, "reset_gate");
     }
 
     rpc::r<r<release_info>> remote_gate::update_now() {
@@ -351,15 +350,15 @@ namespace ka::p2p {
     }
 
     rpc::r<r<bool>> remote_gate::connect_wifi(std::string_view ssid, std::string_view password) {
-        return _b.remote_invoke_unique(&local_gate::connect_wifi, ssid, password);
+        return _b.remote_invoke(&local_gate::connect_wifi, "connect_wifi", ssid, password);
     }
 
     rpc::r<> remote_gate::bye() {
-        return _b.remote_invoke_unique(&local_gate::disconnect);
+        return _b.remote_invoke(&local_gate::disconnect, "disconnect");
     }
 
     rpc::r<r<>> remote_gate::restart_gate() {
-        return _b.remote_invoke_unique(&local_gate::restart);
+        return _b.remote_invoke(&local_gate::restart, "restart");
     }
 }// namespace ka::p2p
 
