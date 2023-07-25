@@ -20,14 +20,15 @@ struct linenoiseCompletions;
 namespace ka {
 
     template <class Fn>
-    concept prompt_parsing_function = requires (Fn &&fn) {
-        bool(fn(std::declval<std::string>()));
-        not std::is_void_v<decltype(*fn(std::declval<std::string>()))>;
-    };
+    concept prompt_parsing_function = requires(Fn &&fn) {
+                                          bool(fn(std::declval<std::string>()));
+                                          not std::is_void_v<decltype(*fn(std::declval<std::string>()))>;
+                                      };
 
     class console {
         struct console_setup;
         std::shared_ptr<console_setup> _raii;
+
     public:
         console();
         [[nodiscard]] std::optional<std::string> read_line(std::string_view prompt = "> ") const;
