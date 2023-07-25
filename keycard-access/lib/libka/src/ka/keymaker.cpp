@@ -19,7 +19,33 @@
 namespace ka {
     namespace {
         constexpr auto gate_namespace = "ka-gates";
-    }
+
+        [[nodiscard]] rpc_p2p_r<gate_id, bool> reject_not_ours(rpc_p2p_r<gate_id, bool> r, bool accept_unconfigured) {
+            if (r and not r->second) {
+                if (not accept_unconfigured or r->first != std::numeric_limits<gate_id>::max()) {
+                    ESP_LOGE(TAG, "This gate is not ours.");
+                    return rpc_p2p_error::p2p_unauthorized;
+                }
+            }
+            return r;
+        }
+
+        [[nodiscard]] rpc_p2p_r<gate_id, bool> reject_configured(rpc_p2p_r<gate_id, bool> r) {
+            if (r and r->first != std::numeric_limits<gate_id>::max()) {
+                ESP_LOGE(TAG, "This gate is already configured.");
+                return rpc_p2p_error::p2p_invalid_operation;
+            }
+            return r;
+        }
+
+        [[nodiscard]] rpc_p2p_r<gate_id, bool> expect_gid(rpc_p2p_r<gate_id, bool> r, gate_id gid) {
+            if (r and r->first != gid) {
+                ESP_LOGE(TAG, "This gate has id %lu, was expecting %lu", std::uint32_t{r->first}, std::uint32_t{gid});
+                return rpc_p2p_error::p2p_invalid_argument;
+            }
+            return r;
+        }
+    }// namespace
     using namespace ka::cmd_literals;
 
     const char *to_string(gate_status gs) {
@@ -262,20 +288,7 @@ namespace ka {
     rpc_p2p_r<> keymaker::configure_gate_internal(keymaker_gate_data &gd) {
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY_RESULT_AS(identify_gate(rg), r_ours) {
-                if (r_ours->first != std::numeric_limits<gate_id>::max()) {
-                    if (not r_ours->second) {
-                        ESP_LOGE(TAG, "Cannot configure a gate that is not ours.");
-                    } else if (gd.pk != r_chn->peer_pub_key()) {
-                        if (gd.status == gate_status::configured or gd.status == gate_status::deleted) {
-                            ESP_LOGE(TAG, "The locally stored public key does not match the remote, reset this gate.");
-                        }
-                    } else {
-                        ESP_LOGE(TAG, "This gate is already configured.");
-                    }
-                    return rpc_p2p_error::p2p_invalid_operation;
-                }
-            }
+            TRY(reject_configured(identify_gate(rg)));
             TRY_CAST_RESULT(rg.register_gate(gd.id)) {
                 if (not *r) {
                     return cast_error(r->error());
@@ -362,18 +375,7 @@ namespace ka {
                     return rpc_p2p_error::p2p_invalid_operation;
                 }
                 auto &rg = r_chn->remote_gate();
-                TRY_RESULT_AS(identify_gate(rg), r_ours) {
-                    if (r_ours->first == std::numeric_limits<gate_id>::max()) {
-                        ESP_LOGW(TAG, "This gate is not configured or was already deleted.");
-                        return mlab::result_success;
-                    } else if (not r_ours->second) {
-                        ESP_LOGE(TAG, "This gate is not ours.");
-                        return rpc_p2p_error::p2p_invalid_operation;
-                    } else if (r_ours->first != id) {
-                        ESP_LOGE(TAG, "This is not gate %lu, it's gate %lu.", std::uint32_t{id}, std::uint32_t{r_ours->first});
-                        return rpc_p2p_error::p2p_invalid_operation;
-                    }
-                }
+                TRY_RESULT(expect_gid(reject_not_ours(identify_gate(rg), false), id));
                 TRY_CAST(rg.reset_gate());
             }
             return mlab::result_success;
@@ -461,7 +463,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), true));
             return cast_result(rg.set_update_settings(update_channel, automatic_updates));
         }
     }
@@ -470,7 +472,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), true));
             TRY_CAST_RESULT(rg.connect_wifi(ssid, password)) {
                 return cast_result(*r);
             }
@@ -481,7 +483,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), true));
             TRY_CAST_RESULT(rg.check_for_updates()) {
                 return cast_result(*r);
             }
@@ -501,7 +503,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), true));
             TRY_CAST_RESULT(rg.update_now()) {
                 return cast_result(*r);
             }
@@ -512,7 +514,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), true));
             return cast_result(rg.update_manually(fw_url));
         }
     }
@@ -521,13 +523,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY_RESULT_AS(identify_gate(rg), r_ours) {
-                if (not r_ours->second) {
-                    ESP_LOGE(TAG, "This gate is not ours.");
-                    return rpc_p2p_error::p2p_unauthorized;
-                }
-            }
-            TRY(identify_gate(rg));
+            TRY(reject_not_ours(identify_gate(rg), false));
             return cast_result(rg.set_backend_url(url, api_key));
         }
     }
@@ -554,12 +550,7 @@ namespace ka {
         ESP_LOGI(TAG, "Bring closer a gate...");
         TRY_RESULT_AS(open_gate_channel(), r_chn) {
             auto &rg = r_chn->remote_gate();
-            TRY_RESULT_AS(identify_gate(rg), r_ours) {
-                if (not r_ours->second) {
-                    ESP_LOGE(TAG, "This gate is not ours.");
-                    return rpc_p2p_error::p2p_unauthorized;
-                }
-            }
+            TRY(reject_not_ours(identify_gate(rg), false));
             return cast_result(rg.set_gpio_config({gpio, level, hold_time}));
         }
     }

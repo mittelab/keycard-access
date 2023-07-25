@@ -95,7 +95,6 @@ namespace ka {
         /**
          * Prints a message with the gate id and checks whether it's registered to us.
          * @return The gate id and a boolean expressing whether the gate is ours.
-         * @todo Add a boolean that fail if not ours
          */
         [[nodiscard]] rpc_p2p_r<gate_id, bool> identify_gate(p2p::remote_gate &rg) const;
 
