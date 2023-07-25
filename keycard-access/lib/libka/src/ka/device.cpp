@@ -265,8 +265,13 @@ namespace ka {
             ESP_LOGE(TAG, "Updates not available during test.");
             return;
         }
-        if (const auto ri = _ota->check_now(); ri) {
-            _ota->update_from(ri->firmware_url);
+        wifi_session session;
+        if (session) {
+            if (const auto ri = _ota->check_now(); ri) {
+                _ota->update_from(ri->firmware_url);
+            }
+        } else {
+            ESP_LOGW(TAG, "Unable to update, no wifi.");
         }
     }
 

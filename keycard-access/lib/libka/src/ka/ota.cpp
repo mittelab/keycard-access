@@ -233,8 +233,13 @@ namespace ka {
         ESP_LOGI(TAG, "Update watch thread running on core %d", xPortGetCoreID());
         std::this_thread::sleep_for(5s);
         while (_stop.wait_for(lock, _refresh_interval) == std::cv_status::timeout) {
-            if (const auto release = check_now(); release) {
-                update_from(release->firmware_url);
+            wifi_session session;
+            if (session) {
+                if (const auto release = check_now(); release) {
+                    update_from(release->firmware_url);
+                }
+            } else {
+                ESP_LOGW(TAG, "Unable to update, no wifi.");
             }
         }
     }
