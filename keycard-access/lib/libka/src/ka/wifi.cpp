@@ -327,6 +327,13 @@ namespace ka {
         return s == wifi_status::ready;
     }
 
+    bool wifi::await_disconnection(std::chrono::milliseconds timeout) {
+        mlab::reduce_timeout rt{timeout.count() > 0 ? timeout : std::numeric_limits<std::chrono::milliseconds>::max()};
+        wifi_status s = status();
+        for (; rt and s != wifi_status::failure and s != wifi_status::idle; s = await_status_change(s, rt.remaining())) {}
+        return s == wifi_status::failure or s == wifi_status::idle;
+    }
+
     wifi::~wifi() {
         disconnect();
         ESP_ERROR_CHECK(esp_wifi_stop());
@@ -421,6 +428,7 @@ namespace ka {
         }
         if (_disconnect_when_done) {
             wf.disconnect();
+            wf.await_disconnection();
         }
     }
 }// namespace ka

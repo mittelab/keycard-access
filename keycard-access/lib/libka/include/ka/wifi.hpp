@@ -62,11 +62,12 @@ namespace ka {
 
         [[nodiscard]] wifi_status status() const;
 
-        wifi_status await_status_change(wifi_status old, std::chrono::milliseconds timeout = 30s);
+        wifi_status await_status_change(wifi_status old, std::chrono::milliseconds timeout = 10s);
 
-        [[nodiscard]] bool await_connection_attempt(std::chrono::milliseconds timeout = 30s);
+        bool await_connection_attempt(std::chrono::milliseconds timeout = 10s);
+        bool await_disconnection(std::chrono::milliseconds timeout = 10s);
 
-        bool ensure_connected(std::chrono::milliseconds timeout = 30s);
+        bool ensure_connected(std::chrono::milliseconds timeout = 10s);
 
         [[nodiscard]] unsigned attempts() const;
 
