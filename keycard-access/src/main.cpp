@@ -14,21 +14,6 @@
 
 using namespace std::chrono_literals;
 
-namespace helper {
-    template <class Fn>
-    [[nodiscard]] auto prompt_password(ka::console &console, std::string_view prompt, Fn &&validate) {
-        while (true) {
-            std::printf("%s\n", prompt.data());
-            auto user_input = console.read_line();
-            if (user_input) {
-                if (auto validation_result = validate(*user_input); validation_result) {
-                    return *validation_result;
-                }
-            }
-        };
-    };
-}// namespace helper
-
 void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::controller> ctrl) {
     // Generate a fresh new keypair, which we will then override if any is found
     ka::key_pair kp{ka::randomize};
@@ -41,38 +26,17 @@ void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::control
 
     if (kp_storage.exists()) {
         // Ask the password to unlock it
-        kp = helper::prompt_password(
-                console,
-                "Enter the password to unlock this keymaker:",
-                [&](std::string_view candidate) -> std::optional<ka::key_pair> {
-                    if (auto kp = kp_storage.load(candidate); kp) {
-                        return *kp;
-                    }
-                    ESP_LOGE(TAG, "Incorrect password.");
-                    std::this_thread::sleep_for(1s);
-                    return std::nullopt;
-                });
+        auto pw = kp_storage.prompt_for_password(console, false);
+        assert(pw);
+        auto opt_kp = kp_storage.load(*pw);
+        assert(opt_kp);
+        kp = *opt_kp;
     } else {
         // This is the first run, ask the user for a password
-        std::string pwd1, pwd2;
-        do {
-            pwd1 = helper::prompt_password(console, "Enter a new password for this keymaker:", [](std::string s) -> std::optional<std::string> {
-                if (s.length() < 10) {
-                    ESP_LOGE(TAG, "Must be at least 10 characters long.");
-                    return std::nullopt;
-                }
-                return s;
-            });
-            pwd2 = helper::prompt_password(console, "Enter the same password again:", [&](std::string s) -> std::optional<std::string> {
-                if (s != pwd1) {
-                    ESP_LOGE(TAG, "Mismatching passwords.");
-                }
-                // Will trigger another prompt
-                return s;
-            });
-        } while (pwd1 != pwd2);
+        auto pw = ka::device_keypair_storage::prompt_for_new_password(console, false, false);
+        assert(pw);
         // Save the new key pair using the password
-        kp_storage.save(kp, pwd1);
+        kp_storage.save(kp, *pw);
     }
 
     ka::keymaker km{partition, std::move(kp_storage), kp, std::move(ctrl)};

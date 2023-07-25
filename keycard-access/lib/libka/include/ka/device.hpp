@@ -15,6 +15,8 @@ namespace ut {
 }
 
 namespace ka {
+    class console;
+
     namespace cmd {
         class shell;
         template <class>
@@ -36,9 +38,16 @@ namespace ka {
          */
         device_keypair_storage() = default;
 
-        [[nodiscard]] std::optional<key_pair> load(std::string_view password);
+        [[nodiscard]] std::optional<key_pair> load(std::string_view password) const;
         void save(key_pair const &kp, std::string_view password);
-        [[nodiscard]] bool exists();
+        [[nodiscard]] bool exists() const;
+
+        /**
+         * @warning Will return std::nullopt even if @p allow_cancel is set to false, in the event that @p expected_kp differs from the stored one,
+         * even if the password is correct.
+         */
+        [[nodiscard]] std::optional<std::string> prompt_for_password(console &c, bool allow_cancel, std::optional<key_pair> expected_kp = std::nullopt) const;
+        [[nodiscard]] static std::optional<std::string> prompt_for_new_password(console &c, bool allow_cancel, bool exit_on_mismatch);
     };
 
     class device {
@@ -98,7 +107,9 @@ namespace ka {
         [[nodiscard]] bool wifi_test();
         bool wifi_connect(std::string_view ssid, std::string_view password);
 
-        [[nodiscard]] bool change_password(std::string_view oldpw, std::string_view newpw);
+        void restart();
+
+        [[nodiscard]] bool change_password_prompt();
 
         virtual void register_commands(cmd::shell &sh);
     };

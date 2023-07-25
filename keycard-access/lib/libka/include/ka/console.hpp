@@ -18,19 +18,22 @@
 struct linenoiseCompletions;
 
 namespace ka {
+
+    template <class Fn>
+    concept prompt_parsing_function = requires (Fn &&fn) {
+        bool(fn(std::declval<std::string>()));
+        not std::is_void_v<decltype(*fn(std::declval<std::string>()))>;
+    };
+
     class console {
+        struct console_setup;
+        std::shared_ptr<console_setup> _raii;
     public:
         console();
-
-        console(console const &) = delete;
-        console(console &&) noexcept = delete;
-
-        console &operator=(console const &) = delete;
-        console &operator=(console &&) noexcept = delete;
-
         [[nodiscard]] std::optional<std::string> read_line(std::string_view prompt = "> ") const;
 
-        ~console();
+        template <prompt_parsing_function Fn>
+        [[nodiscard]] auto repeated_prompt(std::string_view prompt_desc, std::string_view prompt, bool allow_cancel, Fn &&parse);
     };
 
     namespace cmd_literals {
@@ -275,6 +278,25 @@ namespace ka {
 }// namespace ka
 
 namespace ka {
+
+
+    template <prompt_parsing_function Fn>
+    auto console::repeated_prompt(std::string_view prompt_desc, std::string_view prompt, bool allow_cancel, Fn &&parse) {
+        using fn_retval_t = std::decay_t<decltype(*parse(std::declval<std::string>()))>;
+        using retval_t = std::optional<fn_retval_t>;
+        while (true) {
+            if (not prompt_desc.empty()) {
+                std::printf("%s\n", prompt_desc.data());
+            }
+            if (auto user_input = read_line(prompt); user_input) {
+                if (auto parsed_object = parse(std::move(*user_input)); parsed_object) {
+                    return retval_t{*parsed_object};
+                }
+            } else if (allow_cancel) {
+                return retval_t{std::nullopt};
+            }
+        }
+    }
 
     namespace cmd {
 

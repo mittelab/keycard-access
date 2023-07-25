@@ -19,14 +19,14 @@ namespace ka {
 
     device_keypair_storage::device_keypair_storage(nvs::partition &partition) : _ns{partition.open_namespc(default_namespace)} {}
 
-    bool device_keypair_storage::exists() {
+    bool device_keypair_storage::exists() const {
         if (_ns == nullptr) {
             return false;
         }
         return bool(_ns->get_blob("secret-key"));
     }
 
-    std::optional<key_pair> device_keypair_storage::load(std::string_view password) {
+    std::optional<key_pair> device_keypair_storage::load(std::string_view password) const {
         if (_ns == nullptr) {
             return std::nullopt;
         }
@@ -50,6 +50,73 @@ namespace ka {
             TRY(_ns->commit());
             return mlab::result_success;
         }());
+    }
+
+
+    std::optional<std::string> device_keypair_storage::prompt_for_password(console &c, bool allow_cancel, std::optional<key_pair> expected_kp) const {
+        if (not exists()) {
+            ESP_LOGE(TAG, "No storage is active.");
+            return std::nullopt;
+        }
+        bool stored_kp_differs_from_expected_kp = false;
+        auto validate = [&](std::string candidate) -> std::optional<std::string> {
+            // Try to load from this keypair
+            if (auto kp = load(candidate); kp) {
+                // Does it match the expected one?
+                if (expected_kp and *kp != *expected_kp) {
+                    ESP_LOGE(TAG, "Stored keypair and in-memory keypair differ!");
+                    stored_kp_differs_from_expected_kp = true;
+                }
+                return candidate;
+            } else {
+                ESP_LOGE(TAG, "Incorrect password.");
+                std::this_thread::sleep_for(1s);
+                return std::nullopt;
+            }
+        };
+        return c.repeated_prompt("Enter the password to unlock this key pair:", "cur pw> ", allow_cancel, validate);
+    }
+
+    std::optional<std::string> device_keypair_storage::prompt_for_new_password(console &c, bool allow_cancel, bool exit_on_mismatch) {
+        while (true) {
+            auto pwd1 = c.repeated_prompt(
+                    "Enter a new password for this key pair:", "new pw> ", allow_cancel,
+                    [](std::string s) -> std::optional<std::string> {
+                        if (s.length() < 10) {
+                            ESP_LOGE(TAG, "Must be at least 10 characters long.");
+                            return std::nullopt;
+                        }
+                        return s;
+                    });
+            // If the user canceled, and we allow it, return now
+            if (pwd1 == std::nullopt) {
+                return std::nullopt;
+            }
+            // Ok ask again
+            auto pwd2 = c.repeated_prompt(
+                    "Enter the same password again:", "repeat> ", allow_cancel,
+                    [&](std::string s) -> std::optional<std::string> {
+                        if (s != *pwd1) {
+                            ESP_LOGE(TAG, "Mismatching passwords.");
+                        }
+                        // Will trigger another prompt
+                        return s;
+                    });
+            if (pwd2 == std::nullopt) {
+                // The user canceled
+                return std::nullopt;
+            }
+            if (*pwd2 != *pwd1) {
+                // Mismatching passwords
+                if (exit_on_mismatch) {
+                    return std::nullopt;
+                } else {
+                    continue;
+                }
+            }
+            // They match
+            return *pwd1;
+        };
     }
 
     void device::restore_kp(std::string_view password) {
@@ -227,6 +294,10 @@ namespace ka {
         return wf.get_ssid();
     }
 
+    void device::restart() {
+        esp_restart();
+    }
+
     bool device::wifi_test() {
         auto &wf = wifi::instance();
         return wf.ensure_connected();
@@ -238,30 +309,19 @@ namespace ka {
         return wf.ensure_connected();
     }
 
-
-    bool device::change_password(std::string_view oldpw, std::string_view newpw) {
-        /**
-         * @todo prompt for this twice instead of taking arguments, and make sure they are sufficiently long
-         * @todo Add reboot command
-         */
-        if (not _kp_storage.exists()) {
-            ESP_LOGE(TAG, "No storage is active.");
+    bool device::change_password_prompt() {
+        console c;
+        auto orig_pw = _kp_storage.prompt_for_password(c, true, keys());
+        if (not orig_pw) {
             return false;
         }
-        if (const auto r_kp = _kp_storage.load(oldpw); r_kp) {
-            if (*r_kp == keys()) {
-                _kp_storage.save(keys(), newpw);
-                return true;
-            } else {
-                ESP_LOGE(TAG, "Saved keys and memorized keys differ!");
-                return false;
-            }
-        } else {
-            ESP_LOGE(TAG, "Unable to load the stored key pair, wrong password?");
+        auto new_pw = _kp_storage.prompt_for_new_password(c, true, true);
+        if (not new_pw) {
             return false;
         }
+        _kp_storage.save(keys(), *new_pw);
+        return true;
     }
-
 
     namespace cmd {
         template <>
@@ -298,7 +358,9 @@ namespace ka {
         sh.register_command("update-manually", *this, &device::update_manually, {"firmware-url"_pos});
         sh.register_command("update-check-only", *this, &device::check_for_updates, {});
         sh.register_command("update-get-current-version", *this, &device::get_firmware_info, {});
-        sh.register_command("change-password", *this, &device::change_password, {{"old"}, {"new"}});
+        sh.register_command("password-change", *this, &device::change_password_prompt, {});
+        sh.register_command("restart", *this, &device::restart, {});
+        sh.register_command("firmware-info", *this, &device::get_firmware_info, {});
     }
 
 }// namespace ka
