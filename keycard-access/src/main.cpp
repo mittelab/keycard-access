@@ -29,7 +29,7 @@ namespace {
             ka::fw_info::running_fw_mark_verified();
         }
     }
-}
+}// namespace
 
 void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::controller> ctrl) {
     // Generate a fresh new keypair, which we will then override if any is found

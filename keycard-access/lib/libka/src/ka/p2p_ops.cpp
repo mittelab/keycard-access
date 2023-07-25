@@ -237,8 +237,8 @@ namespace ka::p2p {
     r<> local_gate::restart() {
         TRY(assert_peer_is_keymaker(true));
         std::thread restart_th{[]() {
-          std::this_thread::sleep_for(2s);
-          esp_restart();
+            std::this_thread::sleep_for(2s);
+            esp_restart();
         }};
         restart_th.detach();
         _b.serve_stop();
