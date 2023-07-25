@@ -21,17 +21,6 @@ namespace ka {
         class partition;
     }
 
-    namespace p2p {
-        struct protocol_factory_base;
-        class local_gate_base;
-
-        template <class T>
-        concept local_gate_protocol = std::is_base_of_v<local_gate_base, T>;
-
-        template <local_gate_protocol Protocol>
-        struct protocol_factory;
-    }// namespace p2p
-
     class gate;
 
     struct gate_pub_info {
