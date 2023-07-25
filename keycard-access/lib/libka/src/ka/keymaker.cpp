@@ -574,15 +574,12 @@ namespace ka {
                 exp_pk = r_chn->peer_pub_key();
                 auto &rg = r_chn->remote_gate();
                 TRY_RESULT_AS(identify_gate(rg), r_ours) {
-                    if (r_ours->first != std::numeric_limits<gate_id>::max()) {
-                        id = r_ours->first;
-                        ours = r_ours->second;
-                    }
+                    std::tie(id, ours) = *r_ours;
                 }
             }
         }
         if (id == std::numeric_limits<gate_id>::max()) {
-            return rpc_p2p_error::rpc_channel_error;
+            return rpc_p2p_error::p2p_invalid_operation;
         }
         if (not ours) {
             return keymaker_gate_info{id, *exp_pk, gate_status::unknown, {}};
