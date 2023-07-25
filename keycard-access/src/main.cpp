@@ -69,6 +69,11 @@ void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::control
 }
 
 extern "C" void app_main() {
+    std::printf("\nKeycard Access  Copyright (C) 2023  Pietro Saccardi\n\n"
+                "This program comes with ABSOLUTELY NO WARRANTY.\n"
+                "This is free software, and you are welcome to\n"
+                "redistribute it under certain conditions.\n"
+                "See the LICENSE file in the source code for details.\n");
     // Open the main partition and ensure it works correctly.
     auto partition = ka::nvs::instance().open_default_partition();
     if (partition == nullptr) {
