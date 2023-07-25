@@ -125,6 +125,7 @@ namespace ka::p2p {
         _b.register_command(&local_gate::reset_gate, *this);
         _b.register_command(&local_gate::connect_wifi, *this);
         _b.register_command(&local_gate::disconnect, *this);
+        _b.register_command(&local_gate::restart, *this);
         // These two have the same signature, so we must disambiguate manually
         _b.register_command(&local_gate::check_for_updates, *this, "check_for_updates");
         _b.register_command(&local_gate::update_now, *this, "update_now");
@@ -231,6 +232,17 @@ namespace ka::p2p {
     r<> local_gate::reset_gate() {
         TRY(assert_peer_is_keymaker());
         _g.reset();
+        return mlab::result_success;
+    }
+
+    r<> local_gate::restart() {
+        TRY(assert_peer_is_keymaker(true));
+        std::thread restart_th{[]() {
+          std::this_thread::sleep_for(2s);
+          esp_restart();
+        }};
+        restart_th.detach();
+        _b.serve_stop();
         return mlab::result_success;
     }
 
@@ -344,6 +356,10 @@ namespace ka::p2p {
 
     rpc::r<> remote_gate::bye() {
         return _b.remote_invoke_unique(&local_gate::disconnect);
+    }
+
+    rpc::r<r<>> remote_gate::restart_gate() {
+        return _b.remote_invoke_unique(&local_gate::restart);
     }
 }// namespace ka::p2p
 

@@ -146,6 +146,7 @@ namespace ka {
         [[nodiscard]] rpc_p2p_r<std::string> gate_get_backend_url() const;
         [[nodiscard]] rpc_p2p_r<gpio_responder_config> gate_get_gpio_config() const;
         rpc_p2p_r<> gate_set_gpio_config(gpio_num_t gpio, bool level, std::chrono::milliseconds hold_time);
+        rpc_p2p_r<> gate_restart();
 
         void register_commands(ka::cmd::shell &sh) override;
     };

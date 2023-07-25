@@ -93,6 +93,8 @@ namespace ka::p2p {
         r<release_info> update_now();
         r<bool> connect_wifi(std::string_view ssid, std::string_view password);
 
+        r<> restart();
+
         void disconnect();
 
         /**
@@ -130,6 +132,8 @@ namespace ka::p2p {
         rpc::r<r<>> reset_gate();
         rpc::r<r<release_info>> update_now();
         rpc::r<r<bool>> connect_wifi(std::string_view ssid, std::string_view password);
+
+        rpc::r<r<>> restart_gate();
 
         rpc::r<> bye();
         /**

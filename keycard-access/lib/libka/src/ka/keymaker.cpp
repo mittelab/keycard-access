@@ -555,6 +555,15 @@ namespace ka {
         }
     }
 
+    rpc_p2p_r<> keymaker::gate_restart() {
+        ESP_LOGI(TAG, "Bring closer a gate...");
+        TRY_RESULT_AS(open_gate_channel(), r_chn) {
+            auto &rg = r_chn->remote_gate();
+            TRY(reject_not_ours(identify_gate(rg), true));
+            return cast_result(rg.restart_gate());
+        }
+    }
+
 
     rpc_p2p_r<keymaker_gate_info> keymaker::gate_inspect(gate_id id) const {
         std::optional<pub_key> exp_pk = std::nullopt;
@@ -1081,6 +1090,7 @@ namespace ka {
         sh.register_command("gate-backend-get-url", *this, &keymaker::gate_get_backend_url, {});
         sh.register_command("gate-gpio-get-config", *this, &keymaker::gate_get_gpio_config, {});
         sh.register_command("gate-gpio-configure", *this, &keymaker::gate_set_gpio_config, {{"gpio"}, {"level", true}, {"hold-time", 100ms}});
+        sh.register_command("gate-restart", *this, &keymaker::gate_restart, {});
     }
 
 
