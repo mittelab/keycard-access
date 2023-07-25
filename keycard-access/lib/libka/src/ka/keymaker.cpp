@@ -375,7 +375,7 @@ namespace ka {
                     return rpc_p2p_error::p2p_invalid_operation;
                 }
                 auto &rg = r_chn->remote_gate();
-                TRY_RESULT(expect_gid(reject_not_ours(identify_gate(rg), false), id));
+                TRY(expect_gid(reject_not_ours(identify_gate(rg), false), id));
                 TRY_CAST(rg.reset_gate());
             }
             return mlab::result_success;

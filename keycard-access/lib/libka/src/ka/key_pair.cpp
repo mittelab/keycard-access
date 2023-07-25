@@ -26,9 +26,9 @@ namespace ka {
 
         [[nodiscard]] std::optional<std::array<std::uint8_t, 32>> hash_password(std::string_view password) {
             static_assert(CONFIG_MAIN_TASK_STACK_SIZE > pwhash_memlimit, "libSodium operates on the stack, please increase the minimum stack size.");
+            static_assert(crypto_pwhash_argon2id_PASSWD_MIN == 0);
             std::array<std::uint8_t, 32> hash{};
-            if (password.length() < crypto_pwhash_argon2id_PASSWD_MIN or
-                password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
+            if (password.length() > crypto_pwhash_argon2id_PASSWD_MAX) {
                 ESP_LOGE("KA", "Password must be between %u and %u characters long.",
                          crypto_pwhash_argon2id_PASSWD_MIN,
                          crypto_pwhash_argon2id_PASSWD_MAX);
