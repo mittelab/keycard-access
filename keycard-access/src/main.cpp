@@ -14,6 +14,23 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+    void fw_rollback(const char *what_went_wrong) {
+        if (ka::fw_info::is_running_fw_pending_verification()) {
+            ESP_LOGE(TAG, "Could not %s with the new firmware. Will roll back in 5s.", what_went_wrong);
+            std::this_thread::sleep_for(5s);
+            ka::fw_info::running_fw_rollback();
+        }
+    }
+
+    void fw_is_good() {
+        if (ka::fw_info::is_running_fw_pending_verification()) {
+            ESP_LOGI(TAG, "Firmware was updated.");
+            ka::fw_info::running_fw_mark_verified();
+        }
+    }
+}
+
 void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::controller> ctrl) {
     // Generate a fresh new keypair, which we will then override if any is found
     ka::key_pair kp{ka::randomize};
@@ -44,6 +61,10 @@ void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::control
     sh.register_help_command();
     km.register_commands(sh);
 
+    // This is the latest point at which we have done something and can certify to a good
+    // extent the firmware is working (no broken key pair, no broken storage, rf field working...)
+    fw_is_good();
+
     ESP_LOGI(TAG, "Entering shell, type 'help' for help:");
 
     sh.repl(console);
@@ -59,10 +80,16 @@ void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::control
     } else {
         ESP_LOGI(TAG, "Gate not configured.");
     }
+
     // Make sure GPIO configuration is loaded now, not at the first usage
     static_cast<void>(ka::gpio_responder_config::get_global_config());
     ka::gpio_gate_responder responder{g};
     pn532::scanner scanner{*ctrl};
+
+    // This is the latest point at which we have done something and can certify to a good
+    // extent the firmware is working (no broken key pair, no broken storage, rf field working...)
+    fw_is_good();
+
     while (true) {
         scanner.loop(responder, false);
     }
@@ -73,16 +100,15 @@ extern "C" void app_main() {
                 "This program comes with ABSOLUTELY NO WARRANTY.\n"
                 "This is free software, and you are welcome to\n"
                 "redistribute it under certain conditions.\n"
-                "See the LICENSE file in the source code for details.\n");
+                "See the LICENSE file in the source code for details.\n\n");
+    auto fw_str = ka::fw_info::get_running_fw().to_string();
+    std::printf("Firmware version: %s\n\n", fw_str.c_str());
+
     // Open the main partition and ensure it works correctly.
     auto partition = ka::nvs::instance().open_default_partition();
     if (partition == nullptr) {
         // This is severe, we cannot do anything without NVS partition.
-        if (ka::fw_info::is_running_fw_pending_verification()) {
-            ESP_LOGE(TAG, "Could not %s with the new firmware. Will roll back in 5s.", "open the NVS partition");
-            std::this_thread::sleep_for(5s);
-            ka::fw_info::running_fw_rollback();
-        }
+        fw_rollback("open the NVS partition");
         ESP_LOGE(TAG, "Could not %s, power cycle the device to try again.", "open the NVS partition");
         return;
     }
@@ -97,16 +123,10 @@ extern "C" void app_main() {
     // Do initial setup of the PN532
     if (not hsu_chn.wake() or not controller->init_and_test()) {
         // Is this a new fw? Roll back
-        if (ka::fw_info::is_running_fw_pending_verification()) {
-            ESP_LOGE(TAG, "Could not %s with the new firmware. Will roll back in 5s.", "start the PN532");
-            std::this_thread::sleep_for(5s);
-            ka::fw_info::running_fw_rollback();
-        }
+        fw_rollback("start the PN532");
         ESP_LOGE(TAG, "Could not %s, power cycle the device to try again.", "start the PN532");
         return;
     }
-
-    ESP_LOGI(TAG, "Self-test passed.");
 
 #if defined(KEYCARD_ACCESS_GATE)
     gate_main(*partition, controller);
