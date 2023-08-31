@@ -30,7 +30,9 @@ namespace ka {
     public:
         using ka::gate_responder::gate_responder;
 
+        void on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) override;
         void on_authentication_success(ka::identity const &) override;
+        void on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) override;
     };
 
 }// namespace ka

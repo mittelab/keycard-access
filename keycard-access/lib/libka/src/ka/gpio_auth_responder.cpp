@@ -7,10 +7,17 @@
 #include <mlab/result_macro.hpp>
 #include <mutex>
 #include <thread>
-
 namespace ka {
 
     namespace {
+
+#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
+        static_assert((KEYCARD_ACCESS_BLINK_PN532_PIN >= 30 and KEYCARD_ACCESS_BLINK_PN532_PIN <= 39) or (KEYCARD_ACCESS_BLINK_PN532_PIN >= 70 and KEYCARD_ACCESS_BLINK_PN532_PIN <= 79),
+                      "You can only use pins 30..39 or 70..79.");
+        constexpr pn532::gpio_port blink_port = KEYCARD_ACCESS_BLINK_PN532_PIN >= 70 ? pn532::gpio_port::p7 : pn532::gpio_port::p3;
+        constexpr std::uint8_t blink_pin = std::uint8_t(KEYCARD_ACCESS_BLINK_PN532_PIN % 10);
+#endif
+
         class gpio_responder_global_config {
             gpio_responder_config _cfg = {};
             mutable std::mutex _chg_mtx = {};
@@ -96,6 +103,20 @@ namespace ka {
 
     void gpio_gate_responder::on_authentication_success(ka::identity const &) {
         gpio_responder_global_config::instance().async_hold();
+    }
+
+    void gpio_gate_responder::on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) {
+        gate_responder::on_activation(scanner, target);
+#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
+        scanner.ctrl().set_gpio_pin(blink_port, blink_pin, true);
+#endif
+    }
+
+    void gpio_gate_responder::on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) {
+        gate_responder::on_leaving_rf(scanner, target);
+#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
+        scanner.ctrl().set_gpio_pin(blink_port, blink_pin, false);
+#endif
     }
 
     nvs::r<> gpio_responder_config::save_to(nvs::namespc &ns) const {
