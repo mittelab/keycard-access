@@ -50,11 +50,12 @@ def cdb_patch_argument(arg: str, old_d: str, new_d: str) -> str:
     return arg_pfx + arg
 
 
-def cdb_change_entry_path(e: dict, new_d: str) -> dict:
+def cdb_change_entry_path(e: dict, new_d: str, pio_ini_dir: str) -> dict:
     cmd = e['command']
     old_d = e['directory']
     file = e['file']
-    assert os.path.isabs(file)
+    if not os.path.isabs(file):
+        file = os.path.abspath(os.path.join(pio_ini_dir, file))
     assert os.path.isabs(old_d)
     new_d = os.path.abspath(new_d)
     return {
@@ -105,7 +106,7 @@ def main(args):
     dest_dir = os.path.dirname(cdb_dest_path)
     dest_repo = git.Repo(dest_dir, search_parent_directories=True)
     cdb = list(
-        map(lambda e: cdb_change_entry_path(e, dest_dir),
+        map(lambda e: cdb_change_entry_path(e, dest_dir, pio_ini_dir),
             filter(lambda e: in_work_tree(dest_repo, e['file'], rel_to=pio_ini_dir),
                    cdb)))
 
