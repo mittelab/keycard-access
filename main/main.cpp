@@ -117,11 +117,11 @@ extern "C" void app_main() {
     desfire::esp32::suppress_log suppress{"AUTH ROOT KEY"};
 
     // Create pn532, scanner and controller
-    pn532::esp32::hsu_channel hsu_chn{ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx};
+    auto hsu_chn = std::make_shared<pn532::esp32::hsu_channel>(ka::pinout::uart_port, ka::pinout::uart_config, ka::pinout::pn532_hsu_tx, ka::pinout::pn532_hsu_rx);
     auto controller = std::make_shared<pn532::controller>(hsu_chn);
 
     // Do initial setup of the PN532
-    if (not hsu_chn.wake() or not controller->init_and_test()) {
+    if (not hsu_chn->wake() or not controller->init_and_test()) {
         // Is this a new fw? Roll back
         fw_rollback("start the PN532");
         ESP_LOGE(TAG, "Could not %s, power cycle the device to try again.", "start the PN532");

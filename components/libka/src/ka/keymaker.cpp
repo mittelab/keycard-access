@@ -134,7 +134,7 @@ namespace ka {
                 const auto nfcid_s = mlab::data_to_hex_string(r->front().nfcid);
                 ESP_LOGI(TAG, "Found a %s tag with NFC id %s", to_string(pn532::target_type::passive_106kbps_iso_iec_14443_4_typea), nfcid_s.c_str());
                 _tkid = id_from_nfc_id(r->front().nfcid);
-                _tag = std::make_unique<desfire::tag>(desfire::tag::make<desfire::esp32::default_cipher_provider>(*_ctrl, r->front().logical_index));
+                _tag = std::make_unique<desfire::tag>(*_ctrl, r->front().logical_index);
             }
             return mlab::result_success;
         }

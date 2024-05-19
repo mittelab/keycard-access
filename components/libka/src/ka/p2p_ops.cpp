@@ -457,11 +457,18 @@ namespace mlab {
             return s;
         }
 
-        s >> v.major >> v.minor >> v.patch >> v.prerelease_type >> v.prerelease_number;
+        s >> lsb16 >> v.major;
+        s >> lsb16 >> v.minor;
+        s >> lsb16 >> v.patch;
+        s >> v.prerelease_type;
+#warning "pre-release number is not parsed correctly"
+        // TODO: s >> v.prerelease_number;
         return s;
     }
 
     bin_data &operator<<(bin_data &bd, semver::version const &v) {
-        return bd << v.major << v.minor << v.patch << v.prerelease_type << v.prerelease_number;
+        return bd << lsb16 << v.major << lsb16 << v.minor << lsb16 << v.patch << v.prerelease_type;
+#warning "pre-release number is not parsed correctly"
+        // TODO: bd << v.prerelease_number;
     }
 }// namespace mlab

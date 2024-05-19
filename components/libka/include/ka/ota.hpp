@@ -11,7 +11,7 @@
 #include <freertos/task.h>
 #include <ka/data.hpp>
 #include <ka/misc.hpp>
-#include <nlohmann/json.hpp>
+#include <json.hpp>
 #include <thread>
 
 namespace ka {
