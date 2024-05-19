@@ -1,6 +1,4 @@
 .pio
-CMakeLists*.txt
-!CMakeListsUser.txt
 cmake-build-*/
 build
 .vscode

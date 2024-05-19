@@ -4,6 +4,3 @@
 [submodule "components/libmodernjson/json"]
 	path = components/libmodernjson/json
 	url = https://github.com/nlohmann/json.git
-[submodule "components/libsemver/semver"]
-	path = components/libsemver/semver
-	url = https://github.com/Neargye/semver.git
