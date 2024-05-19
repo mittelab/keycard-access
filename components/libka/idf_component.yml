@@ -3,6 +3,10 @@ dependencies:
   espressif/libsodium: "^1.0.20~1"
   idf:  # Required IDF version
     version: ">=4.1.0"
+  libspookyaction:
+    path: libspookyaction
+    git: https://git.mittelab.org/proj/libspookyaction.git
+    version: restructure-proj
 description: Support library for Keycard Access
 maintainers:
   - Pietro Saccardi <lizardm4@gmail.com>
