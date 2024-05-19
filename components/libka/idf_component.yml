@@ -1,0 +1,13 @@
+dependencies:
+  mittelab/mittelib: "^1.0.5"
+  idf:  # Required IDF version
+    version: ">=4.1.0"
+description: Support library for Keycard Access
+maintainers:
+  - Pietro Saccardi <lizardm4@gmail.com>
+version: 1.0.0
+license: LGPL-3.0-only
+documentation: https://proj.mittelab.dev/keycard-access/
+issues: https://git.mittelab.org/proj/keycard-access/-/issues
+repository: https://git.mittelab.org/proj/keycard-access
+url: https://proj.mittelab.dev/keycard-access/
