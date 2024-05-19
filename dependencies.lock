@@ -1,0 +1,15 @@
+dependencies:
+  idf:
+    component_hash: null
+    source:
+      type: idf
+    version: 5.1.2
+  mittelab/mittelib:
+    component_hash: fbfee184f6bd7ebb4514f457b0b6762d5782da3bb059e32f61d3f4297895d99d
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.0.5
+manifest_hash: 88197db82b3bf747decac016dbe29d4e4408577e932b16e8aea2ca81e0f3244e
+target: esp32
+version: 1.0.0
