@@ -12,10 +12,10 @@ add_custom_command(
      COMMAND curl -L https://github.com/nlohmann/json/releases/download/v${JSON_VERSION}/json.hpp -o ${JSON_FOLDER}/json.hpp
      VERBATIM)
 
-add_custom_target(download_semver
+add_custom_target(download_json
      DEPENDS "${JSON_FOLDER}/json.hpp")
 
-add_dependencies("${COMPONENT_LIB}" download_semver)
+add_dependencies("${COMPONENT_LIB}" download_json)
 
 set_property(
      DIRECTORY "${COMPONENT_DIR}"
