@@ -1,6 +1,5 @@
 #include <chrono>
 #include <desfire/esp32/utils.hpp>
-#include <ka/config.hpp>
 #include <ka/console.hpp>
 #include <ka/gpio_auth_responder.hpp>
 #include <ka/keymaker.hpp>
@@ -13,6 +12,25 @@
 #define TAG "KA"
 
 using namespace std::chrono_literals;
+
+
+namespace ka::pinout {
+    static constexpr gpio_num_t pn532_hsu_rx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_TX);
+    static constexpr gpio_num_t pn532_hsu_tx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_RX);
+
+
+    static constexpr uart_config_t uart_config = {
+            .baud_rate = 115200,
+            .data_bits = UART_DATA_8_BITS,
+            .parity = UART_PARITY_DISABLE,
+            .stop_bits = UART_STOP_BITS_1,
+            .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+            .rx_flow_ctrl_thresh = 122,
+            .source_clk = UART_SCLK_REF_TICK};
+
+    static constexpr uart_port_t uart_port = UART_NUM_1;
+}// namespace ka::pinout
+
 
 namespace {
     void fw_rollback(const char *what_went_wrong) {
@@ -128,9 +146,9 @@ extern "C" void app_main() {
         return;
     }
 
-#if defined(KEYCARD_ACCESS_GATE)
+#if CONFIG_KEYCARD_ACCESS_FIRMWARE_GATE
     gate_main(*partition, controller);
-#else
+#elif CONFIG_KEYCARD_ACCESS_FIRMWARE_KEYMAKER
     keymaker_main(*partition, controller);
 #endif
     vTaskSuspend(nullptr);
