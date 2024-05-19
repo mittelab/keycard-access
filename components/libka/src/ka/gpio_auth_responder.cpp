@@ -11,12 +11,14 @@ namespace ka {
 
     namespace {
 
-#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
-        static_assert((KEYCARD_ACCESS_BLINK_PN532_PIN >= 30 and KEYCARD_ACCESS_BLINK_PN532_PIN <= 39) or (KEYCARD_ACCESS_BLINK_PN532_PIN >= 70 and KEYCARD_ACCESS_BLINK_PN532_PIN <= 79),
-                      "You can only use pins 30..39 or 70..79.");
-        constexpr pn532::gpio_port blink_port = KEYCARD_ACCESS_BLINK_PN532_PIN >= 70 ? pn532::gpio_port::p7 : pn532::gpio_port::p3;
-        constexpr std::uint8_t blink_pin = std::uint8_t(KEYCARD_ACCESS_BLINK_PN532_PIN % 10);
+#if CONFIG_PN532_BLINK_GPIO_P3
+        constexpr pn532::gpio_port blink_port = pn532::gpio_port::p3;
+        constexpr std::uint8_t blink_pin = std::uint8_t(CONFIG_PN532_BLINK_GPIO_NUM);
+#elif CONFIG_PN532_BLINK_GPIO_P7
+        constexpr pn532::gpio_port blink_port = pn532::gpio_port::p7;
+        constexpr std::uint8_t blink_pin = std::uint8_t(CONFIG_PN532_BLINK_GPIO_NUM);
 #endif
+
 
         class gpio_responder_global_config {
             gpio_responder_config _cfg = {};
@@ -107,14 +109,14 @@ namespace ka {
 
     void gpio_gate_responder::on_activation(pn532::scanner &scanner, pn532::scanned_target const &target) {
         gate_responder::on_activation(scanner, target);
-#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
+#if CONFIG_PN532_BLINK_GPIO_P3 || CONFIG_PN532_BLINK_GPIO_P7
         scanner.ctrl().set_gpio_pin(blink_port, blink_pin, true);
 #endif
     }
 
     void gpio_gate_responder::on_leaving_rf(pn532::scanner &scanner, pn532::scanned_target const &target) {
         gate_responder::on_leaving_rf(scanner, target);
-#ifdef KEYCARD_ACCESS_BLINK_PN532_PIN
+#if CONFIG_PN532_BLINK_GPIO_P3 || CONFIG_PN532_BLINK_GPIO_P7
         scanner.ctrl().set_gpio_pin(blink_port, blink_pin, false);
 #endif
     }
