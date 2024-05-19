@@ -69,6 +69,7 @@ namespace ka {
                     .is_async = false,
                     .use_global_ca_store = false,
                     .skip_cert_common_name_check = false,
+                    .common_name = nullptr,
                     .crt_bundle_attach = esp_crt_bundle_attach,
                     .keep_alive_enable = false,
                     .keep_alive_idle = 0,
