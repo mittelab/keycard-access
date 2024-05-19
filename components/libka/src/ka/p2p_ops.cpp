@@ -461,14 +461,25 @@ namespace mlab {
         s >> lsb16 >> v.minor;
         s >> lsb16 >> v.patch;
         s >> v.prerelease_type;
-#warning "pre-release number is not parsed correctly"
-        // TODO: s >> v.prerelease_number;
+        bool has_prerelease_number = false;
+        s >> has_prerelease_number;
+        if (has_prerelease_number) {
+            std::uint16_t prerelease_number = 0;
+            s >> lsb16 >> prerelease_number;
+            v.prerelease_number = prerelease_number;
+        } else {
+            v.prerelease_number = std::nullopt;
+        }
         return s;
     }
 
     bin_data &operator<<(bin_data &bd, semver::version const &v) {
-        return bd << lsb16 << v.major << lsb16 << v.minor << lsb16 << v.patch << v.prerelease_type;
-#warning "pre-release number is not parsed correctly"
-        // TODO: bd << v.prerelease_number;
+        bd << lsb16 << v.major << lsb16 << v.minor << lsb16 << v.patch << v.prerelease_type;
+        if (v.prerelease_number != std::nullopt) {
+            bd << true << lsb16 << *v.prerelease_number;
+        } else {
+            bd << false;
+        }
+        return bd;
     }
 }// namespace mlab
