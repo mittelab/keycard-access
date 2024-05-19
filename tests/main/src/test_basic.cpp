@@ -2,7 +2,7 @@
 // Created by spak on 7/6/23.
 //
 
-#include "test_basic.hpp"
+#include "../include/test_basic.hpp"
 #include <ka/key_pair.hpp>
 #include <ka/nvs.hpp>
 #include <mlab/bin_data.hpp>

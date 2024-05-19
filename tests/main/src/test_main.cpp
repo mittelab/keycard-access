@@ -1,6 +1,6 @@
-#include "test_basic.hpp"
-#include "test_card.hpp"
-#include "test_p2p.hpp"
+#include "../include/test_basic.hpp"
+#include "../include/test_card.hpp"
+#include "../include/test_p2p.hpp"
 #include <unity.h>
 
 extern "C" void app_main() {

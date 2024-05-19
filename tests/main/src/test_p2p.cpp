@@ -2,8 +2,8 @@
 // Created by spak on 7/6/23.
 //
 
-#include "test_p2p.hpp"
-#include "test_bundle.hpp"
+#include "../include/test_p2p.hpp"
+#include "../include/test_bundle.hpp"
 #include <chrono>
 #include <desfire/esp32/utils.hpp>
 #include <ka/gpio_auth_responder.hpp>
