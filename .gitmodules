@@ -7,3 +7,6 @@
 [submodule "keycard-access/lib/_semver"]
 	path = keycard-access/lib/_semver
 	url = https://github.com/Neargye/semver.git
+[submodule "libspookyaction"]
+	path = libspookyaction
+	url = https://git.mittelab.org/proj/libspookyaction.git
