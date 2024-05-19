@@ -10,7 +10,7 @@
 #include <desfire/keys.hpp>
 #include <desfire/tag.hpp>
 #include <ka/misc.hpp>
-#include <semver.hpp>
+#include <semver/semver.hpp>
 
 namespace ka {
 

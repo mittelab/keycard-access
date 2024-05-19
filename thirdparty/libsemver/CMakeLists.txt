@@ -3,7 +3,7 @@ set(SEMVER_FOLDER "${COMPONENT_DIR}/semver")
 
 idf_component_register(
      SRCS "${SEMVER_FOLDER}/semver.hpp"
-     INCLUDE_DIRS "${SEMVER_FOLDER}")
+     INCLUDE_DIRS "${COMPONENT_DIR}")
 
 add_custom_command(
      OUTPUT "${SEMVER_FOLDER}/semver.hpp"

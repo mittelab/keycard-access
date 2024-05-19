@@ -3,7 +3,7 @@ set(JSON_FOLDER "${COMPONENT_DIR}/json")
 
 idf_component_register(
      SRCS "${JSON_FOLDER}/json.hpp"
-     INCLUDE_DIRS "${JSON_FOLDER}")
+     INCLUDE_DIRS "${COMPONENT_DIR}")
 
 add_compile_definitions(JSON_NO_IO JSON_NOEXCEPTION)
 
