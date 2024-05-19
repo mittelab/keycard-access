@@ -6,8 +6,8 @@ idf_component_register(
         REQUIRES
         mittelib
         libspookyaction
-        libmodernjson
-        libsemver
+        nlohmann_json
+        neargye_semver
         libsodium
         esp_partition
         nvs_flash
