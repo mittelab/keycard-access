@@ -1,5 +1,6 @@
 dependencies:
   mittelab/mittelib: "^1.0.5"
+  espressif/libsodium: "^1.0.20~1"
   idf:  # Required IDF version
     version: ">=4.1.0"
 description: Support library for Keycard Access

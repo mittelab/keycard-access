@@ -1,4 +1,10 @@
 dependencies:
+  espressif/libsodium:
+    component_hash: f6e982479a2389cb6868e8fb761cf23aba6c355a8090b3e906299807775f58a3
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 1.0.20~1
   idf:
     component_hash: null
     source:
@@ -10,6 +16,6 @@ dependencies:
       service_url: https://api.components.espressif.com/
       type: service
     version: 1.0.5
-manifest_hash: 88197db82b3bf747decac016dbe29d4e4408577e932b16e8aea2ca81e0f3244e
+manifest_hash: a4fd7e0a04309530cf59a98f8312abce62d35eccac0889259a5c0e24964ec89e
 target: esp32
 version: 1.0.0
