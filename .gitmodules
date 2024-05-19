@@ -1,9 +1,9 @@
 [submodule "keycard-access/components/_idf-extra-components"]
 	path = keycard-access/components/_idf-extra-components
 	url = https://github.com/espressif/idf-extra-components
-[submodule "keycard-access/lib/_semver"]
-	path = keycard-access/lib/_semver
-	url = https://github.com/Neargye/semver.git
 [submodule "libspookyaction"]
 	path = libspookyaction
 	url = https://git.mittelab.org/proj/libspookyaction.git
+[submodule "components/libmodernjson/json"]
+	path = components/libmodernjson/json
+	url = https://github.com/nlohmann/json.git
