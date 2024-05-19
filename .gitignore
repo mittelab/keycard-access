@@ -1,12 +1,4 @@
-.pio
-cmake-build-*/
 build
 .vscode
 .idea
-compile_commands.json
-sdkconfig
-sdkconfig.*
-docs/_build
-compile_commands.json.bak
-version.txt
-project_name.txt
+managed_components
