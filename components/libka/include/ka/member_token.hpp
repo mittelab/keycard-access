@@ -34,6 +34,7 @@ namespace ka {
     class member_token {
         /**
          * @note Mutable because interacting with the tag requires non-const access.
+         * @todo Consider using a shared pointer
          */
         mutable desfire::tag *_tag;
 
