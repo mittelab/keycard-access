@@ -2,8 +2,8 @@
 // Created by spak on 7/6/23.
 //
 
-#include "../include/test_p2p.hpp"
-#include "../include/test_bundle.hpp"
+#include "test_bundle.hpp"
+#include <catch/catch.hpp>
 #include <chrono>
 #include <desfire/esp32/utils.hpp>
 #include <ka/gpio_auth_responder.hpp>
@@ -12,7 +12,6 @@
 #include <ka/rpc.hpp>
 #include <ka/secure_p2p.hpp>
 #include <pn532/p2p.hpp>
-#include <unity.h>
 
 using namespace std::chrono_literals;
 
@@ -91,17 +90,18 @@ namespace ut {
         std::shared_ptr<ka::p2p::secure_initiator> initiator;
         std::shared_ptr<ka::p2p::secure_target> target;
 
-        secure_p2p_loopback(std::shared_ptr<p2p_loopback> loop, ka::key_pair const &km_keys, ka::key_pair const &g_keys)
+        secure_p2p_loopback(std::shared_ptr<p2p_loopback> const &loop, ka::key_pair const &km_keys, ka::key_pair const &g_keys)
             : initiator{std::make_shared<ka::p2p::secure_initiator>(loop, g_keys)},
               target{std::make_shared<ka::p2p::secure_target>(loop, km_keys)} {
             std::thread t{[&]() {
-                TEST_ASSERT(initiator->handshake(5s));
+                CHECK(initiator->handshake(5s));
             }};
-            TEST_ASSERT(target->handshake(5s));
+            CHECK(target->handshake(5s));
             t.join();
         }
 
-        secure_p2p_loopback(std::shared_ptr<p2p_loopback> loop, ka::keymaker const &km, ka::gate const &g) : secure_p2p_loopback{std::move(loop), km.keys(), g.keys()} {}
+        secure_p2p_loopback(std::shared_ptr<p2p_loopback> const &loop, ka::keymaker const &km, ka::gate const &g)
+            : secure_p2p_loopback{loop, km.keys(), g.keys()} {}
     };
 
     namespace {
@@ -118,7 +118,7 @@ namespace ut {
         };
     }// namespace
 
-    void test_rpc() {
+    TEST_CASE("0010 RPC") {
         rpc_test local_instance{-4};
         rpc_test remote_instance{4};
 
@@ -139,21 +139,19 @@ namespace ut {
 
         {
             auto r_mul = local_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
-            TEST_ASSERT(r_mul);
-            if (r_mul) {
-                TEST_ASSERT(*r_mul == 42 * 4);
+            CHECKED_IF_FAIL(r_mul) {
+                CHECK(*r_mul == 42 * 4);
             }
 
             auto r_inc = local_bridge.remote_invoke_unique(&rpc_test::increase_multiplier);
-            TEST_ASSERT(r_inc);
+            CHECK(r_inc);
 
             r_mul = local_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
-            TEST_ASSERT(r_mul);
-            if (r_mul) {
-                TEST_ASSERT(*r_mul == 42 * 5);
+            CHECKED_IF_FAIL(r_mul) {
+                CHECK(*r_mul == 42 * 5);
             }
 
-            TEST_ASSERT(local_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
+            CHECK(local_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
             remote_serve.join();
         }
 
@@ -162,26 +160,24 @@ namespace ut {
 
         {
             auto r_mul = remote_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
-            TEST_ASSERT(r_mul);
-            if (r_mul) {
-                TEST_ASSERT(*r_mul == 42 * -4);
+            CHECKED_IF_FAIL(r_mul) {
+                CHECK(*r_mul == 42 * -4);
             }
 
             auto r_inc = remote_bridge.remote_invoke_unique(&rpc_test::increase_multiplier);
-            TEST_ASSERT(r_inc);
+            CHECK(r_inc);
 
             r_mul = remote_bridge.remote_invoke_unique(&rpc_test::multiply, 42);
-            TEST_ASSERT(r_mul);
-            if (r_mul) {
-                TEST_ASSERT(*r_mul == 42 * -3);
+            CHECKED_IF_FAIL(r_mul) {
+                CHECK(*r_mul == 42 * -3);
             }
 
-            TEST_ASSERT(remote_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
+            CHECK(remote_bridge.remote_invoke_unique(&ka::rpc::bridge::serve_stop));
             local_serve.join();
         }
     }
 
-    void test_rpc_gate() {
+    TEST_CASE("0011 Gate RPC") {
         ka::gate g{bundle.g0_kp};
         ka::keymaker km{bundle.km_kp};
         auto base_loop = std::make_shared<p2p_loopback>();
@@ -190,8 +186,8 @@ namespace ut {
         ka::p2p::local_gate lg{g, loop.initiator};
         ka::p2p::remote_gate rg{loop.target};
 
-        TEST_ASSERT(loop.initiator->did_handshake());
-        TEST_ASSERT(loop.target->did_handshake());
+        CHECK(loop.initiator->did_handshake());
+        CHECK(loop.target->did_handshake());
 
         ka::wifi::instance().set_max_attempts(1);
 
@@ -200,23 +196,21 @@ namespace ut {
         {
             ESP_LOGI("UT", "Testing %s", "get_fw_info");
             auto r = rg.get_fw_info();
-            TEST_ASSERT(r);
-            if (r) {
+            CHECKED_IF_FAIL(r) {
                 auto orig = g.get_firmware_info();
-                TEST_ASSERT(r->semantic_version == orig.semantic_version);
-                TEST_ASSERT(r->commit_info == orig.commit_info);
-                TEST_ASSERT(r->app_name == orig.app_name);
-                TEST_ASSERT(r->platform_code == orig.platform_code);
+                CHECK(r->semantic_version == orig.semantic_version);
+                CHECK(r->commit_info == orig.commit_info);
+                CHECK(r->app_name == orig.app_name);
+                CHECK(r->platform_code == orig.platform_code);
             }
         }
 
         {
             ESP_LOGI("UT", "Testing %s", "get_update_settings");
             auto r = rg.get_update_settings();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(r->update_channel == g.update_channel());
-                TEST_ASSERT(r->enable_automatic_update == g.updates_automatically());
+            CHECKED_IF_FAIL(r) {
+                CHECK(r->update_channel == g.update_channel());
+                CHECK(r->enable_automatic_update == g.updates_automatically());
             }
         }
 
@@ -224,15 +218,14 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "get_wifi_status");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KA-WIFI"}};
             auto r = rg.get_wifi_status();
-            TEST_ASSERT(r);
-            if (r) {
+            CHECKED_IF_FAIL(r) {
                 auto orig_ssid = g.wifi_get_ssid();
                 if (orig_ssid) {
-                    TEST_ASSERT(r->ssid == *orig_ssid);
-                    TEST_ASSERT(r->operational == g.wifi_test());
+                    CHECK(r->ssid == *orig_ssid);
+                    CHECK(r->operational == g.wifi_test());
                 } else {
-                    TEST_ASSERT(r->ssid.empty());
-                    TEST_ASSERT(not r->operational);
+                    CHECK(r->ssid.empty());
+                    CHECK(not r->operational);
                 }
             }
         }
@@ -240,33 +233,30 @@ namespace ut {
         {
             ESP_LOGI("UT", "Testing %s", "is_updating");
             auto r = rg.is_updating();
-            TEST_ASSERT(r);
-            if (r) {
+            CHECKED_IF_FAIL(r) {
                 auto orig = g.is_updating();
-                TEST_ASSERT(r->updating_from == orig.updating_from);
+                CHECK(r->updating_from == orig.updating_from);
             }
         }
 
         {
             ESP_LOGI("UT", "Testing %s", "get_gpio_config");
             auto r = rg.get_gpio_config();
-            TEST_ASSERT(r);
-            if (r) {
+            CHECKED_IF_FAIL(r) {
                 auto orig = ka::gpio_responder_config::get_global_config();
-                TEST_ASSERT(r->level == orig.level);
-                TEST_ASSERT(r->gpio == orig.gpio);
-                TEST_ASSERT(r->hold_time == orig.hold_time);
+                CHECK(r->level == orig.level);
+                CHECK(r->gpio == orig.gpio);
+                CHECK(r->hold_time == orig.hold_time);
             }
         }
 
         {
             ESP_LOGI("UT", "Testing %s", "get_registration_info");
             auto r = rg.get_registration_info();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(r->keymaker_pk == g.keymaker_pk());
-                TEST_ASSERT(r->pk == g.public_info().pk);
-                TEST_ASSERT(r->id == g.public_info().id);
+            CHECKED_IF_FAIL(r) {
+                CHECK(r->keymaker_pk == g.keymaker_pk());
+                CHECK(r->pk == g.public_info().pk);
+                CHECK(r->id == g.public_info().id);
             }
         }
 
@@ -274,10 +264,9 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "get_backend_url (future feature)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
             auto r = rg.get_backend_url();
-            TEST_ASSERT(r);
-            if (r) {
+            CHECKED_IF_FAIL(r) {
                 // So far is unimplemented.
-                TEST_ASSERT(r->empty());
+                CHECK(r->empty());
             }
         }
 
@@ -285,12 +274,10 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "check_for_updates");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
             auto r = rg.check_for_updates();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
-                if (*r) {
-                    TEST_ASSERT(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
-                    TEST_ASSERT((**r).firmware_url.empty());
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(*r) {
+                    CHECK(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
+                    CHECK((**r).firmware_url.empty());
                 }
             }
         }
@@ -299,11 +286,9 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "set_update_settings (noop in test)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
             auto r = rg.set_update_settings("https://foo.bar", true);
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(not *r);
-                if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_argument);
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(not *r) {
+                    CHECK(r->error() == ka::p2p::error::invalid_argument);
                 }
             }
         }
@@ -312,9 +297,8 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "update_manually (noop in test)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
             auto r = rg.update_manually("https://foo.bar");
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
+            CHECKED_IF_FAIL(r) {
+                CHECK(*r);
             }
         }
 
@@ -322,12 +306,10 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "update_now (noop in test)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KADEV"}};
             auto r = rg.update_now();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
-                if (*r) {
-                    TEST_ASSERT(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
-                    TEST_ASSERT((**r).firmware_url.empty());
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(*r) {
+                    CHECK(((**r).semantic_version == semver::version{0, 0, 0, semver::prerelease::alpha, 0}));
+                    CHECK((**r).firmware_url.empty());
                 }
             }
         }
@@ -336,12 +318,10 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "connect_wifi (non existent ssid)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"KA-WIFI"}};
             auto r = rg.connect_wifi("non existent", "wifi");
-            TEST_ASSERT(ka::wifi::instance().get_ssid() == "non existent");
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
-                if (*r) {
-                    TEST_ASSERT(not **r);
+            CHECK(ka::wifi::instance().get_ssid() == "non existent");
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(*r) {
+                    CHECK(not **r);
                 }
             }
         }
@@ -349,14 +329,12 @@ namespace ut {
         {
             ESP_LOGI("UT", "Testing %s", "register_gate");
             auto r = rg.register_gate(ka::gate_id{42});
-            TEST_ASSERT(r);
+            CHECK(r);
             // Test that it fails afterward
             r = rg.register_gate(ka::gate_id{42});
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(not *r);
-                if (not *r) {
-                    TEST_ASSERT((*r).error() == ka::p2p::error::invalid_operation);
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(not *r) {
+                    CHECK((*r).error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -365,11 +343,9 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "set_backend_url (future feature)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
             auto r = rg.set_backend_url("foo", "bar");
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(not *r);
-                if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(not *r) {
+                    CHECK(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -377,14 +353,12 @@ namespace ut {
         {
             ESP_LOGI("UT", "Testing %s", "set_gpio_config");
             auto r = rg.set_gpio_config(ka::gpio_responder_config{GPIO_NUM_MAX, false, 42ms});
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
-                if (*r) {
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(*r) {
                     auto orig = ka::gpio_responder_config::get_global_config();
-                    TEST_ASSERT(orig.level == false);
-                    TEST_ASSERT(orig.hold_time == 42ms);
-                    TEST_ASSERT(orig.gpio == GPIO_NUM_MAX);
+                    CHECK(orig.level == false);
+                    CHECK(orig.hold_time == 42ms);
+                    CHECK(orig.gpio == GPIO_NUM_MAX);
                 }
             }
         }
@@ -393,9 +367,8 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "reset_gate");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"GATE"}};
             auto r = rg.reset_gate();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(*r);
+            CHECKED_IF_FAIL(r) {
+                CHECK(*r);
             }
         }
 
@@ -403,11 +376,9 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "set_backend_url (not configured)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
             auto r = rg.set_backend_url("foo", "bar");
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(not *r);
-                if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(not *r) {
+                    CHECK(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
@@ -416,21 +387,19 @@ namespace ut {
             ESP_LOGI("UT", "Testing %s", "reset_gate (not configured)");
             desfire::esp32::suppress_log suppress{ESP_LOG_NONE, {"P2P"}};
             auto r = rg.reset_gate();
-            TEST_ASSERT(r);
-            if (r) {
-                TEST_ASSERT(not *r);
-                if (not *r) {
-                    TEST_ASSERT(r->error() == ka::p2p::error::invalid_operation);
+            CHECKED_IF_FAIL(r) {
+                CHECKED_IF_FAIL(not *r) {
+                    CHECK(r->error() == ka::p2p::error::invalid_operation);
                 }
             }
         }
 
-        TEST_ASSERT(rg.bye());
+        CHECK(rg.bye());
 
         local_serve.join();
     }
 
-    void test_rpc_registration() {
+    TEST_CASE("0012 RPC registration") {
         desfire::esp32::suppress_log suppress{ESP_LOG_ERROR, {"GATE", "P2P"}};
 
         ka::keymaker km1{bundle.km_kp};
@@ -456,20 +425,20 @@ namespace ut {
         auto is_invalid = [](auto const &r) { return r and not *r and r->error() == ka::p2p::error::invalid_operation; };
 
         // Do the setup with km1
-        TEST_ASSERT(rg1.get_fw_info());
-        TEST_ASSERT(rg1.register_gate(ka::gate_id{11}));
-        TEST_ASSERT(is_invalid(rg1.register_gate(ka::gate_id{11})));
+        CHECK(rg1.get_fw_info());
+        CHECK(rg1.register_gate(ka::gate_id{11}));
+        CHECK(is_invalid(rg1.register_gate(ka::gate_id{11})));
 
         // Attempt to register with km2
-        TEST_ASSERT(rg2.get_fw_info());
-        TEST_ASSERT(is_invalid(rg2.register_gate(ka::gate_id{12})));
-        TEST_ASSERT(is_unauthorized(rg2.reset_gate()));
-        TEST_ASSERT(is_unauthorized(rg2.connect_wifi("foo", "bar")));
-        TEST_ASSERT(is_unauthorized(rg2.set_update_settings("foo", false)));
+        CHECK(rg2.get_fw_info());
+        CHECK(is_invalid(rg2.register_gate(ka::gate_id{12})));
+        CHECK(is_unauthorized(rg2.reset_gate()));
+        CHECK(is_unauthorized(rg2.connect_wifi("foo", "bar")));
+        CHECK(is_unauthorized(rg2.set_update_settings("foo", false)));
 
         // Reset with km1
-        TEST_ASSERT(rg1.reset_gate());
-        TEST_ASSERT(rg2.register_gate(ka::gate_id{11}));
+        CHECK(rg1.reset_gate());
+        CHECK(rg2.register_gate(ka::gate_id{11}));
 
         // Good.
         rg1.bye();
