@@ -5,7 +5,7 @@ idf_component_register(
      SRCS "${CATCH_FOLDER}/catch_amalgamated.cpp"
      INCLUDE_DIRS "${COMPONENT_DIR}")
 
-add_compile_definitions(CATCH_CONFIG_NO_POSIX_SIGNALS)
+add_compile_definitions(CATCH_CONFIG_NO_POSIX_SIGNALS CATCH_AMALGAMATED_CUSTOM_MAIN)
 target_compile_options("${COMPONENT_LIB}" PRIVATE -Wno-unused-function)
 
 # Header and CPP file for Catch must be downloaded
