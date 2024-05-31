@@ -12,27 +12,7 @@ stages:
 
 variables:
   PIO_PROJ_FOLDER: keycard-access
-  GIT_SUBMODULE_STRATEGY: normal
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
-
-.pio-cache: &pio-cache
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - "${PIO_PROJ_FOLDER}/.pio"
-
-.rules-changes-sources: &rules-changes-sources
-  changes:
-    - ${PIO_PROJ_FOLDER}/src/**/*
-    - ${PIO_PROJ_FOLDER}/include/**/*
-    - ${PIO_PROJ_FOLDER}/lib/**/*
-    - ${PIO_PROJ_FOLDER}/test/**/*
-    - ${PIO_PROJ_FOLDER}/platformio.ini
-
-.rules-changes-cicd: &rules-changes-cicd
-  changes:
-    - cicd/*
-    - .gitlab-ci.yml
 
 .rules-merge-to-master: &rules-merge-to-master
   if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
@@ -46,13 +26,11 @@ check format:
   before_script:
     - apk add --update --no-cache git clang clang-extra-tools
   script:
-    - cd "${PIO_PROJ_FOLDER}"
     - >
-      find . \( -path './lib/libka/*' -or -path './test/*' -or -path './src/*' \) -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
+      find . \( -path './components/*' -or -path './tests/*' -or -path './main/*' \) -and \( -name '*.[hc]' -or -name '*.[hc]pp' \) | while read -r FILE; do
           echo "Formatting $FILE"
           clang-format --style file -i "$FILE"
       done
-    - cd ..
     - git diff --patch | tee 0001-Clang-format.patch
     - test ! -s 0001-Clang-format.patch
   artifacts:
@@ -66,134 +44,132 @@ check format:
 
 .build-template: &build-template
   stage: build
-  image: ${CI_REGISTRY}/proj/testinator/esp32:latest
-  <<: *pio-cache
-  before_script:
-    # This is needed to work around https://gitlab.com/gitlab-org/gitlab-runner/-/issues/29022
-    # We must be able to run `git describe` in the folder to obtain the proper version
-    - git config --global --add safe.directory $CI_PROJECT_DIR
-    - cd "${PIO_PROJ_FOLDER}"
-    # Remove the cached firmwares to ensure we will rebuild
-    - rm -f .pio/build/${PIO_ENV}/*.bin
-    - rm -f .pio/build/${PIO_ENV}/config/sdkconfig.json
+  image: espressif/idf:v5.1.2
+  script:
+    - idf.py -C ${PROJ_PATH} -B build-${SUFFIX} build
+  rules:
+    - when: always
+  cache:
+    paths:
+      - build-${SUFFIX}
   artifacts:
     paths:
-      - "${PIO_PROJ_FOLDER}/.pio/build/project.checksum"  # Without this, `pio run` deletes the firmware
-      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/*.bin"
-      - "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/config/sdkconfig.json"
-
+      - ${PROJ_PATH}/build-${SUFFIX}/*.bin
+      - ${PROJ_PATH}/build-${SUFFIX}/*.elf
+      - ${PROJ_PATH}/build-${SUFFIX}/*/*.bin
+      - ${PROJ_PATH}/build-${SUFFIX}/flash_args
+      - ${PROJ_PATH}/build-${SUFFIX}/flash_project_args
+      - ${PROJ_PATH}/build-${SUFFIX}/flasher_args.json
+      - ${PROJ_PATH}/build-${SUFFIX}/config/sdkconfig.json
+      - ${PROJ_PATH}/build-${SUFFIX}/**/*.gcno  # Coverage files
+  needs: []
+  timeout: 30 minutes
 
 build test firmware:
   <<: *build-template
-  script:
-    - pio test -e ${PIO_ENV} -vv --without-uploading --without-testing
-  rules:
-    - when: always
   variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-    PIO_ENV: cicdmachine
+    PROJ_PATH: tests
+    SUFFIX: tests
 
 
 build esp32 keymaker firmware:
   <<: *build-template
-  script:
-    - pio run -e ${PIO_ENV}
-    - pio run -e ${PIO_ENV} -t mergebin
-  rules:
-    - when: always
+  before_script:
+    - cp sdkconfig-keymaker.defaults sdkconfig.defaults
   variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-    PIO_ENV: esp32-keymaker
+    PROJ_PATH: .
+    SUFFIX: keymaker
 
 
 build esp32 gate firmware:
   <<: *build-template
-  script:
-    - pio run -e ${PIO_ENV}
-    - pio run -e ${PIO_ENV} -t mergebin
-  rules:
-    - when: always
+  before_script:
+    - cp sdkconfig-gate.defaults sdkconfig.defaults
   variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-    PIO_ENV: esp32-gate
+    PROJ_PATH: .
+    SUFFIX: gate
 
 
 test hardware:
   stage: test
-  image: ${CI_REGISTRY}/proj/testinator/esp32:latest
+  image: espressif/idf:v5.1.2
   tags:
     - pn532
   dependencies:
     -  build test firmware
   before_script:
-    - cd "${PIO_PROJ_FOLDER}"
+    - python /opt/esp/idf/tools/idf_tools.py install-python-env --features=+pytest
+    - cd ${PROJ_PATH}
   script:
-    # Make two attempts at uploading.
-    - pio test -e cicdmachine --without-building --without-testing -vv || pio test -e cicdmachine --without-building --without-testing -vv
-    - pio test -e cicdmachine --without-building --without-uploading -vv
+    # $ cd build-${SUFFIX} && esptool.py --chip esp32s3 write_flash @flash_args
+    # pytest uploads the image itself, but should it be needed the line above takes are of it
+    - pytest -s pytest_gcov.py --target esp32s3 --openocd-cli-args "-f board/esp32s3-builtin.cfg" --build-dir build-${SUFFIX}
+  artifacts:
+    paths:
+      - ${PROJ_PATH}/build-${SUFFIX}/**/*.gcda
+  variables:
+    PROJ_PATH: tests
+    SUFFIX: tests
   rules:
     # Run always, on merge request too
     - <<: *rules-merge-to-master
-    # But skip by default if the sources did not change
-    - <<: *rules-changes-sources
-    - <<: *rules-changes-cicd
 
 
-.release-tags-only: &release-tags-only
-  rules:
-    # Match all v<semantic_version> tags, and use everything after it as the release version
-    # Regex just copied from semver.org
-    - if: $CI_COMMIT_TAG =~ /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-  before_script:
-    - export VERSION="${CI_COMMIT_TAG##v}"
-
-.upload-template: &upload-template
-  <<: *release-tags-only
-  stage: upload
-  image: curlimages/curl:latest
-  script:
-    - |
-      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-        --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.bin" \
-        "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.ota"
-    - |
-      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-        --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/merged.bin" \
-        "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.bin"
-
-
-upload esp32 keymaker firmware:
-  <<: *upload-template
-  dependencies:
-    - build esp32 keymaker firmware
-  variables:
-    PIO_ENV: esp32-keymaker
-    FW_SLUG: ka-keymaker-esp32
-
-
-upload esp32 gate firmware:
-  <<: *upload-template
-  dependencies:
-    - build esp32 gate firmware
-  variables:
-    PIO_ENV: esp32-gate
-    FW_SLUG: ka-gate-esp32
-
-
-release:
-  <<: *release-tags-only
-  stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
-  dependencies:
-    # NOTE: explicitly list all environments here for which to create a release
-    - upload esp32 keymaker firmware
-    - upload esp32 gate firmware
-  script:
-    # NOTE: explicitly list all environments here for which to create a release,
-    # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
-    - |
-      release-cli create --name "Release $VERSION" --tag-name $CI_COMMIT_TAG \
-        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.ota\"}" \
-        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.ota\"}" \
-        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.bin\"}" \
-        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.bin\"}"
+#.release-tags-only: &release-tags-only
+#  rules:
+#    # Match all v<semantic_version> tags, and use everything after it as the release version
+#    # Regex just copied from semver.org
+#    - if: $CI_COMMIT_TAG =~ /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+#  before_script:
+#    - export VERSION="${CI_COMMIT_TAG##v}"
+#
+#.upload-template: &upload-template
+#  <<: *release-tags-only
+#  stage: upload
+#  image: curlimages/curl:latest
+#  script:
+#    - |
+#      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+#        --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/firmware.bin" \
+#        "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.ota"
+#    - |
+#      curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
+#        --upload-file "${PIO_PROJ_FOLDER}/.pio/build/${PIO_ENV}/merged.bin" \
+#        "${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/${FW_SLUG}-${VERSION}.bin"
+#
+#
+#upload esp32 keymaker firmware:
+#  <<: *upload-template
+#  dependencies:
+#    - build esp32 keymaker firmware
+#  variables:
+#    PIO_ENV: esp32-keymaker
+#    FW_SLUG: ka-keymaker-esp32
+#
+#
+#upload esp32 gate firmware:
+#  <<: *upload-template
+#  dependencies:
+#    - build esp32 gate firmware
+#  variables:
+#    PIO_ENV: esp32-gate
+#    FW_SLUG: ka-gate-esp32
+#
+#
+#release:
+#  <<: *release-tags-only
+#  stage: release
+#  image: registry.gitlab.com/gitlab-org/release-cli:latest
+#  dependencies:
+#    # NOTE: explicitly list all environments here for which to create a release
+#    - upload esp32 keymaker firmware
+#    - upload esp32 gate firmware
+#  script:
+#    # NOTE: explicitly list all environments here for which to create a release,
+#    # Using release-cli, so we can interpolate CI_COMMIT_TAG and truncate "release-" from the beginning
+#    - |
+#      release-cli create --name "Release $VERSION" --tag-name $CI_COMMIT_TAG \
+#        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.ota\"}" \
+#        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.ota\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.ota\"}" \
+#        --assets-link "{\"name\":\"ka-keymaker-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-keymaker-esp32-${VERSION}.bin\"}" \
+#        --assets-link "{\"name\":\"ka-gate-esp32-${VERSION}.bin\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PIO_PROJ_FOLDER}/${VERSION}/ka-gate-esp32-${VERSION}.bin\"}"
