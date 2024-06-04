@@ -225,7 +225,7 @@ namespace ka {
                         .sae_pwe_h2e = WPA3_SAE_PWE_UNSPECIFIED,
                         .sae_pk_mode = WPA3_SAE_PK_MODE_AUTOMATIC,
                         .failure_retry_cnt = 0,
-                        .he_dcm_set = 0  /* default */,
+                        .he_dcm_set = 0 /* default */,
                         .he_dcm_max_constellation_tx = 3 /* default */,
                         .he_dcm_max_constellation_rx = 3 /* default */,
                         .he_mcs9_enabled = 0 /* default */,
@@ -234,8 +234,7 @@ namespace ka {
                         .he_trig_mu_bmforming_partial_feedback_disabled = 0,
                         .he_trig_cqi_feedback_disabled = 0,
                         .he_reserved = 0,
-                        .sae_h2e_identifier = ""
-                },
+                        .sae_h2e_identifier = ""},
         };
 
         std::fill(std::begin(wifi_config.sta.ssid), std::end(wifi_config.sta.ssid), 0);

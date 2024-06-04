@@ -9,9 +9,9 @@
 #include <condition_variable>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <json/json.hpp>
 #include <ka/data.hpp>
 #include <ka/misc.hpp>
-#include <json/json.hpp>
 #include <thread>
 
 namespace ka {
