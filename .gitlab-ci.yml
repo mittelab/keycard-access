@@ -54,14 +54,14 @@ check format:
       - build-${SUFFIX}
   artifacts:
     paths:
-      - ${PROJ_PATH}/build-${SUFFIX}/*.bin
-      - ${PROJ_PATH}/build-${SUFFIX}/*.elf
-      - ${PROJ_PATH}/build-${SUFFIX}/*/*.bin
-      - ${PROJ_PATH}/build-${SUFFIX}/flash_args
-      - ${PROJ_PATH}/build-${SUFFIX}/flash_project_args
-      - ${PROJ_PATH}/build-${SUFFIX}/flasher_args.json
-      - ${PROJ_PATH}/build-${SUFFIX}/config/sdkconfig.json
-      - ${PROJ_PATH}/build-${SUFFIX}/**/*.gcno  # Coverage files
+      - build-${SUFFIX}/*.bin
+      - build-${SUFFIX}/*.elf
+      - build-${SUFFIX}/*/*.bin
+      - build-${SUFFIX}/flash_args
+      - build-${SUFFIX}/flash_project_args
+      - build-${SUFFIX}/flasher_args.json
+      - build-${SUFFIX}/config/sdkconfig.json
+      - build-${SUFFIX}/**/*.gcno  # Coverage files
   needs: []
   timeout: 30 minutes
 
@@ -99,14 +99,13 @@ test hardware:
     -  build test firmware
   before_script:
     - python /opt/esp/idf/tools/idf_tools.py install-python-env --features=+pytest
-    - cd ${PROJ_PATH}
   script:
     # $ cd build-${SUFFIX} && esptool.py --chip esp32s3 write_flash @flash_args
     # pytest uploads the image itself, but should it be needed the line above takes are of it
-    - pytest -s pytest_gcov.py --target esp32s3 --openocd-cli-args "-f board/esp32s3-builtin.cfg" --build-dir build-${SUFFIX}
+    - pytest -s ${PROJ_PATH}/pytest_gcov.py --target esp32s3 --openocd-cli-args "-f board/esp32s3-builtin.cfg" --build-dir build-${SUFFIX}
   artifacts:
     paths:
-      - ${PROJ_PATH}/build-${SUFFIX}/**/*.gcda
+      - build-${SUFFIX}/**/*.gcda
   variables:
     PROJ_PATH: tests
     SUFFIX: tests
