@@ -67,6 +67,8 @@ check format:
 
 build test firmware:
   <<: *build-template
+  before_script:
+    - cp tests/sdkconfig.defaults sdkconfig.defaults
   variables:
     PROJ_PATH: tests
     SUFFIX: tests
