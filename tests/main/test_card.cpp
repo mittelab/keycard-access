@@ -36,7 +36,7 @@ namespace ut {
             .stop_bits = UART_STOP_BITS_1,
             .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             .rx_flow_ctrl_thresh = 122,
-            .source_clk = UART_SCLK_REF_TICK};
+            .source_clk = UART_SCLK_DEFAULT};
 
     template <bool B, class Result>
     [[nodiscard]] bool ok_and(Result const &res) {
