@@ -50,6 +50,7 @@ check format:
   rules:
     - when: always
   cache:
+    key: build-${SUFFIX}-$CI_COMMIT_REF_SLUG
     paths:
       - build-${SUFFIX}
   artifacts:
