@@ -46,7 +46,7 @@ check format:
   stage: build
   image: espressif/idf:v5.1.2
   script:
-    - idf.py -C ${PROJ_PATH} -B build-${SUFFIX} build
+    - idf.py --ccache -C ${PROJ_PATH} -B build-${SUFFIX} build
   rules:
     - when: always
   cache:
