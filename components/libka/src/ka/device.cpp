@@ -140,7 +140,9 @@ namespace ka {
         ESP_LOGI(TAG, "Generating a new key pair; public key:");
         _kp.generate_random();
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, _kp.raw_pk().data(), _kp.raw_pk().size(), ESP_LOG_INFO);
-        _kp_storage.save(_kp, password);
+        if (_device_ns != nullptr) {
+            _kp_storage.save(_kp, password);
+        }
     }
 
     void device::restore_ota() {
