@@ -75,7 +75,11 @@ namespace ka {
                     .keep_alive_idle = 0,
                     .keep_alive_interval = 0,
                     .keep_alive_count = 0,
-                    .if_name = nullptr};
+                    .if_name = nullptr,
+#if CONFIG_ESP_TLS_USE_DS_PERIPHERAL
+                    .ds_data = nullptr
+#endif
+            };
         }
 
         explicit http_client_impl(std::string_view url, std::chrono::milliseconds timeout = 5s) : http_client_impl() {
