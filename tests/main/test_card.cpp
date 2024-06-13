@@ -24,9 +24,11 @@ namespace ut {
     namespace pinout {
         static constexpr gpio_num_t pn532_hsu_rx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_TX);
         static constexpr gpio_num_t pn532_hsu_tx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_RX);
+#if CONFIG_PN532_CHANNEL_SELECTION
         static constexpr gpio_num_t pn532_cicd_i0 = static_cast<gpio_num_t>(CONFIG_PN532_I0);
         static constexpr gpio_num_t pn532_cicd_i1 = static_cast<gpio_num_t>(CONFIG_PN532_I1);
         static constexpr gpio_num_t pn532_cicd_rstn = static_cast<gpio_num_t>(CONFIG_PN532_RSTN);
+#endif
     }// namespace pinout
 
     static constexpr uart_config_t uart_config = {
@@ -68,19 +70,24 @@ namespace ut {
             desfire::esp32::suppress_log suppress{PN532_TAG};
             ctrl->power_down({pn532::wakeup_source::i2c, pn532::wakeup_source::hsu, pn532::wakeup_source::spi});
         }
+#if CONFIG_PN532_CHANNEL_SELECTION
         gpio_set_level(pinout::pn532_cicd_rstn, 0);
         std::this_thread::sleep_for(500ms);
+#endif
     }
 
     void testinator_power_up() {
+#if CONFIG_PN532_CHANNEL_SELECTION
         gpio_set_level(pinout::pn532_cicd_rstn, 1);
         std::this_thread::sleep_for(500ms);
+#endif
     }
 
     void testinator_select_hsu() {
         /**
          * @note When running on the CI/CD machine, we need to make sure we are on HSU
          */
+#if CONFIG_PN532_CHANNEL_SELECTION
         gpio_set_direction(pinout::pn532_cicd_rstn, GPIO_MODE_OUTPUT);
         gpio_set_direction(pinout::pn532_cicd_i0, GPIO_MODE_OUTPUT);
         gpio_set_direction(pinout::pn532_cicd_i1, GPIO_MODE_OUTPUT);
@@ -90,6 +97,7 @@ namespace ut {
         gpio_set_level(pinout::pn532_cicd_i0, 0);
         gpio_set_level(pinout::pn532_cicd_i1, 0);
         testinator_power_up();
+#endif
     }
 
     [[nodiscard]] bool testinator_attempt_activate(pn532::esp32::hsu_channel &chn, pn532::controller &ctrl) {

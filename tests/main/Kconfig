@@ -1,6 +1,6 @@
 menu "Keycard Access tests"
     config PN532_HSU_TX
-        int "GPIO connected to PN532 UART TX/I2C SDA line"
+        int "GPIO connected to PN532 UART TX line"
         range 0 39 if IDF_TARGET_ESP32
         range 0 20 if IDF_TARGET_ESP32C2
         range 0 21 if IDF_TARGET_ESP32C3
@@ -13,7 +13,7 @@ menu "Keycard Access tests"
         default 21 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
 
     config PN532_HSU_RX
-        int "GPIO connected to PN532 UART RX/I2C SCL line"
+        int "GPIO connected to PN532 UART RX line"
         range 0 39 if IDF_TARGET_ESP32
         range 0 20 if IDF_TARGET_ESP32C2
         range 0 21 if IDF_TARGET_ESP32C3
@@ -25,42 +25,49 @@ menu "Keycard Access tests"
         default 33 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
         default 20 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
 
-    config PN532_I0
-        int "GPIO connected to PN532 I0 pin (channel selection)"
-        range 0 39 if IDF_TARGET_ESP32
-        range 0 20 if IDF_TARGET_ESP32C2
-        range 0 21 if IDF_TARGET_ESP32C3
-        range 0 30 if IDF_TARGET_ESP32C6
-        range 0 27 if IDF_TARGET_ESP32H2
-        range 0 56 if IDF_TARGET_ESP32P4
-        range 0 46 if IDF_TARGET_ESP32S2
-        range 0 48 if IDF_TARGET_ESP32S3
-        default 23 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-        default 4 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
 
-    config PN532_I1
-        int "GPIO connected to PN532 I1 pin (channel selection)"
-        range 0 39 if IDF_TARGET_ESP32
-        range 0 20 if IDF_TARGET_ESP32C2
-        range 0 21 if IDF_TARGET_ESP32C3
-        range 0 30 if IDF_TARGET_ESP32C6
-        range 0 27 if IDF_TARGET_ESP32H2
-        range 0 56 if IDF_TARGET_ESP32P4
-        range 0 46 if IDF_TARGET_ESP32S2
-        range 0 48 if IDF_TARGET_ESP32S3
-        default 22 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-        default 5 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
+    config PN532_CHANNEL_SELECTION
+        bool "Control PN532 channel I0, I1 and RST"
+        default y
 
-    config PN532_RSTN
-        int "GPIO connected to PN532 RST pin (reset)"
-        range 0 39 if IDF_TARGET_ESP32
-        range 0 20 if IDF_TARGET_ESP32C2
-        range 0 21 if IDF_TARGET_ESP32C3
-        range 0 30 if IDF_TARGET_ESP32C6
-        range 0 27 if IDF_TARGET_ESP32H2
-        range 0 56 if IDF_TARGET_ESP32P4
-        range 0 46 if IDF_TARGET_ESP32S2
-        range 0 48 if IDF_TARGET_ESP32S3
-        default 19 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
-        default 6 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
+    if PN532_CHANNEL_SELECTION
+        config PN532_I0
+            int "GPIO connected to PN532 I0 pin (channel selection)"
+            range 0 39 if IDF_TARGET_ESP32
+            range 0 20 if IDF_TARGET_ESP32C2
+            range 0 21 if IDF_TARGET_ESP32C3
+            range 0 30 if IDF_TARGET_ESP32C6
+            range 0 27 if IDF_TARGET_ESP32H2
+            range 0 56 if IDF_TARGET_ESP32P4
+            range 0 46 if IDF_TARGET_ESP32S2
+            range 0 48 if IDF_TARGET_ESP32S3
+            default 23 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
+            default 4 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
+
+        config PN532_I1
+            int "GPIO connected to PN532 I1 pin (channel selection)"
+            range 0 39 if IDF_TARGET_ESP32
+            range 0 20 if IDF_TARGET_ESP32C2
+            range 0 21 if IDF_TARGET_ESP32C3
+            range 0 30 if IDF_TARGET_ESP32C6
+            range 0 27 if IDF_TARGET_ESP32H2
+            range 0 56 if IDF_TARGET_ESP32P4
+            range 0 46 if IDF_TARGET_ESP32S2
+            range 0 48 if IDF_TARGET_ESP32S3
+            default 22 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
+            default 5 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
+
+        config PN532_RSTN
+            int "GPIO connected to PN532 RST pin (reset)"
+            range 0 39 if IDF_TARGET_ESP32
+            range 0 20 if IDF_TARGET_ESP32C2
+            range 0 21 if IDF_TARGET_ESP32C3
+            range 0 30 if IDF_TARGET_ESP32C6
+            range 0 27 if IDF_TARGET_ESP32H2
+            range 0 56 if IDF_TARGET_ESP32P4
+            range 0 46 if IDF_TARGET_ESP32S2
+            range 0 48 if IDF_TARGET_ESP32S3
+            default 19 if IDF_TARGET_ESP32 || IDF_TARGET_ESP32C6 || IDF_TARGET_ESP32P4 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3
+            default 6 if IDF_TARGET_ESP32C2 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32H2
+    endif
 endmenu
