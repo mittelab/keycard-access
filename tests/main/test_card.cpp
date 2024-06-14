@@ -22,8 +22,8 @@ using namespace mlab_literals;
 
 namespace ut {
     namespace pinout {
-        static constexpr gpio_num_t pn532_hsu_rx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_TX);
-        static constexpr gpio_num_t pn532_hsu_tx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_RX);
+        static constexpr gpio_num_t pn532_hsu_tx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_TX);
+        static constexpr gpio_num_t pn532_hsu_rx = static_cast<gpio_num_t>(CONFIG_PN532_HSU_RX);
 #if CONFIG_PN532_CHANNEL_SELECTION
         static constexpr gpio_num_t pn532_cicd_i0 = static_cast<gpio_num_t>(CONFIG_PN532_I0);
         static constexpr gpio_num_t pn532_cicd_i1 = static_cast<gpio_num_t>(CONFIG_PN532_I1);
@@ -160,7 +160,7 @@ namespace ut {
     }
 
     TEST_CASE("0020 DESFire") {
-        ESP_LOGI("UT", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_rx, pinout::pn532_hsu_tx);
+        ESP_LOGI("UT", "Attempting to set up a PN532 on pins %d, %d", pinout::pn532_hsu_tx, pinout::pn532_hsu_rx);
 
         testinator_select_hsu();
 
