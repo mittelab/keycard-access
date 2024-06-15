@@ -34,9 +34,8 @@ namespace ka {
     class member_token {
         /**
          * @note Mutable because interacting with the tag requires non-const access.
-         * @todo Consider using a shared pointer
          */
-        mutable desfire::tag *_tag;
+        std::shared_ptr<desfire::tag> _tag;
 
         /**
          * @param aid App Id
@@ -213,7 +212,7 @@ namespace ka {
         r<> list_gate_apps_internal(bool check_app, Fn &&app_action) const;
 
     public:
-        explicit member_token(desfire::tag &tag);
+        explicit member_token(std::shared_ptr<desfire::tag> tag);
 
         /**
          * @addtogroup Low level member token commands, checking

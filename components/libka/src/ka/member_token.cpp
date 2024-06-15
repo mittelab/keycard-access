@@ -91,10 +91,10 @@ namespace ka {
         }
     }
 
-    member_token::member_token(desfire::tag &tag) : _tag{&tag} {}
+    member_token::member_token(std::shared_ptr<desfire::tag> tag) : _tag{std::move(tag)} {}
 
     pn532::post_interaction member_token_responder::interact_with_tag(desfire::tag &tag) {
-        member_token token{tag};
+        member_token token{tag.shared_from_this()};
         return interact_with_token(token);
     }
 

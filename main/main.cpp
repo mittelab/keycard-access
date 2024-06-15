@@ -26,7 +26,7 @@ namespace ka::pinout {
             .stop_bits = UART_STOP_BITS_1,
             .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
             .rx_flow_ctrl_thresh = 122,
-            .source_clk = UART_SCLK_REF_TICK};
+            .source_clk = UART_SCLK_DEFAULT};
 
     static constexpr uart_port_t uart_port = UART_NUM_1;
 }// namespace ka::pinout
@@ -102,7 +102,7 @@ void keymaker_main(ka::nvs::partition &partition, std::shared_ptr<pn532::control
     // Make sure GPIO configuration is loaded now, not at the first usage
     static_cast<void>(ka::gpio_responder_config::get_global_config());
     ka::gpio_gate_responder responder{g};
-    pn532::scanner scanner{*ctrl};
+    pn532::scanner scanner{ctrl};
 
     // This is the latest point at which we have done something and can certify to a good
     // extent the firmware is working (no broken key pair, no broken storage, rf field working...)

@@ -171,7 +171,7 @@ namespace ut {
         REQUIRE(ctrl->diagnose_comm_line());
         REQUIRE(ctrl->diagnose_self_antenna(pn532::low_current_thr::mA_25, pn532::high_current_thr::mA_150));
 
-        std::unique_ptr<desfire::tag> tag = nullptr;
+        std::shared_ptr<desfire::tag> tag = nullptr;
         ka::token_id nfc_id{};
 
         /**
@@ -185,7 +185,7 @@ namespace ut {
                     ESP_LOGI("UT", "Logical index %u; NFC ID:", target.logical_index);
                     ESP_LOG_BUFFER_HEX_LEVEL("UT", target.nfcid.data(), target.nfcid.size(), ESP_LOG_INFO);
                     std::copy_n(std::begin(target.nfcid), nfc_id.size(), std::begin(nfc_id));
-                    tag = std::make_unique<desfire::tag>(*ctrl, target.logical_index);
+                    tag = std::make_shared<desfire::tag>(ctrl, target.logical_index);
                     // We only need one
                     break;
                 }
@@ -203,7 +203,7 @@ namespace ut {
         REQUIRE(card_recover_key_and_format(*tag, nfc_id, true));
 
         {
-            ka::member_token token{*tag};
+            ka::member_token token{tag};
 
             const auto r_id = token.get_id();
             CHECK(r_id);
@@ -253,7 +253,7 @@ namespace ut {
         }
 
         {
-            ka::member_token token{*tag};
+            ka::member_token token{tag};
 
             const auto r_id = token.get_id();
             constexpr desfire::app_id aid = {0xf5, 0x10, 0x01};
@@ -474,7 +474,7 @@ namespace ut {
         }
 
         {
-            ka::member_token token{*tag};
+            ka::member_token token{tag};
 
             const auto r_id = token.get_id();
             CHECK(r_id);
@@ -706,7 +706,7 @@ namespace ut {
         }
 
         {
-            ka::member_token token{*tag};
+            ka::member_token token{tag};
 
             const auto r_id = token.get_id();
             CHECK(r_id);

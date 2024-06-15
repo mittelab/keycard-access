@@ -96,7 +96,7 @@ namespace ka {
     class keymaker::card_channel {
         std::shared_ptr<pn532::controller> _ctrl = {};
         std::shared_ptr<pn532::desfire_pcd> _pcd = {};
-        std::unique_ptr<desfire::tag> _tag = {};
+        std::shared_ptr<desfire::tag> _tag = {};
         token_id _tkid = {};
 
     public:
@@ -134,7 +134,7 @@ namespace ka {
                 const auto nfcid_s = mlab::data_to_hex_string(r->front().nfcid);
                 ESP_LOGI(TAG, "Found a %s tag with NFC id %s", to_string(pn532::target_type::passive_106kbps_iso_iec_14443_4_typea), nfcid_s.c_str());
                 _tkid = id_from_nfc_id(r->front().nfcid);
-                _tag = std::make_unique<desfire::tag>(*_ctrl, r->front().logical_index);
+                _tag = std::make_shared<desfire::tag>(_ctrl, r->front().logical_index);
             }
             return mlab::result_success;
         }
@@ -932,7 +932,7 @@ namespace ka {
                 ESP_LOGI(TAG, "Using token-specific key to unlock the card.");
                 old_root_key = keys().derive_token_root_key(r->id());
             }
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             TRY(tkn.deploy(keys(), identity{r->id(), std::string{holder}, std::string{publisher}}));
             return mlab::result_success;
         }
@@ -947,7 +947,7 @@ namespace ka {
             return desfire::error::parameter_error;
         }
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             TRY(tkn.enroll_gate(keys(), _gates[std::uint32_t{gid}], identity{r->id(), std::string{holder}, std::string{publisher}}));
             return mlab::result_success;
         }
@@ -959,7 +959,7 @@ namespace ka {
             ESP_LOGW(TAG, "A different master key protects gates enrolled by other keymakers.");
         }
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             TRY(tkn.unenroll_gate(keys(), _gates[std::uint32_t{gid}]));
             return mlab::result_success;
         }
@@ -967,7 +967,7 @@ namespace ka {
 
     r<bool> keymaker::card_is_gate_enrolled(gate_id gid) const {
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             TRY_RESULT_AS(tkn.is_gate_enrolled(gid, true, true), r_enrolled) {
                 if (not *r_enrolled) {
                     return false;
@@ -985,21 +985,21 @@ namespace ka {
 
     r<> keymaker::card_is_deployed() const {
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             return tkn.is_deployed_correctly(keys());
         }
     }
 
     r<identity> keymaker::card_get_identity() const {
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             return tkn.read_encrypted_master_file(keys(), true, true);
         }
     }
 
     r<std::vector<keymaker_gate_info>> keymaker::card_list_enrolled_gates() const {
         TRY_RESULT(open_card_channel()) {
-            member_token tkn{r->tag()};
+            member_token tkn{r->tag().shared_from_this()};
             TRY_RESULT_AS(tkn.list_gates(true, true), r_gates) {
                 std::vector<keymaker_gate_info> gi{};
                 gi.reserve(r_gates->size());

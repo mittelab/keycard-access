@@ -11,12 +11,12 @@ dependencies:
       type: idf
     version: 5.1.2
   libspookyaction:
-    component_hash: 5e1344f2ba07e1a79ff361239e080edeb283ec8fe389b69cc22686d1de2dd780
+    component_hash: bb7e4c0b942f1aaef4955840fe9274c7b35b241a91f76a41b7e380d4c9b0ece8
     source:
       git: https://git.mittelab.org/proj/libspookyaction.git
       path: libspookyaction
       type: git
-    version: 9be390a7224487ba29cdc0e670f1d24b6919ed33
+    version: cda038547e562f170fb248ba3d8cbd8b92b77f53
   mittelab/mittelib:
     component_hash: fbfee184f6bd7ebb4514f457b0b6762d5782da3bb059e32f61d3f4297895d99d
     source:
