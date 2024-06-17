@@ -46,6 +46,7 @@ check format:
   stage: build
   image: espressif/idf:v5.1.2
   script:
+    - idf.py set-target ${TARGET}
     - idf.py --ccache -C ${PROJ_PATH} -B build-${SUFFIX} build
   rules:
     - when: always
@@ -73,24 +74,20 @@ build test firmware:
   variables:
     PROJ_PATH: tests
     SUFFIX: tests
+    TARGET: esp32s3
 
 
-build esp32 keymaker firmware:
+build firmware matrix:
   <<: *build-template
   before_script:
-    - cp sdkconfig-keymaker.defaults sdkconfig.defaults
+    - cp sdkconfig-${TYPE}.defaults sdkconfig.defaults
+  parallel:
+    matrix:
+      - TYPE: [keymaker, gate]
+        TARGET: [esp32, esp32s3]
   variables:
     PROJ_PATH: .
-    SUFFIX: keymaker
-
-
-build esp32 gate firmware:
-  <<: *build-template
-  before_script:
-    - cp sdkconfig-gate.defaults sdkconfig.defaults
-  variables:
-    PROJ_PATH: .
-    SUFFIX: gate
+    SUFFIX: ${TYPE}-${TARGET}
 
 
 test hardware:
