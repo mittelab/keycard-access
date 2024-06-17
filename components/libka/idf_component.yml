@@ -6,7 +6,7 @@ dependencies:
   libspookyaction:
     path: libspookyaction
     git: https://git.mittelab.org/proj/libspookyaction.git
-    version: restructure-proj
+    version: master
 description: Support library for Keycard Access
 maintainers:
   - Pietro Saccardi <lizardm4@gmail.com>

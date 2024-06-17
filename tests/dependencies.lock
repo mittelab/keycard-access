@@ -16,13 +16,13 @@ dependencies:
       git: https://git.mittelab.org/proj/libspookyaction.git
       path: libspookyaction
       type: git
-    version: cda038547e562f170fb248ba3d8cbd8b92b77f53
+    version: 9b1f76daa4a0aebf6e058318fe7699463c434c55
   mittelab/mittelib:
     component_hash: fbfee184f6bd7ebb4514f457b0b6762d5782da3bb059e32f61d3f4297895d99d
     source:
       service_url: https://api.components.espressif.com/
       type: service
     version: 1.0.5
-manifest_hash: f130b4a91b51e34a0a5e80cfd2fd7b0a250cebf03b2f167af4bfa966bd196436
+manifest_hash: 171bb93806a4098f6d7ddd1cc1afacf6011ce0b88472aba2fdcd8369ae399546
 target: esp32s3
 version: 1.0.0
