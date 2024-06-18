@@ -7,3 +7,4 @@ managed_components
 /sdkconfig.defaults
 sdkconfig
 sdkconfig.old
+dependencies.lock
