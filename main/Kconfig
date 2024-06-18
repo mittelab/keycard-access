@@ -1,0 +1,36 @@
+menu "Keycard Access"
+    config PN532_HSU_TX
+        int "GPIO connected to PN532 UART TX/I2C SDA line"
+        range 0 39 if IDF_TARGET_ESP32
+        range 0 20 if IDF_TARGET_ESP32C2
+        range 0 21 if IDF_TARGET_ESP32C3
+        range 0 30 if IDF_TARGET_ESP32C6
+        range 0 27 if IDF_TARGET_ESP32H2
+        range 0 56 if IDF_TARGET_ESP32P4
+        range 0 46 if IDF_TARGET_ESP32S2
+        range 0 48 if IDF_TARGET_ESP32S3
+        default 18
+
+    config PN532_HSU_RX
+        int "GPIO connected to PN532 UART RX/I2C SCL line"
+        range 0 39 if IDF_TARGET_ESP32
+        range 0 20 if IDF_TARGET_ESP32C2
+        range 0 21 if IDF_TARGET_ESP32C3
+        range 0 30 if IDF_TARGET_ESP32C6
+        range 0 27 if IDF_TARGET_ESP32H2
+        range 0 56 if IDF_TARGET_ESP32P4
+        range 0 46 if IDF_TARGET_ESP32S2
+        range 0 48 if IDF_TARGET_ESP32S3
+        default 19
+
+    choice KEYCARD_ACCESS_FIRMWARE
+        prompt "Firmware to build"
+        help
+            You can build either a gate or a keymaker
+        default KEYCARD_ACCESS_FIRMWARE_KEYMAKER
+        config KEYCARD_ACCESS_FIRMWARE_KEYMAKER
+            bool "Keymaker"
+        config KEYCARD_ACCESS_FIRMWARE_GATE
+            bool "Gate"
+    endchoice
+endmenu

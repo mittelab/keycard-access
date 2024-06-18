@@ -1,0 +1,22 @@
+menu "Keycard Access extras"
+
+    choice PN532_BLINK_GPIO
+        prompt "PN532 GPIO high on activity"
+        help
+            You can set one of the PN532 GPIOs to high during keycard access activity.
+        default PN532_BLINK_GPIO_NONE
+        config PN532_BLINK_GPIO_NONE
+            bool "None"
+        config PN532_BLINK_GPIO_P3
+            bool "Use PN532 bus 3"
+        config PN532_BLINK_GPIO_P7
+            bool "Use PN532 bus 7"
+    endchoice
+
+    if PN532_BLINK_GPIO_P3 || PN532_BLINK_GPIO_P7
+        config PN532_BLINK_GPIO_NUM
+            int "GPIO number on bus"
+            range 0 9
+            default 0
+    endif
+endmenu
