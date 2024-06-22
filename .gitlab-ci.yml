@@ -105,10 +105,12 @@ test hardware:
   script:
     # $ cd build-${SUFFIX} && esptool.py --chip esp32s3 write_flash @flash_args
     # pytest uploads the image itself, but should it be needed the line above takes are of it
-    - pytest -s ${PROJ_PATH}/pytest_gcov.py --target esp32s3 --openocd-cli-args "-f board/esp32s3-builtin.cfg" --build-dir build-${SUFFIX}
+    - export PYTEST_SUITE_NAME=keycard-access-tests
+    - pytest -s ${PROJ_PATH}/pytest_main.py --target esp32s3 --build-dir build-${SUFFIX} --junitxml report.xml
   artifacts:
-    paths:
-      - build-${SUFFIX}/**/*.gcda
+    when: always
+    reports:
+      junit: report.xml
   variables:
     PROJ_PATH: tests
     SUFFIX: tests
