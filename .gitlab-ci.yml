@@ -12,6 +12,7 @@ stages:
 
 variables:
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic"
+  GIT_SUBMODULE_STRATEGY: recursive
 
 .rules-merge-to-master: &rules-merge-to-master
   if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
