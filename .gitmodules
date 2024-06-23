@@ -1,0 +1,3 @@
+[submodule "thirdparty/spooky_reporter"]
+	path = thirdparty/spooky_reporter
+	url = https://git.mittelab.org/proj/spooky-reporter.git
