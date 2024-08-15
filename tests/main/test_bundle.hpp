@@ -26,9 +26,9 @@ namespace ut {
 
         ka::gate g13{g13_kp, 13_g, km_kp.drop_secret_key()};
 
-        ka::gate_sec_info g0_sec_info{0_g, g0_kp.drop_secret_key(), ka::gate_base_key::from_gate(km_kp, g0_kp)};
+        ka::gate_sec_info g0_sec_info{0_g, g0_kp.drop_secret_key(), ka::gate_base_key::from_gate(g0_kp, km_kp)};
 
-        ka::gate_sec_info g13_sec_info{13_g, g13_kp.drop_secret_key(), ka::gate_base_key::from_gate(km_kp, g13_kp)};
+        ka::gate_sec_info g13_sec_info{13_g, g13_kp.drop_secret_key(), ka::gate_base_key::from_gate(g13_kp, km_kp)};
 
         ka::gate g0_uncfg{g0_kp};
 
