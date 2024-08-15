@@ -28,6 +28,10 @@ namespace ka {
 
     static_assert(gate_base_key::array_size == crypto_kdf_blake2b_KEYBYTES);
 
+    gate_base_key::gate_base_key(randomize_t) : tagged_array{} {
+        randombytes_buf(data(), array_size);
+    }
+
     gate_token_key gate_base_key::derive_token_key(const token_id &token_id, std::uint8_t key_no) const {
         desfire::key_body<key_type::size> derived_key_data{};
         if (0 != crypto_kdf_blake2b_derive_from_key(
@@ -161,13 +165,6 @@ namespace ka {
                 ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "keymaker public key", to_string(r.error()));
             }
 
-            if (const auto r = _gate_ns->get_parse_blob<gate_base_key>("base-key"); r) {
-                _base_key = *r;
-            } else if (r.error() == nvs::error::not_found) {
-                return false;// Set up as new gate
-            } else {
-                ESP_LOGE(TAG, "Unable to retrieve %s, %s error", "app base key", to_string(r.error()));
-            }
             return true;
         };
 
@@ -175,38 +172,34 @@ namespace ka {
             // Reset
             _id = std::numeric_limits<gate_id>::max();
             _km_pk = {};
-            _base_key = {};
+            _base_key = gate_base_key{randomize};
+        } else {
+            _base_key = gate_base_key::from_gate(keys(), keymaker_pk());
         }
     }
 
     gate::gate(nvs::partition &partition)
         : device{partition, "" /* explicitly use no password, we rely on flash encryption here */},
-          _gate_ns{partition.open_namespc("ka-gate")},
-          _id{std::numeric_limits<gate_id>::max()},
-          _km_pk{},
-          _base_key{} {
+          _gate_ns{partition.open_namespc("ka-gate")} {
         restore_attributes();
     }
 
     gate::gate(key_pair kp)
-        : device{kp},
-          _gate_ns{nullptr},
-          _id{std::numeric_limits<gate_id>::max()},
-          _km_pk{},
-          _base_key{} {}
+        : device{kp} {
+    }
 
-    gate::gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey, gate_base_key base_key)
+    gate::gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey)
         : device{kp},
-          _gate_ns{nullptr},
           _id{gid},
           _km_pk{keymaker_pubkey},
-          _base_key{base_key} {}
+          _base_key{gate_base_key::from_gate(keys(), keymaker_pk())} {
+    }
 
     void gate::reset() {
         ESP_LOGW(TAG, "Gate is being reset.");
         _id = std::numeric_limits<gate_id>::max();
         _km_pk = {};
-        _base_key = {};
+        _base_key = gate_base_key{randomize};
         if (_gate_ns) {
             void([&]() -> nvs::r<> {
                 TRY(_gate_ns->erase("id"));
@@ -223,19 +216,18 @@ namespace ka {
         return _base_key.derive_token_key(token_id, key_no);
     }
 
-    std::optional<gate_base_key> gate::configure(gate_id gid, pub_key keymaker_pubkey) {
+    bool gate::configure(gate_id gid, pub_key keymaker_pubkey) {
         if (is_configured()) {
             ESP_LOGE(TAG, "Attempt to reconfigure gate %lu as gate %lu with the following public key:",
                      std::uint32_t(id()), std::uint32_t(gid));
             ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_ERROR);
-            return std::nullopt;
+            return false;
         }
         ESP_LOGI(TAG, "Configuring as gate %lu, with the following keymaker pubkey:", std::uint32_t(gid));
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, keymaker_pubkey.raw_pk().data(), keymaker_pubkey.raw_pk().size(), ESP_LOG_INFO);
         _id = gid;
         _km_pk = keymaker_pubkey;
-        // Generate a new app base key
-        randombytes_buf(_base_key.data(), _base_key.size());
+        _base_key = gate_base_key::from_gate(keys(), keymaker_pk());
 
         if (_gate_ns) {
 #ifndef CONFIG_NVS_ENCRYPTION
@@ -244,7 +236,6 @@ namespace ka {
             auto update_nvs = [&]() -> nvs::r<> {
                 TRY(_gate_ns->set_u32("id", std::uint32_t(_id)));
                 TRY(_gate_ns->set_encode_blob("keymaker-pubkey", _km_pk));
-                TRY(_gate_ns->set_encode_blob("base-key", _base_key));
                 TRY(_gate_ns->commit());
                 return mlab::result_success;
             };
@@ -254,7 +245,7 @@ namespace ka {
             }
         }
 
-        return _base_key;
+        return true;
     }
 
     void gate::serve_remote_gate(pn532::controller &ctrl, std::uint8_t logical_idx) {

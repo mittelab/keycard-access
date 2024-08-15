@@ -59,9 +59,6 @@ namespace ka {
         raw_sec_key _sk{};
     };
 
-    struct randomize_t {};
-    static constexpr randomize_t randomize{};
-
     struct pwhash_t {};
     static constexpr pwhash_t pwhash{};
 

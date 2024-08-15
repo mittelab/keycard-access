@@ -5,9 +5,12 @@
 #include <esp_chip_info.h>
 #include <esp_ota_ops.h>
 #include <ka/data.hpp>
-#include <ka/misc.hpp>
+#include <ka/key_pair.hpp>
 #include <mlab/strutils.hpp>
+#include <sodium/crypto_generichash.h>
 #include <sodium/crypto_hash_sha512.h>
+#include <sodium/crypto_kx.h>
+#include <sodium/crypto_scalarmult.h>
 
 namespace ka {
     [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d) {
@@ -166,6 +169,32 @@ namespace ka {
         } else {
             return mlab::concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
         }
+    }
+
+
+    gate_base_key gate_base_key::from_keymaker(key_pair const &km_kp, pub_key const &gate_pk) {
+        return gate_base_key{km_kp, gate_pk, true};
+    }
+    gate_base_key gate_base_key::from_gate(key_pair const &gate_kp, pub_key const &km_pk) {
+        return gate_base_key{gate_kp, km_pk, false};
+    }
+
+    gate_base_key::gate_base_key(key_pair const &own_kp, pub_key const &peer_key, bool peer_is_gate)
+        : tagged_array{} {
+        std::array<std::uint8_t, crypto_kx_SESSIONKEYBYTES> unused{};
+        if (peer_is_gate) {
+            if (0 == crypto_kx_server_session_keys(data(), unused.data(), own_kp.raw_pk().data(),
+                                                   own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
+                return;
+            }
+        } else {
+            if (0 == crypto_kx_client_session_keys(data(), unused.data(), own_kp.raw_pk().data(),
+                                                   own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
+                return;
+            }
+        }
+        ESP_LOGE("KA", "Unable to derive gate base key.");
+        std::abort();
     }
 
 }// namespace ka
