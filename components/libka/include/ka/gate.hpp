@@ -81,7 +81,7 @@ namespace ka {
 
         gate_id _id = std::numeric_limits<gate_id>::max();
         pub_key _km_pk = {};
-        gate_base_key _base_key = gate_base_key{randomize};  // safety initialization
+        gate_base_key _base_key = gate_base_key{randomize};
 
         void restore_attributes();
 
