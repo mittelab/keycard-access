@@ -9,6 +9,7 @@
 #include <mlab/strutils.hpp>
 #include <sodium/crypto_generichash.h>
 #include <sodium/crypto_hash_sha512.h>
+#include <sodium/crypto_kx.h>
 #include <sodium/crypto_scalarmult.h>
 
 namespace ka {
@@ -180,25 +181,19 @@ namespace ka {
 
     gate_base_key::gate_base_key(key_pair const &own_kp, pub_key const &peer_key, bool peer_is_gate)
         : tagged_array{} {
-        // Collect together shared_secret | gate_pk | keymaker_pk
-        std::array<std::uint8_t, crypto_scalarmult_BYTES + 2 * raw_pub_key::array_size> shared_secret{};
-        if (0 == crypto_scalarmult(shared_secret.data(), own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
-            // Select which key goes first
-            const auto gate_pk_it = std::begin(shared_secret) + crypto_scalarmult_BYTES;
-            const auto keymaker_pk_it = gate_pk_it + raw_pub_key::array_size;
-            if (peer_is_gate) {
-                std::copy_n(std::begin(peer_key.raw_pk()), raw_pub_key::array_size, gate_pk_it);
-                std::copy_n(std::begin(own_kp.raw_pk()), raw_pub_key::array_size, keymaker_pk_it);
-            } else {
-                std::copy_n(std::begin(own_kp.raw_pk()), raw_pub_key::array_size, gate_pk_it);
-                std::copy_n(std::begin(peer_key.raw_pk()), raw_pub_key::array_size, keymaker_pk_it);
+        std::array<std::uint8_t, crypto_kx_SESSIONKEYBYTES> unused{};
+        if (peer_is_gate) {
+            if (0 == crypto_kx_server_session_keys(data(), unused.data(), own_kp.raw_pk().data(),
+                                                   own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
+                return;
             }
-            // Hash the secret into our backing memory
-            if (0 == crypto_generichash(data(), array_size, shared_secret.data(), shared_secret.size(), nullptr, 0)) {
+        } else {
+            if (0 == crypto_kx_client_session_keys(data(), unused.data(), own_kp.raw_pk().data(),
+                                                   own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
                 return;
             }
         }
-        ESP_LOGE("KA", "Unable to derive root key.");
+        ESP_LOGE("KA", "Unable to derive gate base key.");
         std::abort();
     }
 
