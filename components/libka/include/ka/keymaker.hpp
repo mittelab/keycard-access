@@ -32,11 +32,11 @@ namespace ka {
         std::string notes = {};
     };
 
-    struct keymaker_gate_data : gate_sec_info, keymaker_gate_extra_data {
+    struct keymaker_gate_data : gate_pub_info, keymaker_gate_extra_data {
         keymaker_gate_data() = default;
 
-        keymaker_gate_data(gate_id id_, pub_key pk_, gate_base_key bk_, gate_status s_, std::string notes_)
-            : gate_sec_info{id_, pk_, bk_}, keymaker_gate_extra_data{s_, std::move(notes_)} {}
+        keymaker_gate_data(gate_id id_, pub_key pk_, gate_status s_, std::string notes_)
+            : gate_pub_info{id_, pk_}, keymaker_gate_extra_data{s_, std::move(notes_)} {}
 
         [[nodiscard]] nvs::r<> save_to(nvs::namespc &ns) const;
         [[nodiscard]] static std::string get_nvs_key(gate_id gid);
@@ -99,6 +99,8 @@ namespace ka {
         [[nodiscard]] rpc_p2p_r<gate_id, bool> identify_gate(p2p::remote_gate &rg) const;
 
         nvs::r<> save_gate(keymaker_gate_data const &gd);
+
+        [[nodiscard]] gate_sec_info gate_data_to_sec_info(keymaker_gate_data const &data) const;
 
         void restore_gates();
         void turn_rf_off();

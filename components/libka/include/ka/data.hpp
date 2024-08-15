@@ -85,8 +85,22 @@ namespace ka {
 
     struct gate_base_key_tag {};
 
+    class pub_key;
+    class key_pair;
+
+    struct randomize_t {};
+    static constexpr randomize_t randomize{};
+
     struct gate_base_key : public mlab::tagged_array<gate_base_key_tag, 32> {
+        explicit gate_base_key(randomize_t);
+
         [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
+
+        [[nodiscard]] static gate_base_key from_keymaker(key_pair const &km_kp, pub_key const &gate_pk);
+        [[nodiscard]] static gate_base_key from_gate(key_pair const &gate_kp, pub_key const &km_pk);
+
+    private:
+        gate_base_key(key_pair const &own_kp, pub_key const &peer_key, bool peer_is_gate);
     };
 
     [[nodiscard]] constexpr std::uint64_t pack_token_id(token_id id);

@@ -134,12 +134,12 @@ upload firmware matrix:
   script:
     - |
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
-        --upload-file "build-${SUFFIX}/ka-${TYPE}.bin" \
-        "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-${SUFFIX}-${CI_COMMIT_TAG}.ota"
+        --upload-file "build-${SUFFIX}/keycard-access-${TYPE}.bin" \
+        "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-${SUFFIX}-${CI_COMMIT_TAG}.ota"
     - |
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" \
         --upload-file "build-${SUFFIX}/firmware.bin" \
-        "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-${SUFFIX}-${CI_COMMIT_TAG}.bin"
+        "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-${SUFFIX}-${CI_COMMIT_TAG}.bin"
   parallel:
     matrix:
       - TYPE: [keymaker, gate]
@@ -164,19 +164,19 @@ release:
     description: "Automated release. $CI_COMMIT_TAG_MESSAGE"
     assets:
       links:
-        - name: ka-keymaker-esp32-${CI_COMMIT_TAG}.ota
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-keymaker-esp32-${CI_COMMIT_TAG}.ota"
-        - name: ka-keymaker-esp32-${CI_COMMIT_TAG}.bin
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-keymaker-esp32-${CI_COMMIT_TAG}.bin"
-        - name: ka-keymaker-esp32s3-${CI_COMMIT_TAG}.ota
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-keymaker-esp32s3-${CI_COMMIT_TAG}.ota"
-        - name: ka-keymaker-esp32s3-${CI_COMMIT_TAG}.bin
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-keymaker-esp32s3-${CI_COMMIT_TAG}.bin"
-        - name: ka-gate-esp32-${CI_COMMIT_TAG}.ota
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-gate-esp32-${CI_COMMIT_TAG}.ota"
-        - name: ka-gate-esp32-${CI_COMMIT_TAG}.bin
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-gate-esp32-${CI_COMMIT_TAG}.bin"
-        - name: ka-gate-esp32s3-${CI_COMMIT_TAG}.ota
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-gate-esp32s3-${CI_COMMIT_TAG}.ota"
-        - name: ka-gate-esp32s3-${CI_COMMIT_TAG}.bin
-          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/ka-gate-esp32s3-${CI_COMMIT_TAG}.bin"
+        - name: keycard-access-keymaker-esp32-${CI_COMMIT_TAG}.ota
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-keymaker-esp32-${CI_COMMIT_TAG}.ota"
+        - name: keycard-access-keymaker-esp32-${CI_COMMIT_TAG}.bin
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-keymaker-esp32-${CI_COMMIT_TAG}.bin"
+        - name: keycard-access-keymaker-esp32s3-${CI_COMMIT_TAG}.ota
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-keymaker-esp32s3-${CI_COMMIT_TAG}.ota"
+        - name: keycard-access-keymaker-esp32s3-${CI_COMMIT_TAG}.bin
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-keymaker-esp32s3-${CI_COMMIT_TAG}.bin"
+        - name: keycard-access-gate-esp32-${CI_COMMIT_TAG}.ota
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-gate-esp32-${CI_COMMIT_TAG}.ota"
+        - name: keycard-access-gate-esp32-${CI_COMMIT_TAG}.bin
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-gate-esp32-${CI_COMMIT_TAG}.bin"
+        - name: keycard-access-gate-esp32s3-${CI_COMMIT_TAG}.ota
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-gate-esp32s3-${CI_COMMIT_TAG}.ota"
+        - name: keycard-access-gate-esp32s3-${CI_COMMIT_TAG}.bin
+          url: "${PACKAGE_REGISTRY_URL}/keycard-access/${CI_COMMIT_TAG}/keycard-access-gate-esp32s3-${CI_COMMIT_TAG}.bin"

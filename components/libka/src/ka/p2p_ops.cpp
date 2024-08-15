@@ -184,15 +184,14 @@ namespace ka::p2p {
         return release_info{};
     }
 
-    r<gate_base_key> local_gate::register_gate(gate_id requested_id) {
+    r<> local_gate::register_gate(gate_id requested_id) {
         if (_g.is_configured()) {
             return error::invalid_operation;
         }
         if (const auto bk = _g.configure(requested_id, peer_pub_key()); not bk) {
             return error::invalid_operation;
-        } else {
-            return *bk;
         }
+        return mlab::result_success;
     }
 
     r<> local_gate::set_update_settings(std::string_view update_channel, bool automatic_updates) {
@@ -321,7 +320,7 @@ namespace ka::p2p {
         return _b.remote_invoke(&local_gate::check_for_updates, "check_for_updates");
     }
 
-    rpc::r<r<gate_base_key>> remote_gate::register_gate(gate_id requested_id) {
+    rpc::r<r<>> remote_gate::register_gate(gate_id requested_id) {
         return _b.remote_invoke(&local_gate::register_gate, "register_gate", requested_id);
     }
 

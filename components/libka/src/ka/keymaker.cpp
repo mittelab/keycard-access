@@ -294,7 +294,6 @@ namespace ka {
                     return cast_error(r->error());
                 }
                 gd.pk = r_chn->peer_pub_key();
-                gd.bk = **r;
                 gd.status = gate_status::configured;
                 if (not save_gate(_gates.back())) {
                     return rpc_p2p_error::p2p_invalid_operation;
@@ -306,7 +305,7 @@ namespace ka {
 
     rpc_p2p_r<gate_id> keymaker::gate_add(std::string notes, bool configure) {
         const gate_id id{_gates.size()};
-        _gates.push_back(keymaker_gate_data{id, {}, {}, gate_status::initialized, std::move(notes)});
+        _gates.push_back(keymaker_gate_data{id, {}, gate_status::initialized, std::move(notes)});
         if (configure) {
             ESP_LOGI(TAG, "Bring closer an unconfigured gate...");
             if (const auto r = configure_gate_internal(_gates.back()); r) {
@@ -423,6 +422,10 @@ namespace ka {
             TRY(gd.save_to(*_gate_ns));
         }
         return mlab::result_success;
+    }
+
+    gate_sec_info keymaker::gate_data_to_sec_info(keymaker_gate_data const &data) const {
+        return {data.id, data.pk, gate_base_key::from_keymaker(keys(), data.pk)};
     }
 
     rpc_p2p_r<gate_id, bool> keymaker::identify_gate(p2p::remote_gate &rg) const {
@@ -948,7 +951,8 @@ namespace ka {
         }
         TRY_RESULT(open_card_channel()) {
             member_token tkn{r->tag().shared_from_this()};
-            TRY(tkn.enroll_gate(keys(), _gates[std::uint32_t{gid}], identity{r->id(), std::string{holder}, std::string{publisher}}));
+            auto sec_info = gate_data_to_sec_info(_gates[std::uint32_t{gid}]);
+            TRY(tkn.enroll_gate(keys(), sec_info, identity{r->id(), std::string{holder}, std::string{publisher}}));
             return mlab::result_success;
         }
     }
@@ -960,7 +964,8 @@ namespace ka {
         }
         TRY_RESULT(open_card_channel()) {
             member_token tkn{r->tag().shared_from_this()};
-            TRY(tkn.unenroll_gate(keys(), _gates[std::uint32_t{gid}]));
+            auto sec_info = gate_data_to_sec_info(_gates[std::uint32_t{gid}]);
+            TRY(tkn.unenroll_gate(keys(), sec_info));
             return mlab::result_success;
         }
     }
@@ -977,7 +982,8 @@ namespace ka {
                 ESP_LOGW(TAG, "Gate not found, so we cannot confirm the authenticity.");
                 return true;
             }
-            TRY_RESULT_AS(tkn.is_gate_enrolled_correctly(keys(), _gates[std::uint32_t{gid}]), r_enrolled) {
+            auto sec_info = gate_data_to_sec_info(_gates[std::uint32_t{gid}]);
+            TRY_RESULT_AS(tkn.is_gate_enrolled_correctly(keys(), sec_info), r_enrolled) {
                 return r_enrolled->first;
             }
         }
@@ -1118,7 +1124,7 @@ namespace ka {
                 break;
             } else {
                 ESP_LOGE(TAG, "Unable to load gate %lu, error %s", std::uint32_t{gid}, to_string(r.error()));
-                retval.push_back(keymaker_gate_data{gid, {}, {}, gate_status::unknown, {}});
+                retval.push_back(keymaker_gate_data{gid, {}, gate_status::unknown, {}});
             }
         }
         return retval;
@@ -1128,7 +1134,7 @@ namespace ka {
 namespace mlab {
     bin_data &operator<<(bin_data &bd, ka::keymaker_gate_data const &gd) {
         const auto sz = 4 + 1 + ka::raw_pub_key::array_size + ka::gate_base_key::array_size + 4 + gd.notes.size();
-        return bd << prealloc(sz) << gd.id << gd.status << gd.pk << gd.bk << length_encoded << gd.notes;
+        return bd << prealloc(sz) << gd.id << gd.status << gd.pk << length_encoded << gd.notes;
     }
 
     bin_stream &operator>>(bin_stream &s, ka::keymaker_gate_data &gd) {
@@ -1137,7 +1143,7 @@ namespace mlab {
             return s;
         }
         ka::keymaker_gate_data new_gd{};
-        s >> new_gd.id >> new_gd.status >> new_gd.pk >> new_gd.bk >> length_encoded >> new_gd.notes;
+        s >> new_gd.id >> new_gd.status >> new_gd.pk >> length_encoded >> new_gd.notes;
         if (s.bad()) {
             return s;
         }
