@@ -5,9 +5,11 @@
 #include <esp_chip_info.h>
 #include <esp_ota_ops.h>
 #include <ka/data.hpp>
-#include <ka/misc.hpp>
+#include <ka/key_pair.hpp>
 #include <mlab/strutils.hpp>
+#include <sodium/crypto_generichash.h>
 #include <sodium/crypto_hash_sha512.h>
+#include <sodium/crypto_scalarmult.h>
 
 namespace ka {
     [[nodiscard]] token_id id_from_nfc_id(std::vector<std::uint8_t> const &d) {
@@ -166,6 +168,38 @@ namespace ka {
         } else {
             return mlab::concatenate({app_name, "-", platform_code, "-", semantic_version.to_string(), "-", commit_info});
         }
+    }
+
+
+    gate_base_key gate_base_key::from_keymaker(key_pair const &km_kp, pub_key const &gate_pk) {
+        return gate_base_key{km_kp, gate_pk, true};
+    }
+    gate_base_key gate_base_key::from_gate(key_pair const &gate_kp, pub_key const &km_pk) {
+        return gate_base_key{gate_kp, km_pk, false};
+    }
+
+    gate_base_key::gate_base_key(key_pair const &own_kp, pub_key const &peer_key, bool peer_is_gate)
+        : tagged_array{} {
+        // Collect together shared_secret | gate_pk | keymaker_pk
+        std::array<std::uint8_t, crypto_scalarmult_BYTES + 2 * raw_pub_key::array_size> shared_secret{};
+        if (0 == crypto_scalarmult(shared_secret.data(), own_kp.raw_sk().data(), peer_key.raw_pk().data())) {
+            // Select which key goes first
+            const auto gate_pk_it = std::begin(shared_secret) + crypto_scalarmult_BYTES;
+            const auto keymaker_pk_it = gate_pk_it + raw_pub_key::array_size;
+            if (peer_is_gate) {
+                std::copy_n(std::begin(peer_key.raw_pk()), raw_pub_key::array_size, gate_pk_it);
+                std::copy_n(std::begin(own_kp.raw_pk()), raw_pub_key::array_size, keymaker_pk_it);
+            } else {
+                std::copy_n(std::begin(own_kp.raw_pk()), raw_pub_key::array_size, gate_pk_it);
+                std::copy_n(std::begin(peer_key.raw_pk()), raw_pub_key::array_size, keymaker_pk_it);
+            }
+            // Hash the secret into our backing memory
+            if (0 == crypto_generichash(data(), array_size, shared_secret.data(), shared_secret.size(), nullptr, 0)) {
+                return;
+            }
+        }
+        ESP_LOGE("KA", "Unable to derive root key.");
+        std::abort();
     }
 
 }// namespace ka

@@ -83,7 +83,7 @@ namespace ka::p2p {
         [[nodiscard]] gate_registration_info get_registration_info() const;
 
         [[nodiscard]] r<release_info> check_for_updates();
-        [[nodiscard]] r<gate_base_key> register_gate(gate_id requested_id);
+        [[nodiscard]] r<> register_gate(gate_id requested_id);
 
         r<> set_update_settings(std::string_view update_channel, bool automatic_updates);
         r<> update_manually(std::string_view fw_url);
@@ -123,7 +123,7 @@ namespace ka::p2p {
         [[nodiscard]] rpc::r<gate_registration_info> get_registration_info() const;
 
         [[nodiscard]] rpc::r<r<release_info>> check_for_updates();
-        [[nodiscard]] rpc::r<r<gate_base_key>> register_gate(gate_id requested_id);
+        [[nodiscard]] rpc::r<r<>> register_gate(gate_id requested_id);
 
         rpc::r<r<>> set_update_settings(std::string_view update_channel, bool automatic_updates);
         rpc::r<r<>> update_manually(std::string_view fw_url);

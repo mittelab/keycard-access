@@ -29,11 +29,8 @@ namespace ka {
     };
 
     struct gate_sec_info : gate_pub_info {
-        gate_base_key bk = {};
-
-        gate_sec_info() = default;
+        gate_base_key bk;
         gate_sec_info(gate_id id_, pub_key pk_, gate_base_key bk_) : gate_pub_info{id_, pk_}, bk{bk_} {}
-        gate_sec_info(gate_pub_info pi_, gate_base_key bk_) : gate_pub_info{pi_}, bk{bk_} {}
     };
 
     /**
@@ -84,7 +81,7 @@ namespace ka {
 
         gate_id _id = std::numeric_limits<gate_id>::max();
         pub_key _km_pk = {};
-        gate_base_key _base_key = {};
+        gate_base_key _base_key = gate_base_key{randomize};  // safety initialization
 
         void restore_attributes();
 
@@ -107,7 +104,7 @@ namespace ka {
          * and updates are not available on the device.
          * @see device::device(key_pair)
          */
-        explicit gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey, gate_base_key base_key);
+        explicit gate(key_pair kp, gate_id gid, pub_key keymaker_pubkey);
 
         /**
          * Resets this gate to the original status, keeping wifi and update settings.
@@ -120,7 +117,7 @@ namespace ka {
         /**
          * @return `nullopt` if this gate was already configured.
          */
-        [[nodiscard]] std::optional<gate_base_key> configure(gate_id gid, pub_key keymaker_pubkey);
+        [[nodiscard]] bool configure(gate_id gid, pub_key keymaker_pubkey);
 
         [[nodiscard]] gate_token_key derive_token_key(token_id const &token_id, std::uint8_t key_no) const;
 
