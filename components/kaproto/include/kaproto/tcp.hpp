@@ -25,7 +25,7 @@ namespace ka::proto {
 
     [[nodiscard]] const char *to_string(error e);
 
-    [[nodiscard]] constexpr error error_from_errno();
+    [[nodiscard]] error error_from_errno();
 
     template<class... Args>
     using r = mlab::result<error, Args...>;
@@ -60,37 +60,6 @@ namespace ka::proto {
 }
 
 namespace ka::proto {
-    constexpr error error_from_errno() {
-        switch (errno) {
-            case EAGAIN:
-                return error::timeout;
-
-            case EBADF: [[fallthrough]];
-            case ENOTCONN: [[fallthrough]];
-            case ENOTSOCK: [[fallthrough]];
-            case EHOSTUNREACH: [[fallthrough]];
-            case ECONNREFUSED: [[fallthrough]];
-            case EHOSTDOWN: [[fallthrough]];
-            case ENETDOWN: [[fallthrough]];
-            case ECONNRESET:
-                return error::not_connected;
-
-            case EACCES: [[fallthrough]];
-            case EFAULT: [[fallthrough]];
-            case EMSGSIZE: [[fallthrough]];
-            case EADDRNOTAVAIL:
-                return error::invalid_argument;
-
-            case ENOBUFS: [[fallthrough]];
-            case EISCONN: [[fallthrough]];
-            case EPIPE: [[fallthrough]];
-            case EMFILE: [[fallthrough]];
-            case EINTR: [[fallthrough]];
-            default:
-                return error::system_error;
-        }
-    }
-
     tcp_socket::operator bool() const {
         return _socket >= 0 and _connected;
     }

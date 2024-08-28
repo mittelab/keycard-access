@@ -27,6 +27,37 @@ namespace ka::proto {
         }
     }
 
+    error error_from_errno() {
+        switch (errno) {
+            case EAGAIN:
+                return error::timeout;
+
+            case EBADF: [[fallthrough]];
+            case ENOTCONN: [[fallthrough]];
+            case ENOTSOCK: [[fallthrough]];
+            case EHOSTUNREACH: [[fallthrough]];
+            case ECONNREFUSED: [[fallthrough]];
+            case EHOSTDOWN: [[fallthrough]];
+            case ENETDOWN: [[fallthrough]];
+            case ECONNRESET:
+                return error::not_connected;
+
+            case EACCES: [[fallthrough]];
+            case EFAULT: [[fallthrough]];
+            case EMSGSIZE: [[fallthrough]];
+            case EADDRNOTAVAIL:
+                return error::invalid_argument;
+
+            case ENOBUFS: [[fallthrough]];
+            case EISCONN: [[fallthrough]];
+            case EPIPE: [[fallthrough]];
+            case EMFILE: [[fallthrough]];
+            case EINTR: [[fallthrough]];
+            default:
+                return error::system_error;
+        }
+    }
+
     tcp_socket::tcp_socket(std::string const &addr, std::uint16_t port) {
         _socket = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (_socket < 0) {
