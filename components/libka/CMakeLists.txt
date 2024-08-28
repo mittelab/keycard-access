@@ -16,4 +16,5 @@ idf_component_register(
         console
         esp_https_ota
         app_update
+        kaproto
 )
