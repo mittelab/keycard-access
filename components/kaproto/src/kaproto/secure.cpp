@@ -10,6 +10,7 @@
 #include <sodium/crypto_secretstream_xchacha20poly1305.h>
 #include <sodium/randombytes.h>
 #include <mlab/result_macro.hpp>
+#include <esp_random.h>
 
 namespace ka::proto {
     uuid::uuid(randomize_t) : _data{} {
@@ -17,6 +18,14 @@ namespace ka::proto {
         _data[6] = 0x40 | (_data[6] & 0xf);
         _data[8] = 0x80 | (_data[8] & 0b00111111);
     }
+
+    [[nodiscard]] std::size_t uuid::hash() const {
+        // Interprete this as string
+        const std::string_view sv{reinterpret_cast<const char *>(_data.data()), _data.size()};
+        const std::hash<std::string_view> h{};
+        return h(sv);
+    }
+
 
     std::string uuid::to_string() const {
         std::string buffer;
@@ -29,6 +38,24 @@ namespace ka::proto {
         buffer.resize(36);
         return buffer;
     }
+
+    r<uuid> secure_channel::store_send_request(uuid req_id, json req_body, ms timeout) {
+        const mlab::reduce_timeout rt{timeout};
+        req_body["id"] = req_id.to_string();
+        auto request_cbor = json::to_cbor(req_body);
+        const mlab::bin_data request_bd{std::move(request_cbor)};
+        {
+            const std::unique_lock lock{_pending_requests, rt.remaining()};
+            _pending_requests[req_id] = std::promise<json>{};
+        }
+        if (const auto r = send_packet(request_bd, rt.remaining()); not r) {
+            const std::unique_lock lock{_pending_requests};
+            _pending_requests.erase(req_id);
+            return r.error();
+        }
+        return req_id;
+    }
+
 
     r<> secure_channel::send_raw_packet(mlab::bin_data const &packet, ms timeout) {
         if (packet.size() > max_packet_size) {

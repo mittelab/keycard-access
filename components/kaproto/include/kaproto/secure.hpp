@@ -10,6 +10,7 @@
 #include <sodium/crypto_secretstream_xchacha20poly1305.h>
 #include <json/json.hpp>
 #include <ka/data.hpp>
+#include <future>
 
 namespace ka::proto {
     enum struct channel_status {
@@ -28,6 +29,8 @@ namespace ka::proto {
         uuid(): _data{} {
         }
 
+        [[nodiscard]] std::size_t hash() const;
+
         explicit uuid(randomize_t);
 
         [[nodiscard]] std::string to_string() const;
@@ -40,6 +43,8 @@ namespace ka::proto {
         std::timed_mutex _send_mutex = {};
         crypto_secretstream_xchacha20poly1305_state _recv_state = {};
         crypto_secretstream_xchacha20poly1305_state _send_state = {};
+        std::timed_mutex _pending_requests_mutex = {};
+        std::unordered_map<uuid, std::promise<json> > _pending_requests;
 
         [[nodiscard]] r<> send_raw_packet(mlab::bin_data const &packet, ms timeout);
 
@@ -53,6 +58,9 @@ namespace ka::proto {
 
         [[nodiscard]] r<mlab::bin_data> recv_packet(ms timeout);
 
+        [[nodiscard]] r<uuid> store_send_request(uuid req_id, json req_body, ms timeout);
+
+
     public:
         /**
          * Maximum packet size that can be sent or received. This limit is imposed to prevent filling the ESP RAM.
@@ -60,6 +68,9 @@ namespace ka::proto {
         static constexpr std::size_t max_packet_size = 16 * 1024 * 1024;
 
         secure_channel() = default;
+
+        template<class... Args>
+        [[nodiscard]] r<uuid> request(std::string const &method_name, Args &&... args, ms timeout);
 
         [[nodiscard]] inline channel_status status() const;
 
@@ -70,6 +81,13 @@ namespace ka::proto {
         void disconnect();
     };
 }
+
+template<>
+struct std::hash<ka::proto::uuid> {
+    std::size_t operator()(ka::proto::uuid const &u) const {
+        return u.hash();
+    }
+};
 
 namespace ka::proto {
     inline channel_status secure_channel::status() const {
