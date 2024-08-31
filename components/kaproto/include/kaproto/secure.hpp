@@ -8,6 +8,8 @@
 #include <kaproto/tcp.hpp>
 #include <mutex>
 #include <sodium/crypto_secretstream_xchacha20poly1305.h>
+#include <json/json.hpp>
+#include <ka/data.hpp>
 
 namespace ka::proto {
     enum struct channel_status {
@@ -15,6 +17,20 @@ namespace ka::proto {
         handshaking,
         ready,
         disconnecting
+    };
+
+    using json = nlohmann::json;
+
+    class uuid {
+        std::array<std::uint8_t, 16> _data;
+
+    public:
+        uuid(): _data{} {
+        }
+
+        explicit uuid(randomize_t);
+
+        [[nodiscard]] std::string to_string() const;
     };
 
     class secure_channel {

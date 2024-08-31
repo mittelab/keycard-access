@@ -12,6 +12,24 @@
 #include <mlab/result_macro.hpp>
 
 namespace ka::proto {
+    uuid::uuid(randomize_t) : _data{} {
+        esp_fill_random(_data.data(), _data.size());
+        _data[6] = 0x40 | (_data[6] & 0xf);
+        _data[8] = 0x80 | (_data[8] & 0b00111111);
+    }
+
+    std::string uuid::to_string() const {
+        std::string buffer;
+        buffer.resize(37);
+        std::snprintf(buffer.data(), buffer.size(),
+                      "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+                      _data[0], _data[1], _data[2], _data[3], _data[4], _data[5], _data[6], _data[7],
+                      _data[8], _data[9], _data[10], _data[11], _data[12], _data[13], _data[14], _data[15]
+        );
+        buffer.resize(36);
+        return buffer;
+    }
+
     r<> secure_channel::send_raw_packet(mlab::bin_data const &packet, ms timeout) {
         if (packet.size() > max_packet_size) {
             return error::invalid_argument;
