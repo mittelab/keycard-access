@@ -23,6 +23,93 @@ namespace ka::proto {
 
     using json = nlohmann::json;
 
+    using json_value_type = json::value_t;
+
+    struct any_json_value_t {} static constexpr any_json_value = {};
+
+    template <class T>
+    concept json_equatable = requires (T a) { std::declval<json const &>() == a; };
+
+    template <class Fn>
+    concept json_validation_predicate = std::is_invocable_r_v<bool, Fn, json const &>;
+
+    /**
+     * @brief Shorthand function to validate an entry in a Json object.
+     *
+     * This function will check
+     *  - if an entry with key @p key exists in @p j.
+     *  - If it does not exist, it will return true of @p omittable, and false otherwise.
+     *  - If it does exist, it checks if its type is one of `Types`. If `Types` is not empty and this is not the case,
+     *    it returns false. If `Types` is empty, any type is accepted.
+     *  - At this point, we know @p j contains a key @p key, possibly with type being one of `Types`.
+     *  - If @p value_or_predicate is @ref any_json_value, then the function returns true.
+     *  - If @p value_or_predicate is callable with signature `bool predicate(json const &)`, then @p value_or_predicate
+     *    is called with the value of the entry @p key, and its return value returned.
+     *  - Otherwise, @p value_or predicate is compared to the value entry.
+     *
+     * @code
+     * json j; // j = ...
+     * // j must have a key "child" of any value:
+     * json_validate(j, "child");
+     * // j must have a key "child" which must be a string
+     * json_validate<json_value_type::string>(j, "child");
+     * // j must have a key "child" which must be a string or an unsigned integer
+     * json_validate<json_value_type::string, json_value_type::number_unsigned>(j, "child");
+     * // If j has a "count" key, it must be an unsigned integer
+     * json_validate<json_value_type::number_unsigned>(j, "count", true);
+     * // j must have a key "count" which must be an unsigned integer of value exactly 0
+     * json_validate<json_value_type::number_unsigned>(j, "count", false, 0);
+     * // If j has a "count" key, it must be an unsigned integer of value exactly 0
+     * json_validate<json_value_type::number_unsigned>(j, "count", true, 0);
+     * // If j has a "parent" key, it must be either a string or null
+     * json_validate<json_value_type::string, json_value_type::null>(j, "parent", true);
+     * // j must have a "parent" key, which is either a string or null
+     * json_validate<json_value_type::string, json_value_type::null>(j, "parent", false);
+     * @endcode
+     *
+     * @code
+     * bool child_validator(json const &); // ...
+     *
+     * // j must have a "child" key of type object, which must pass `child_validator`,
+     * //  i.e. child_validator(j["child"]) must be true.
+     * json_validate<json_value_type::object>(j, "child", false, child_validator);
+     * @endcode
+     *
+     * @code
+     * // j must have either a "result" field of any type, or an "error" field of type object, which itself must be
+     * // validated by error_validator.
+     * bool error_validator(json const &); // ...
+     *
+     * bool validator(json const &j) {
+     *     if (json_validate(j, "result", false)) {
+     *         return not json_validate(j, "error", false);
+     *     }
+     *     return json_validate<json_value_type::object>(k, "error", false, error_validator);
+     * }
+     * @endcode
+     *
+     * @tparam Types List of accepted @ref json_value_type for this entry. If empty, any type is accepted.
+     * @tparam P Either a value that can be compared to @ref json type, or a predicate matching the call signature
+     *  `bool predicate(json const &)` which validates the entry.
+     * @param j Json object for which to validate the entry
+     * @param key Key name to test
+     * @param omittable Whether the absence of @p key is considered a failure or not. True to allow omission,
+     *  false to consider it a failure.
+     * @param value_or_predicate If this is an instance of @ref any_json_value_t (i.e. @ref any_json_value), any value
+     *  of a valid type is considered valid. If this is a validation predicate, (i.e. has the signature
+     *  `bool predicate(json const &)`), then this predicate will be called with the value of the entry, and determine
+     *  its validity. Otherwise, it is compared to the value of the entry to determine validity.
+     * @return A boolean expressing whether the value entry passes the checks.
+     */
+    template <json_value_type... Types, class P = any_json_value_t>
+        requires json_equatable<P> or json_validation_predicate<P> or std::is_same_v<P, any_json_value_t>
+    [[nodiscard]] bool json_validate(json const &j, std::string_view key,
+                                     bool omittable = false, P value_or_predicate = {});
+
+    [[nodiscard]] bool jsonrpc_validate_request(json const &j);
+    [[nodiscard]] bool jsonrpc_validate_response(json const &j);
+    [[nodiscard]] bool jsonrpc_validate_error(json const &j);
+
     class uuid {
         std::array<std::uint8_t, 16> _data;
 
@@ -135,6 +222,29 @@ namespace ka::proto {
         }
         return response<R>(*r_req, rt.remaining());
     }
+
+    template <json_value_type... Types, class P>
+        requires json_equatable<P> or json_validation_predicate<P> or std::is_same_v<P, any_json_value_t>
+    [[nodiscard]] bool json_validate(json const &j, std::string_view key, bool omittable, P value_or_predicate) {
+        if (const auto it = j.find(key); it != std::end(j)) {
+            if constexpr (sizeof Types == 0) {
+                return true;
+            } else if (((it->type() == Types) or ...)) {
+                if constexpr (std::is_same_v<P, any_json_value_t>) {
+                    return true;
+                } else if constexpr (std::is_invocable_r_v<bool, P, json const &>) {
+                    return value_or_predicate(*it);
+                } else {
+                    return *it == value_or_predicate;
+                }
+            }
+        } else if (omittable) {
+            return true;
+        }
+        return false;
+    }
+
+
 }
 
 #endif //SECURE_HPP

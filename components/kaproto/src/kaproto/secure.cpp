@@ -10,8 +10,43 @@
 #include <sodium/randombytes.h>
 #include <mlab/result_macro.hpp>
 #include <esp_random.h>
+#include <chrono>
 
 namespace ka::proto {
+    using namespace std::chrono_literals;
+
+    namespace {
+        using jt = json::value_t;
+    }
+
+    bool validate_jsonrpc_request(json const &j) {
+        return json_validate<jt::string>(j, "jsonrpc", false, "2.0")
+               and json_validate<jt::string>(j, "method", false)
+               and json_validate<jt::string, jt::number_integer, jt::number_unsigned, jt::null>(j, "id", true)
+               and json_validate<jt::array, jt::object, jt::null>(j, "params", true);
+    }
+
+    bool validate_jsonrpc_error(json const &j) {
+        return json_validate<jt::number_integer, jt::number_unsigned>(j, "code")
+               and json_validate<jt::string>(j, "message")
+               and json_validate(j, "data", true);
+    }
+
+
+    bool validate_jsonrpc_response(json const &j) {
+        if (json_validate<jt::string>(j, "jsonrpc", false, "2.0")
+            and json_validate<jt::number_integer, jt::number_unsigned, jt::string>(j, "id", false)) {
+            // Either result or error
+            if (json_validate(j, "result", false)) {
+                return not json_validate(j, "error", false);
+            }
+            // If error, must be validatable
+            return json_validate(j, "error", false, validate_jsonrpc_error);
+        }
+        return false;
+    }
+
+
     uuid::uuid(randomize_t) : _data{} {
         esp_fill_random(_data.data(), _data.size());
         _data[6] = 0x40 | (_data[6] & 0xf);
@@ -42,6 +77,11 @@ namespace ka::proto {
         const mlab::reduce_timeout rt{timeout};
         const auto req_id = uuid{randomize};
         req_body["id"] = req_id.to_string();
+
+        if (not jsonrpc_validate_request(req_body)) {
+            return error::invalid_argument;
+        }
+
         const auto request_cbor = json::to_cbor(req_body);
         const auto request_cbor_range = mlab::make_range(
             request_cbor.data(), request_cbor.data() + request_cbor.size());
