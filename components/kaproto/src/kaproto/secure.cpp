@@ -57,7 +57,7 @@ namespace ka::proto {
     }
 
 
-    r<> secure_channel::send_raw_packet(mlab::bin_data const &packet, ms timeout) {
+    r<> secure_channel::send_raw_packet(mlab::range<std::uint8_t const *> packet, ms timeout) {
         if (packet.size() > max_packet_size) {
             return error::invalid_argument;
         }
@@ -73,7 +73,7 @@ namespace ka::proto {
         if (const auto res = _socket.send(packet_length.data_view(), rt.remaining()); not res) {
             return res;
         }
-        return _socket.send(packet.data_view(), rt.remaining());
+        return _socket.send(packet, rt.remaining());
     }
 
     r<mlab::bin_data> secure_channel::recv_raw_packet(ms timeout) {
@@ -180,7 +180,7 @@ namespace ka::proto {
         handshake_state state{};
 
         // Send our own ephemeral PK
-        TRY(send_raw_packet(state.own_ephemeral_pk, rt.remaining()));
+        TRY(send_raw_packet(state.own_ephemeral_pk.data_view(), rt.remaining()));
         // Retrieve the peer ephemeral PK
         TRY(state.recv_peer_ephemeral_pk(recv_raw_packet(rt.remaining())));
 
@@ -188,7 +188,8 @@ namespace ka::proto {
         TRY(state.derive_session_keys(false));
 
         // Prepare and send the initialization packet
-        TRY(send_raw_packet(state.prepare_push_packet(_send_state), rt.remaining()));
+        const auto push_packet = state.prepare_push_packet(_send_state);
+        TRY(send_raw_packet(push_packet.data_view(), rt.remaining()));
         // Receive the peer's packet to initialize our own recv state
         TRY(state.recv_peer_pull_packet(_recv_state, recv_raw_packet(rt.remaining())));
 
@@ -204,7 +205,7 @@ namespace ka::proto {
         // Retrieve the peer ephemeral PK
         TRY(state.recv_peer_ephemeral_pk(recv_raw_packet(rt.remaining())));
         // Send our own ephemeral PK
-        TRY(send_raw_packet(state.own_ephemeral_pk, rt.remaining()));
+        TRY(send_raw_packet(state.own_ephemeral_pk.data_view(), rt.remaining()));
 
         // Derive the session keys
         TRY(state.derive_session_keys(true));
@@ -212,13 +213,14 @@ namespace ka::proto {
         // Receive the peer's packet to initialize our own recv state
         TRY(state.recv_peer_pull_packet(_recv_state, recv_raw_packet(rt.remaining())));
         // Prepare and send the initialization packet
-        TRY(send_raw_packet(state.prepare_push_packet(_send_state), rt.remaining()));
+        const auto push_packet = state.prepare_push_packet(_send_state);
+        TRY(send_raw_packet(push_packet.data_view(), rt.remaining()));
 
         return mlab::result_success;
     }
 
 
-    r<> secure_channel::send_packet(mlab::bin_data const &packet, ms timeout) {
+    r<> secure_channel::send_packet(mlab::range<std::uint8_t const *> packet, ms timeout) {
         mlab::bin_data ciphertext;
         ciphertext.resize(packet.size() + crypto_secretstream_xchacha20poly1305_ABYTES);
         // Unfortuntately it doesn't seem to allow in-place encryption
@@ -227,7 +229,7 @@ namespace ka::proto {
                 packet.data(), packet.size(), nullptr, 0, 0)) {
             return error::crypto_error;
         }
-        return send_raw_packet(ciphertext, timeout);
+        return send_raw_packet(ciphertext.data_view(), timeout);
     }
 
     r<mlab::bin_data> secure_channel::recv_packet(ms timeout) {

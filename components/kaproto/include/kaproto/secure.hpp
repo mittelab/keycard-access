@@ -46,7 +46,7 @@ namespace ka::proto {
         std::timed_mutex _pending_requests_mutex = {};
         std::unordered_map<uuid, std::promise<json> > _pending_requests;
 
-        [[nodiscard]] r<> send_raw_packet(mlab::bin_data const &packet, ms timeout);
+        [[nodiscard]] r<> send_raw_packet(mlab::range<std::uint8_t const *> packet, ms timeout);
 
         [[nodiscard]] r<mlab::bin_data> recv_raw_packet(ms timeout);
 
@@ -54,7 +54,7 @@ namespace ka::proto {
 
         [[nodiscard]] r<> handshake_as_server(ms timeout);
 
-        [[nodiscard]] r<> send_packet(mlab::bin_data const &packet, ms timeout);
+        [[nodiscard]] r<> send_packet(mlab::range<std::uint8_t const *> packet, ms timeout);
 
         [[nodiscard]] r<mlab::bin_data> recv_packet(ms timeout);
 
