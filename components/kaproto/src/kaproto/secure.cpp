@@ -39,38 +39,41 @@ namespace ka::proto {
         return buffer;
     }
 
-    r<uuid> secure_channel::store_send_request(uuid req_id, json req_body, ms timeout) {
+    r<std::future<json>> secure_channel::store_send_request(json req_body, ms timeout) {
         const mlab::reduce_timeout rt{timeout};
+        const auto req_id = uuid{randomize};
         req_body["id"] = req_id.to_string();
-        auto request_cbor = json::to_cbor(req_body);
-        const mlab::bin_data request_bd{std::move(request_cbor)};
+        const auto request_cbor = json::to_cbor(req_body);
+        const auto request_cbor_range = mlab::make_range(
+            request_cbor.data(), request_cbor.data() + request_cbor.size());
+        auto shared_fut = std::future<json>{};
         {
             const std::unique_lock lock{_pending_requests, rt.remaining()};
-            _pending_requests[req_id] = std::promise<json>{};
+            if (not lock) {
+                return error::timeout;
+            }
+            auto promise = std::promise<json>{};
+            shared_fut = promise.get_future();
+            _pending_requests[req_id] = std::move(promise);
         }
-        if (const auto r = send_packet(request_bd, rt.remaining()); not r) {
-            const std::unique_lock lock{_pending_requests};
+        if (const auto r = send_packet(request_cbor_range, rt.remaining()); not r) {
+            const std::unique_lock lock{_pending_requests /* do not allow timeout here */};
             _pending_requests.erase(req_id);
             return r.error();
         }
-        return req_id;
+        return shared_fut;
     }
 
 
-    r<json> secure_channel::recv_await_response(uuid req_id, ms timeout, bool keep_after_timeout) {
-        std::promise<json> promise;
-        const mlab::reduce_timeout rt{timeout};
-        {
-            const std::unique_lock lock{_pending_requests, rt.remaining()};
-            if (auto it = _pending_requests.find(req_id); it == std::end(_pending_requests)) {
-                return error::invalid_argument;
-            } else {
-                promise = it->second;
-            }
+    r<json> secure_channel::await_response(std::future<json> &fut, ms timeout) {
+        switch (fut.wait_for(timeout)) {
+            case std::future_status::deferred:
+                return error::system_error;
+            case std::future_status::timeout:
+                return error::timeout;
+            case std::future_status::ready:
+                return fut.get();
         }
-        // Wait for the given amount of time
-
-
     }
 
 

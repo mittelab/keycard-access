@@ -44,7 +44,7 @@ namespace ka::proto {
         crypto_secretstream_xchacha20poly1305_state _recv_state = {};
         crypto_secretstream_xchacha20poly1305_state _send_state = {};
         std::timed_mutex _pending_requests_mutex = {};
-        std::unordered_map<uuid, std::promise<json> > _pending_requests;
+        std::unordered_map<uuid, std::promise<json>> _pending_requests;
 
         [[nodiscard]] r<> send_raw_packet(mlab::range<std::uint8_t const *> packet, ms timeout);
 
@@ -58,8 +58,9 @@ namespace ka::proto {
 
         [[nodiscard]] r<mlab::bin_data> recv_packet(ms timeout);
 
-        [[nodiscard]] r<uuid> store_send_request(uuid req_id, json req_body, ms timeout);
+        [[nodiscard]] r<std::future<json>> store_send_request(json req_body, ms timeout);
 
+        [[nodiscard]] r<json> await_response(std::future<json> &fut, ms timeout);
 
     public:
         /**
@@ -70,7 +71,10 @@ namespace ka::proto {
         secure_channel() = default;
 
         template<class... Args>
-        [[nodiscard]] r<uuid> request(std::string const &method_name, Args &&... args, ms timeout);
+        [[nodiscard]] r<std::future<json>> request(std::string const &method_name, Args &&... args, ms timeout);
+
+        template<class R = json>
+        [[nodiscard]] r<R> response(std::future<json> &fut, ms timeout);
 
         [[nodiscard]] inline channel_status status() const;
 
@@ -96,6 +100,26 @@ namespace ka::proto {
 
     inline secure_channel::operator bool() const {
         return status() == channel_status::ready;
+    }
+
+    template<class... Args>
+    r<std::future<json>> secure_channel::request(std::string const &method_name, Args &&... args, ms timeout) {
+        const auto request_id = uuid{randomize};
+        const json request{
+            {"jsonrpc", "2.0"},
+            {"method", method_name},
+            {"params", std::forward<Args>(args)...}
+        };
+        return store_send_request(request, timeout);
+    }
+
+    template<class R>
+    r<R> secure_channel::response(std::future<json> &fut, ms timeout) {
+        if (const auto res = await_response(fut, timeout); res) {
+            return res->get<R>();
+        } else {
+            return res.error();
+        }
     }
 }
 
