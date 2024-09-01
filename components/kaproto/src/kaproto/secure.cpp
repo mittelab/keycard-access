@@ -57,6 +57,23 @@ namespace ka::proto {
     }
 
 
+    r<json> secure_channel::recv_await_response(uuid req_id, ms timeout, bool keep_after_timeout) {
+        std::promise<json> promise;
+        const mlab::reduce_timeout rt{timeout};
+        {
+            const std::unique_lock lock{_pending_requests, rt.remaining()};
+            if (auto it = _pending_requests.find(req_id); it == std::end(_pending_requests)) {
+                return error::invalid_argument;
+            } else {
+                promise = it->second;
+            }
+        }
+        // Wait for the given amount of time
+
+
+    }
+
+
     r<> secure_channel::send_raw_packet(mlab::range<std::uint8_t const *> packet, ms timeout) {
         if (packet.size() > max_packet_size) {
             return error::invalid_argument;
@@ -66,11 +83,9 @@ namespace ka::proto {
         if (not lock) {
             return error::timeout;
         }
-        /**
-         * @todo Use std::array and lsb32 in a smarter way
-         **/
-        const mlab::bin_data packet_length = mlab::bin_data::chain(mlab::prealloc(4), mlab::lsb32, packet.size());
-        if (const auto res = _socket.send(packet_length.data_view(), rt.remaining()); not res) {
+        const auto packet_len = mlab::encode<mlab::byte_order::lsb_first, 32>(packet.size());
+        const auto packet_len_rg = mlab::make_range(packet_len);
+        if (const auto res = _socket.send(packet_len_rg, rt.remaining()); not res) {
             return res;
         }
         return _socket.send(packet, rt.remaining());
