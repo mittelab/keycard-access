@@ -72,19 +72,19 @@ namespace ka::proto {
         secure_channel() = default;
 
         template<class... Args>
-        [[nodiscard]] r<std::future<json> > request(std::string const &method_name, Args &&... args, ms timeout);
+        [[nodiscard]] r<std::future<json> > request(std::string_view method_name, Args &&... args, ms timeout);
 
         template<class R = json>
         [[nodiscard]] r<R> response(std::future<json> &fut, ms timeout);
 
         template<class R, class... Args>
-        [[nodiscard]] r<R> invoke(std::string const &method_name, Args &&... args, ms timeout);
+        [[nodiscard]] r<R> invoke(std::string_view method_name, Args &&... args, ms timeout);
 
         [[nodiscard]] inline channel_status status() const;
 
         inline explicit operator bool() const;
 
-        [[nodiscard]] r<> connect(std::string const &host, std::uint16_t port);
+        [[nodiscard]] r<> connect(std::string_view host, std::uint16_t port);
 
         void disconnect();
     };
@@ -107,7 +107,7 @@ namespace ka::proto {
     }
 
     template<class... Args>
-    r<std::future<json> > secure_channel::request(std::string const &method_name, Args &&... args, ms timeout) {
+    r<std::future<json> > secure_channel::request(std::string_view method_name, Args &&... args, ms timeout) {
         const auto request_id = uuid{randomize};
         const json request{
             {"jsonrpc", "2.0"},
@@ -127,7 +127,7 @@ namespace ka::proto {
     }
 
     template<class R, class... Args>
-    r<R> secure_channel::invoke(std::string const &method_name, Args &&... args, ms timeout) {
+    r<R> secure_channel::invoke(std::string_view method_name, Args &&... args, ms timeout) {
         mlab::reduce_timeout rt{timeout};
         auto r_req = request(method_name, std::forward<Args>(args)..., rt.remaining());
         if (not r_req) {
