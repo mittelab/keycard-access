@@ -3,7 +3,6 @@
 //
 
 #include <kaproto/secure.hpp>
-#include <mlab/time.hpp>
 #include <mutex>
 #include <rom/uart.h>
 #include <sodium/crypto_kx.h>

@@ -11,6 +11,7 @@
 #include <json/json.hpp>
 #include <ka/data.hpp>
 #include <future>
+#include <mlab/time.hpp>
 
 namespace ka::proto {
     enum struct channel_status {
@@ -44,7 +45,7 @@ namespace ka::proto {
         crypto_secretstream_xchacha20poly1305_state _recv_state = {};
         crypto_secretstream_xchacha20poly1305_state _send_state = {};
         std::timed_mutex _pending_requests_mutex = {};
-        std::unordered_map<uuid, std::promise<json>> _pending_requests;
+        std::unordered_map<uuid, std::promise<json> > _pending_requests;
 
         [[nodiscard]] r<> send_raw_packet(mlab::range<std::uint8_t const *> packet, ms timeout);
 
@@ -58,7 +59,7 @@ namespace ka::proto {
 
         [[nodiscard]] r<mlab::bin_data> recv_packet(ms timeout);
 
-        [[nodiscard]] r<std::future<json>> store_send_request(json req_body, ms timeout);
+        [[nodiscard]] r<std::future<json> > store_send_request(json req_body, ms timeout);
 
         [[nodiscard]] r<json> await_response(std::future<json> &fut, ms timeout);
 
@@ -71,10 +72,13 @@ namespace ka::proto {
         secure_channel() = default;
 
         template<class... Args>
-        [[nodiscard]] r<std::future<json>> request(std::string const &method_name, Args &&... args, ms timeout);
+        [[nodiscard]] r<std::future<json> > request(std::string const &method_name, Args &&... args, ms timeout);
 
         template<class R = json>
         [[nodiscard]] r<R> response(std::future<json> &fut, ms timeout);
+
+        template<class R, class... Args>
+        [[nodiscard]] r<R> invoke(std::string const &method_name, Args &&... args, ms timeout);
 
         [[nodiscard]] inline channel_status status() const;
 
@@ -103,7 +107,7 @@ namespace ka::proto {
     }
 
     template<class... Args>
-    r<std::future<json>> secure_channel::request(std::string const &method_name, Args &&... args, ms timeout) {
+    r<std::future<json> > secure_channel::request(std::string const &method_name, Args &&... args, ms timeout) {
         const auto request_id = uuid{randomize};
         const json request{
             {"jsonrpc", "2.0"},
@@ -120,6 +124,16 @@ namespace ka::proto {
         } else {
             return res.error();
         }
+    }
+
+    template<class R, class... Args>
+    r<R> secure_channel::invoke(std::string const &method_name, Args &&... args, ms timeout) {
+        mlab::reduce_timeout rt{timeout};
+        auto r_req = request(method_name, std::forward<Args>(args)..., rt.remaining());
+        if (not r_req) {
+            return r_req.error();
+        }
+        return response<R>(*r_req, rt.remaining());
     }
 }
 
