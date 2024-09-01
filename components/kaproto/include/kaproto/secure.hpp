@@ -71,13 +71,13 @@ namespace ka::proto {
 
         secure_channel() = default;
 
-        template<class... Args>
+        template <class... Args>
         [[nodiscard]] r<std::future<json> > request(std::string_view method_name, Args &&... args, ms timeout);
 
-        template<class R = json>
+        template <class R = json>
         [[nodiscard]] r<R> response(std::future<json> &fut, ms timeout);
 
-        template<class R, class... Args>
+        template <class R, class... Args>
         [[nodiscard]] r<R> invoke(std::string_view method_name, Args &&... args, ms timeout);
 
         [[nodiscard]] inline channel_status status() const;
@@ -90,7 +90,7 @@ namespace ka::proto {
     };
 }
 
-template<>
+template <>
 struct std::hash<ka::proto::uuid> {
     std::size_t operator()(ka::proto::uuid const &u) const {
         return u.hash();
@@ -106,7 +106,7 @@ namespace ka::proto {
         return status() == channel_status::ready;
     }
 
-    template<class... Args>
+    template <class... Args>
     r<std::future<json> > secure_channel::request(std::string_view method_name, Args &&... args, ms timeout) {
         const auto request_id = uuid{randomize};
         const json request{
@@ -117,7 +117,7 @@ namespace ka::proto {
         return store_send_request(request, timeout);
     }
 
-    template<class R>
+    template <class R>
     r<R> secure_channel::response(std::future<json> &fut, ms timeout) {
         if (const auto res = await_response(fut, timeout); res) {
             return res->get<R>();
@@ -126,7 +126,7 @@ namespace ka::proto {
         }
     }
 
-    template<class R, class... Args>
+    template <class R, class... Args>
     r<R> secure_channel::invoke(std::string_view method_name, Args &&... args, ms timeout) {
         mlab::reduce_timeout rt{timeout};
         auto r_req = request(method_name, std::forward<Args>(args)..., rt.remaining());
