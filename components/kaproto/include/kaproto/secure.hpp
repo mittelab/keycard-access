@@ -122,6 +122,8 @@ namespace ka::proto {
         explicit uuid(randomize_t);
 
         [[nodiscard]] std::string to_string() const;
+
+        [[nodiscard]] static std::optional<uuid> from_string(std::string_view s);
     };
 
     class secure_channel {

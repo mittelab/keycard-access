@@ -73,6 +73,23 @@ namespace ka::proto {
         return buffer;
     }
 
+    std::optional<uuid> uuid::from_string(std::string_view s) {
+        static constexpr auto fmt =
+            "%02hhx%02hhx%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx-%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx";
+        if (s.length() != 36) {
+            return std::nullopt;
+        }
+        uuid retval{};
+        if (16 != std::sscanf(s.data(), fmt,
+                              &retval._data[0], &retval._data[1], &retval._data[2], &retval._data[3], &retval._data[4],
+                              &retval._data[5], &retval._data[6], &retval._data[7], &retval._data[8], &retval._data[9],
+                              &retval._data[10], &retval._data[11], &retval._data[12], &retval._data[13],
+                              &retval._data[14], &retval._data[15])) {
+            return std::nullopt;
+        }
+        return retval;
+    }
+
     r<std::future<json>> secure_channel::store_send_request(json req_body, ms timeout) {
         const mlab::reduce_timeout rt{timeout};
         const auto req_id = uuid{randomize};
