@@ -20,7 +20,8 @@ namespace ka::proto {
         invalid_argument, ///@< EACCES, EFAULT, EMSGSIZE, EADDRNOTAVAIL
         system_error, ///@< ENOBUFS, EISCONN, EPIPE, EMFILE, EINTR
         malformed, ///@< Custom
-        crypto_error
+        crypto_error,
+        application_error
     };
 
     [[nodiscard]] const char *to_string(error e);

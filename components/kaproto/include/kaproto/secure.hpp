@@ -150,7 +150,9 @@ namespace ka::proto {
 
         [[nodiscard]] r<std::future<json> > store_send_request(json req_body, ms timeout);
 
-        [[nodiscard]] r<json> await_response(std::future<json> &fut, ms timeout);
+        void handle_response(json resp_body);
+
+        [[nodiscard]] static r<json> log_error(r<json, bool> res);
 
     public:
         /**
@@ -162,6 +164,8 @@ namespace ka::proto {
 
         template <class... Args>
         [[nodiscard]] r<std::future<json> > request(std::string_view method_name, Args &&... args, ms timeout);
+
+        [[nodiscard]] r<json, bool> response_or_error(std::future<json> &fut, ms timeout);
 
         template <class R = json>
         [[nodiscard]] r<R> response(std::future<json> &fut, ms timeout);
@@ -208,7 +212,7 @@ namespace ka::proto {
 
     template <class R>
     r<R> secure_channel::response(std::future<json> &fut, ms timeout) {
-        if (const auto res = await_response(fut, timeout); res) {
+        if (const auto res = log_error(response_or_error(fut, timeout)); res) {
             return res->get<R>();
         } else {
             return res.error();

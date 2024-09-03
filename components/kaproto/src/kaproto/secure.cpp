@@ -108,7 +108,7 @@ namespace ka::proto {
             if (not lock) {
                 return error::timeout;
             }
-            auto promise = std::promise<json>{};
+            auto promise = std::promise<std::pair<json>{};
             shared_fut = promise.get_future();
             _pending_requests[req_id] = std::move(promise);
         }
@@ -121,14 +121,76 @@ namespace ka::proto {
     }
 
 
-    r<json> secure_channel::await_response(std::future<json> &fut, ms timeout) {
+    r<json, bool> secure_channel::response_or_error(std::future<json> &fut, ms timeout) {
         switch (fut.wait_for(timeout)) {
             case std::future_status::deferred:
                 return error::system_error;
             case std::future_status::timeout:
                 return error::timeout;
             case std::future_status::ready:
-                return fut.get();
+                break;
+        }
+        json resp_body = fut.get();
+        if (resp_body.contains("result")) {
+            return {std::move(resp_body["result"]), true};
+        }
+        return {std::move(resp_body["error"]), false};
+    }
+
+
+    r<json> secure_channel::log_error(r<json, bool> res) {
+        if (not res) {
+            return res.error();
+        }
+        if (res->second) {
+            return std::move(res->first);
+        }
+        auto const &err = res->first;
+        const auto err_code = err["code"].get<int>();
+        const auto err_msg = err["message"].get<std::string_view>();
+        ESP_LOGW("KA", "Request failed with error %d: %s", err_code, err_msg.data());
+        return error::application_error;
+    }
+
+    void secure_channel::handle_response(json resp_body) {
+        if (not jsonrpc_validate_response(resp_body)) {
+            const auto s = resp_body.dump();
+            ESP_LOGE("KA", "Invalid response body: %s.", s.c_str());
+            return;
+        }
+
+        // Attempt at parsing this UUID
+        uuid req_id{};
+        auto validate = [&](json const &json_id) -> bool {
+            if (const auto r = uuid::from_string(json_id.get<std::string_view>()); r) {
+                req_id = *r;
+                return true;
+            }
+            return false;
+        };
+
+        if (not json_validate<json_value_type::string>(resp_body, "id", false, validate)) {
+            ESP_LOGE("KA", "Response to a request not sent through this library.");
+            return;
+        }
+
+        // Now req_id contains a valid UUID, attempt to store the result
+        const std::unique_lock lock{_pending_requests, 1s};
+        if (not lock) {
+            const auto uuid_str = req_id.to_string();
+            ESP_LOGE("KA", "Timeout when trying to store response result for request %s", uuid_str.c_str());
+            return;
+        }
+
+        // Pop the promise from the list and set the result
+        if (const auto it = _pending_requests.find(req_id); it == std::end(_pending_requests)) {
+            const auto uuid_str = req_id.to_string();
+            ESP_LOGE("KA", "Unable to find promise for response %s", uuid_str.c_str());
+        } else {
+            // Set the result and trash the promise
+            auto promise = std::move(it->second);
+            _pending_requests.erase(it);
+            promise.set_value(std::move(resp_body));
         }
     }
 
